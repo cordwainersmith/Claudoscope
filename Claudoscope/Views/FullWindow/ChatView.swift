@@ -4,79 +4,147 @@ struct ChatView: View {
     let session: ParsedSession
     @State private var isNearTop = true
     @State private var isNearBottom = false
+    @State private var searchText = ""
+    @State private var currentMatchIndex = 0
+
+    private var matchingIndices: [Int] {
+        guard !searchText.isEmpty else { return [] }
+        let query = searchText.lowercased()
+        return session.records.enumerated().compactMap { index, record in
+            let text: String
+            switch record.type {
+            case .user:
+                text = record.message?.content?.textContent ?? ""
+            case .assistant:
+                text = record.message?.content?.textContent ?? ""
+            default:
+                return nil
+            }
+            return text.lowercased().contains(query) ? index : nil
+        }
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottomTrailing) {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
-                        // Top anchor
-                        Color.clear.frame(height: 0).id("chat-top")
-
-                        // Continuation banner
-                        if session.parentSessionId != nil {
-                            ContinuationBanner()
-                        }
-
-                        ForEach(Array(session.records.enumerated()), id: \.offset) { index, record in
-                            recordView(for: record, index: index)
-                        }
-
-                        // Bottom anchor
-                        Color.clear.frame(height: 0).id("chat-bottom")
-                    }
-                    .padding(24)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(
-                                key: ScrollOffsetPreferenceKey.self,
-                                value: geo.frame(in: .named("chatScroll")).origin.y
-                            )
-                        }
-                    )
+                VStack(spacing: 0) {
+                    searchBar(proxy: proxy)
+                    chatScrollView
                 }
-                .coordinateSpace(name: "chatScroll")
-                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                    isNearTop = offset > -50
-                    // Approximate: if content is scrolled far enough, show scroll-to-top
-                    isNearBottom = false // Will be refined by bottom detection
-                }
-
-                // Scroll buttons
-                VStack(spacing: 8) {
-                    if !isNearTop {
-                        Button {
-                            withAnimation {
-                                proxy.scrollTo("chat-top", anchor: .top)
-                            }
-                        } label: {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 12, weight: .medium))
-                                .frame(width: 32, height: 32)
-                                .background(.ultraThinMaterial)
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-                        }
-                        .buttonStyle(.plain)
+                scrollButtons(proxy: proxy)
+            }
+            .onChange(of: searchText) { _, _ in
+                currentMatchIndex = 0
+                if let first = matchingIndices.first {
+                    withAnimation {
+                        proxy.scrollTo("record-\(first)", anchor: .center)
                     }
-
-                    Button {
-                        withAnimation {
-                            proxy.scrollTo("chat-bottom", anchor: .bottom)
-                        }
-                    } label: {
-                        Image(systemName: "arrow.down")
-                            .font(.system(size: 12, weight: .medium))
-                            .frame(width: 32, height: 32)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Circle())
-                            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-                    }
-                    .buttonStyle(.plain)
                 }
-                .padding(16)
             }
         }
+    }
+
+    private func searchBar(proxy: ScrollViewProxy) -> some View {
+        ChatSearchBar(
+            searchText: $searchText,
+            currentMatchIndex: $currentMatchIndex,
+            matchCount: matchingIndices.count,
+            onNavigate: { direction in
+                guard !matchingIndices.isEmpty else { return }
+                if direction == .next {
+                    currentMatchIndex = (currentMatchIndex + 1) % matchingIndices.count
+                } else {
+                    currentMatchIndex = (currentMatchIndex - 1 + matchingIndices.count) % matchingIndices.count
+                }
+                let targetIndex = matchingIndices[currentMatchIndex]
+                withAnimation {
+                    proxy.scrollTo("record-\(targetIndex)", anchor: .center)
+                }
+            }
+        )
+    }
+
+    private var chatScrollView: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                Color.clear.frame(height: 0).id("chat-top")
+
+                if session.parentSessionId != nil {
+                    ContinuationBanner()
+                }
+
+                ForEach(Array(session.records.enumerated()), id: \.offset) { index, record in
+                    searchHighlightedRecord(record: record, index: index)
+                }
+
+                Color.clear.frame(height: 0).id("chat-bottom")
+            }
+            .padding(24)
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: ScrollOffsetPreferenceKey.self,
+                        value: geo.frame(in: .named("chatScroll")).origin.y
+                    )
+                }
+            )
+        }
+        .coordinateSpace(name: "chatScroll")
+        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+            isNearTop = offset > -50
+            isNearBottom = false
+        }
+    }
+
+    @ViewBuilder
+    private func searchHighlightedRecord(record: ParsedRecordRaw, index: Int) -> some View {
+        let isMatch = matchingIndices.contains(index)
+        let isCurrentMatch = !matchingIndices.isEmpty
+            && matchingIndices.indices.contains(currentMatchIndex)
+            && matchingIndices[currentMatchIndex] == index
+        let borderColor: Color = isCurrentMatch ? .orange : (isMatch ? .yellow : .clear)
+        let borderWidth: CGFloat = isCurrentMatch ? 2 : 1
+        let bgColor: Color = isCurrentMatch ? Color.orange.opacity(0.08) : (isMatch ? Color.yellow.opacity(0.05) : .clear)
+
+        recordView(for: record, index: index)
+            .id("record-\(index)")
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(borderColor, lineWidth: borderWidth)
+                    .padding(-4)
+            )
+            .background(bgColor)
+    }
+
+    private func scrollButtons(proxy: ScrollViewProxy) -> some View {
+        VStack(spacing: 8) {
+            if !isNearTop {
+                Button {
+                    withAnimation { proxy.scrollTo("chat-top", anchor: .top) }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 12, weight: .medium))
+                        .frame(width: 32, height: 32)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                withAnimation { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+            } label: {
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 32, height: 32)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
     }
 
     @ViewBuilder
@@ -95,6 +163,74 @@ struct ChatView: View {
 
         default:
             EmptyView()
+        }
+    }
+}
+
+// MARK: - Search Bar
+
+enum SearchDirection {
+    case next, previous
+}
+
+struct ChatSearchBar: View {
+    @Binding var searchText: String
+    @Binding var currentMatchIndex: Int
+    let matchCount: Int
+    let onNavigate: (SearchDirection) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+
+            TextField("Search in conversation...", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .onSubmit {
+                    onNavigate(.next)
+                }
+
+            if !searchText.isEmpty {
+                Text(matchCount == 0 ? "No matches" : "\(currentMatchIndex + 1) of \(matchCount)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.secondary)
+
+                Button { onNavigate(.previous) } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(matchCount == 0)
+
+                Button { onNavigate(.next) } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(matchCount == 0)
+
+                Button {
+                    searchText = ""
+                    currentMatchIndex = 0
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
         }
     }
 }
