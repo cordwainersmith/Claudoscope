@@ -1,0 +1,40 @@
+name: Claudoscope
+options:
+  bundleIdPrefix: com.claudoscope
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+packages:
+  swift-collections:
+    url: https://github.com/apple/swift-collections.git
+    from: "1.1.0"
+
+targets:
+  Claudoscope:
+    type: application
+    platform: macOS
+    sources:
+      - path: Claudoscope
+        excludes:
+          - Info.plist
+    info:
+      path: Claudoscope/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleName: Claudoscope
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+    dependencies:
+      - package: swift-collections
+        product: OrderedCollections
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        PRODUCT_BUNDLE_IDENTIFIER: com.claudoscope.app
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_NAME: Claudoscope
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_FILE: Claudoscope/Info.plist
