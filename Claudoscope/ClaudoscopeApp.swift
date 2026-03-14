@@ -213,6 +213,12 @@ final class MainWindowController {
         // Show the app in the Dock while the full window is open
         NSApplication.shared.setActivationPolicy(.regular)
 
+        // Use the c2 icon as the Dock icon
+        if let iconURL = Bundle.module.url(forResource: "c2", withExtension: "png"),
+           let iconImage = NSImage(contentsOf: iconURL) {
+            NSApplication.shared.applicationIconImage = iconImage
+        }
+
         let contentView = FullWindowView()
             .environment(store)
             .frame(minWidth: 900, minHeight: 600)
@@ -299,7 +305,7 @@ struct AboutView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
 
-            Text("Version 1.0.0")
+            Text("Version 0.3.1")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
 
