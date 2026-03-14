@@ -117,6 +117,7 @@ struct SettingsMainPanelView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if shouldShow("appearance") { appearanceSection() }
+                    if shouldShow("general") { generalSection([:]) }
                     if shouldShow("pricing") { pricingSection() }
                 }
                 .frame(maxWidth: 700)
@@ -397,14 +398,27 @@ struct SettingsMainPanelView: View {
     @ViewBuilder
     private func generalSection(_ dict: [String: Any]) -> some View {
         let entries = generalEntries(from: dict)
+        let currentCleanup = dict["cleanupPeriodDays"] as? Int
 
-        if !entries.isEmpty {
-            settingsSection(id: "general", icon: "gear", title: "General") {
-                VStack(spacing: 0) {
-                    ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
-                        SettingsKeyValueRow(key: entry.key, value: entry.value)
-                        if index < entries.count - 1 {
-                            Divider().padding(.horizontal, 12)
+        settingsSection(id: "general", icon: "gear", title: "General") {
+            VStack(alignment: .leading, spacing: 0) {
+                // Cleanup period highlight
+                CleanupPeriodRow(
+                    currentDays: currentCleanup,
+                    settingsPath: settingsPath,
+                    onUpdated: { loadSettings() }
+                )
+
+                if !entries.isEmpty {
+                    // Filter out cleanupPeriodDays since we show it above
+                    let otherEntries = entries.filter { $0.key != "cleanupPeriodDays" }
+                    if !otherEntries.isEmpty {
+                        Divider().padding(.horizontal, 12)
+                        ForEach(Array(otherEntries.enumerated()), id: \.offset) { index, entry in
+                            SettingsKeyValueRow(key: entry.key, value: entry.value)
+                            if index < otherEntries.count - 1 {
+                                Divider().padding(.horizontal, 12)
+                            }
                         }
                     }
                 }
@@ -595,6 +609,90 @@ struct SettingsMainPanelView: View {
             return num.stringValue
         }
         return String(describing: value)
+    }
+}
+
+// MARK: - Cleanup Period Row
+
+private struct CleanupPeriodRow: View {
+    let currentDays: Int?
+    let settingsPath: String
+    let onUpdated: () -> Void
+
+    private var displayDays: Int { currentDays ?? 30 }
+    private var isDefault: Bool { currentDays == nil }
+
+    private let presets: [(label: String, days: Int)] = [
+        ("30 days", 30),
+        ("90 days", 90),
+        ("1 year", 365),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Transcript Retention")
+                        .font(.system(size: 12, weight: .medium))
+                    Text(isDefault ? "Default: 30 days" : "\(displayDays) days")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                HStack(spacing: 0) {
+                    ForEach(presets, id: \.days) { preset in
+                        Button {
+                            updateCleanupPeriod(days: preset.days)
+                        } label: {
+                            Text(preset.label)
+                                .font(.system(size: 11, weight: .medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(displayDays == preset.days ? Color.accentColor.opacity(0.15) : .clear)
+                                .foregroundStyle(displayDays == preset.days ? Color.accentColor : .secondary)
+                        }
+                        .buttonStyle(.plain)
+
+                        if preset.days != presets.last?.days {
+                            Divider().frame(height: 16)
+                        }
+                    }
+                }
+                .background(.bar)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary, lineWidth: 1))
+            }
+
+            if isDefault {
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 10))
+                    Text("Set to 1 year to keep session history longer. Claude Code defaults to 30 days.")
+                        .font(.system(size: 10))
+                }
+                .foregroundStyle(.orange)
+            }
+        }
+        .padding(12)
+    }
+
+    private func updateCleanupPeriod(days: Int) {
+        let url = URL(fileURLWithPath: settingsPath)
+        var json: [String: Any] = [:]
+
+        if let data = try? Data(contentsOf: url),
+           let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            json = existing
+        }
+
+        json["cleanupPeriodDays"] = days
+
+        if let data = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: url, options: .atomic)
+            onUpdated()
+        }
     }
 }
 

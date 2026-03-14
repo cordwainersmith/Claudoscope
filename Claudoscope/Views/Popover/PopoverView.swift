@@ -11,6 +11,7 @@ struct PopoverView: View {
                 Text("Claudoscope")
                     .font(.system(size: 13, weight: .medium))
                 Spacer()
+                AppIconView(size: 20)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -53,10 +54,36 @@ struct PopoverView: View {
                 openWindow(id: "main")
             } label: {
                 HStack {
+                    Image(systemName: "macwindow")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                     Text("Open full view...")
                         .font(.system(size: 12))
                     Spacer()
                     Text("Cmd+O")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+
+            // Quit button
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                HStack {
+                    Image(systemName: "power")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Text("Quit Claudoscope")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Text("Cmd+Q")
                         .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                 }
@@ -80,5 +107,22 @@ struct PopoverView: View {
                 guard let date = isoFormatter.date(from: session.lastTimestamp) else { return false }
                 return now.timeIntervalSince(date) < 60
             }
+    }
+}
+
+// MARK: - App Icon
+
+struct AppIconView: View {
+    var size: CGFloat = 20
+
+    var body: some View {
+        if let url = Bundle.module.url(forResource: "c2", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+        }
     }
 }

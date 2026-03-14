@@ -2,21 +2,79 @@ import SwiftUI
 
 struct ChatView: View {
     let session: ParsedSession
+    @State private var isNearTop = true
+    @State private var isNearBottom = false
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    // Continuation banner
-                    if session.parentSessionId != nil {
-                        ContinuationBanner()
+            ZStack(alignment: .bottomTrailing) {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        // Top anchor
+                        Color.clear.frame(height: 0).id("chat-top")
+
+                        // Continuation banner
+                        if session.parentSessionId != nil {
+                            ContinuationBanner()
+                        }
+
+                        ForEach(Array(session.records.enumerated()), id: \.offset) { index, record in
+                            recordView(for: record, index: index)
+                        }
+
+                        // Bottom anchor
+                        Color.clear.frame(height: 0).id("chat-bottom")
+                    }
+                    .padding(24)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: ScrollOffsetPreferenceKey.self,
+                                value: geo.frame(in: .named("chatScroll")).origin.y
+                            )
+                        }
+                    )
+                }
+                .coordinateSpace(name: "chatScroll")
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                    isNearTop = offset > -50
+                    // Approximate: if content is scrolled far enough, show scroll-to-top
+                    isNearBottom = false // Will be refined by bottom detection
+                }
+
+                // Scroll buttons
+                VStack(spacing: 8) {
+                    if !isNearTop {
+                        Button {
+                            withAnimation {
+                                proxy.scrollTo("chat-top", anchor: .top)
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 12, weight: .medium))
+                                .frame(width: 32, height: 32)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                        }
+                        .buttonStyle(.plain)
                     }
 
-                    ForEach(Array(session.records.enumerated()), id: \.offset) { index, record in
-                        recordView(for: record, index: index)
+                    Button {
+                        withAnimation {
+                            proxy.scrollTo("chat-bottom", anchor: .bottom)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 32, height: 32)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
                     }
+                    .buttonStyle(.plain)
                 }
-                .padding(24)
+                .padding(16)
             }
         }
     }
@@ -38,6 +96,80 @@ struct ChatView: View {
         default:
             EmptyView()
         }
+    }
+}
+
+// MARK: - Scroll Offset Preference Key
+
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Collapsible Text Block
+
+private struct CollapsibleTextView: View {
+    let content: String
+    let fontSize: CGFloat
+    @State private var isCollapsed = true
+    @State private var fullHeight: CGFloat = 0
+
+    private let collapseHeight: CGFloat = 300
+
+    var body: some View {
+        if isLongContent {
+            VStack(alignment: .leading, spacing: 0) {
+                MarkdownContentView(content: content, fontSize: fontSize)
+                    .textSelection(.enabled)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear
+                                .onAppear { fullHeight = geo.size.height }
+                                .onChange(of: geo.size.height) { _, h in fullHeight = h }
+                        }
+                    )
+                    .frame(maxHeight: isCollapsed ? collapseHeight : nil, alignment: .top)
+                    .clipped()
+
+                if isCollapsed {
+                    // Fade-out gradient overlay
+                    LinearGradient(
+                        colors: [.clear, Color(nsColor: .windowBackgroundColor)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 40)
+                    .offset(y: -40)
+                    .allowsHitTesting(false)
+                }
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isCollapsed.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(isCollapsed ? "Show more" : "Show less")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(Color.accentColor)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            MarkdownContentView(content: content, fontSize: fontSize)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var isLongContent: Bool {
+        let lineCount = content.components(separatedBy: "\n").count
+        return lineCount > 15 || content.count > 1500
     }
 }
 
@@ -126,8 +258,7 @@ struct AssistantMessageView: View {
                     contentBlockView(for: block, index: index)
                 }
             } else if !textContent.isEmpty {
-                MarkdownContentView(content: textContent, fontSize: 13)
-                    .textSelection(.enabled)
+                CollapsibleTextView(content: textContent, fontSize: 13)
             }
         }
         .padding(.vertical, 4)
@@ -138,8 +269,7 @@ struct AssistantMessageView: View {
         switch block.type {
         case "text":
             if let text = block.text, !text.isEmpty {
-                MarkdownContentView(content: text, fontSize: 13)
-                    .textSelection(.enabled)
+                CollapsibleTextView(content: text, fontSize: 13)
             }
 
         case "thinking":

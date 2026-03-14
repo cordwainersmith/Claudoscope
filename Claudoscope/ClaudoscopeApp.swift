@@ -10,9 +10,24 @@ struct ClaudoscopeApp: App {
             MenuBarPopoverContent()
                 .environment(store)
         } label: {
-            Label("Claudoscope", systemImage: "chevron.left.forwardslash.chevron.right")
+            MenuBarIcon()
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+/// Loads the custom menu bar icon from bundle resources as a template image
+struct MenuBarIcon: View {
+    var body: some View {
+        if let url = Bundle.module.url(forResource: "menu-bar-icon", withExtension: "png"),
+           let nsImage = NSImage(contentsOf: url) {
+            let templateImage = nsImage
+            let _ = templateImage.isTemplate = true
+            Image(nsImage: templateImage)
+                .renderingMode(.template)
+        } else {
+            Image(systemName: "chevron.left.forwardslash.chevron.right")
+        }
     }
 }
 
@@ -26,9 +41,18 @@ struct MenuBarPopoverContent: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Claudoscope")
-                    .font(.system(size: 13, weight: .medium))
+                Text("CLAUDOSCOPE")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.5)
                 Spacer()
+                if let url = Bundle.module.url(forResource: "c2", withExtension: "png"),
+                   let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 18, height: 18)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -36,34 +60,69 @@ struct MenuBarPopoverContent: View {
 
             Divider()
 
-            // Today's stats
-            StatsStrip(
-                sessionCount: store.todaySessions.count,
-                tokenCount: store.todayTokens,
-                cost: store.todayCost,
-                projectCount: Set(store.todaySessions.map(\.projectId)).count
-            )
+            if store.isLoading {
+                // Loading skeleton
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) {
+                        ForEach(0..<4) { _ in
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(.quaternary)
+                                .frame(height: 40)
+                        }
+                    }
+                    .padding(.horizontal, 16)
 
-            // Sparkline
-            SparklineChart(dailyUsage: store.analyticsData.dailyUsage)
-                .padding(.bottom, 12)
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(.quaternary)
+                        .frame(height: 50)
+                        .padding(.horizontal, 16)
 
-            Divider()
-
-            // Active session (if any)
-            if let activeSession = findActiveSession() {
-                ActiveSessionCard(session: activeSession)
-                    .padding(.vertical, 8)
-                Divider()
-            }
-
-            // Recent sessions
-            if !store.recentSessions.isEmpty {
-                RecentSessionsList(sessions: store.recentSessions) { _ in
-                    MainWindowController.shared.open(store: store)
+                    ForEach(0..<3) { _ in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(.quaternary)
+                                .frame(width: 24, height: 24)
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(.quaternary)
+                                .frame(height: 14)
+                        }
+                        .padding(.horizontal, 16)
+                    }
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, 12)
+                .redacted(reason: .placeholder)
+
                 Divider()
+            } else {
+                // Today's stats
+                StatsStrip(
+                    sessionCount: store.todaySessions.count,
+                    tokenCount: store.todayTokens,
+                    cost: store.todayCost,
+                    projectCount: Set(store.todaySessions.map(\.projectId)).count
+                )
+
+                // Sparkline
+                SparklineChart(dailyUsage: store.analyticsData.dailyUsage)
+                    .padding(.bottom, 12)
+
+                Divider()
+
+                // Active session (if any)
+                if let activeSession = findActiveSession() {
+                    ActiveSessionCard(session: activeSession)
+                        .padding(.vertical, 8)
+                    Divider()
+                }
+
+                // Recent sessions
+                if !store.recentSessions.isEmpty {
+                    RecentSessionsList(sessions: store.recentSessions) { _ in
+                        MainWindowController.shared.open(store: store)
+                    }
+                    .padding(.vertical, 8)
+                    Divider()
+                }
             }
 
             // Reposition tip (shown once)
@@ -75,6 +134,7 @@ struct MenuBarPopoverContent: View {
                     Text("Hold **Cmd** and drag the menu bar icon to reposition it.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
                     Button {
                         hasSeenTip = true
@@ -92,15 +152,17 @@ struct MenuBarPopoverContent: View {
 
             // Actions
             VStack(spacing: 0) {
-                PopoverMenuButton(label: "Open full view...", shortcut: "Cmd+O") {
+                PopoverMenuButton(label: "Dashboard", systemImage: "macwindow", shortcut: "Cmd+O") {
                     MainWindowController.shared.open(store: store)
                 }
 
-                PopoverMenuButton(label: "About Claudoscope") {
+                Divider()
+
+                PopoverMenuButton(label: "About Claudoscope", systemImage: "info.circle") {
                     showAbout = true
                 }
 
-                PopoverMenuButton(label: "Quit Claudoscope", shortcut: "Cmd+Q") {
+                PopoverMenuButton(label: "Quit Claudoscope", systemImage: "power", shortcut: "Cmd+Q") {
                     NSApplication.shared.terminate(nil)
                 }
             }
@@ -185,12 +247,18 @@ final class MainWindowController {
 
 struct PopoverMenuButton: View {
     let label: String
+    var systemImage: String? = nil
     var shortcut: String? = nil
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: 8) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 12))
+                        .frame(width: 16)
+                }
                 Text(label)
                     .font(.system(size: 12))
                 Spacer()
@@ -215,9 +283,14 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                .font(.system(size: 40, weight: .thin))
-                .foregroundStyle(.secondary)
+            if let url = Bundle.module.url(forResource: "menu-bar-icon", withExtension: "png"),
+               let nsImage = NSImage(contentsOf: url) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 48, height: 48)
+                    .foregroundStyle(.secondary)
+            }
 
             Text("Claudoscope")
                 .font(.system(size: 18, weight: .medium))

@@ -1,6 +1,7 @@
 import Foundation
 
 enum AnalyticsTimeRange: String, CaseIterable, Sendable {
+    case today = "today"
     case sevenDays = "7 days"
     case thirtyDays = "30 days"
     case all = "all"
@@ -8,6 +9,9 @@ enum AnalyticsTimeRange: String, CaseIterable, Sendable {
 
     func dateRange(customFrom: Date, customTo: Date) -> (from: Date?, to: Date?) {
         switch self {
+        case .today:
+            let startOfToday = Calendar.current.startOfDay(for: Date())
+            return (startOfToday, nil)
         case .sevenDays:
             return (Calendar.current.date(byAdding: .day, value: -7, to: Date()), nil)
         case .thirtyDays:
