@@ -398,10 +398,176 @@ struct CommandsMainPanelView: View {
     }
 }
 
-// Skills reuse commands views since skills are .md files in the same directory.
-// These typealiases make the intent clear at the call site.
-typealias SkillsSidebarContent = CommandsSidebarContent
-typealias SkillsMainPanelView = CommandsMainPanelView
+// MARK: - Skills
+
+struct SkillsSidebarContent: View {
+    let filterText: String
+    let skills: [SkillEntry]
+    @Binding var selectedSkillName: String?
+
+    private var filtered: [SkillEntry] {
+        if filterText.isEmpty { return skills }
+        return skills.filter { skill in
+            skill.name.localizedCaseInsensitiveContains(filterText) ||
+            skill.displayName.localizedCaseInsensitiveContains(filterText) ||
+            (skill.description?.localizedCaseInsensitiveContains(filterText) ?? false)
+        }
+    }
+
+    var body: some View {
+        if filtered.isEmpty {
+            ConfigEmptyList(icon: "star", text: "No skills found")
+        } else {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                ForEach(filtered) { skill in
+                    SkillRow(
+                        skill: skill,
+                        isSelected: selectedSkillName == skill.displayName
+                    ) {
+                        selectedSkillName = skill.displayName
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+}
+
+private struct SkillRow: View {
+    let skill: SkillEntry
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("/\(skill.name)")
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .foregroundStyle(isSelected ? .white : .primary)
+
+                HStack(spacing: 4) {
+                    if let desc = skill.description {
+                        Text(desc)
+                            .font(.system(size: 10))
+                            .lineLimit(1)
+                    } else {
+                        Text("name: \(skill.name)")
+                            .font(.system(size: 10))
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Text(formatConfigFileSize(skill.sizeBytes))
+                        .font(.system(size: 10))
+                }
+                .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isSelected ? Color.accentColor : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct SkillsMainPanelView: View {
+    let skills: [SkillEntry]
+    @Binding var selectedSkillName: String?
+
+    private var selectedSkill: SkillEntry? {
+        guard let name = selectedSkillName else { return nil }
+        return skills.first { $0.displayName == name }
+    }
+
+    var body: some View {
+        if let skill = selectedSkill {
+            skillDetailContent(skill)
+        } else if skills.isEmpty {
+            EmptyStateView(
+                icon: "star",
+                title: "No skills found",
+                message: "Skills are SKILL.md files in ~/.claude/skills/ or installed via plugins."
+            )
+        } else {
+            EmptyStateView(
+                icon: "star",
+                title: "Select a skill",
+                message: "Choose a skill from the sidebar to view its contents."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func skillDetailContent(_ skill: SkillEntry) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack(spacing: 8) {
+                Button {
+                    selectedSkillName = nil
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+
+                Text("/\(skill.name)")
+                    .font(.system(size: 14, weight: .medium))
+
+                Spacer()
+
+                Text(formatConfigFileSize(skill.sizeBytes))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(.bar)
+
+            Divider()
+
+            // Description banner
+            if let desc = skill.description {
+                HStack(spacing: 6) {
+                    Image(systemName: "text.alignleft")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                    Text(desc)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 8)
+                .background(.bar.opacity(0.5))
+
+                Divider()
+            }
+
+            // Body content rendered as markdown
+            ScrollView {
+                if skill.body.isEmpty {
+                    EmptyStateView(
+                        icon: "doc.text",
+                        title: "No content",
+                        message: "This skill has no body content beyond its metadata."
+                    )
+                } else {
+                    MarkdownContentView(content: skill.body, fontSize: 12)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(24)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MARK: - MCPs

@@ -51,6 +51,7 @@ final class SessionStore {
     // Config data
     var hookGroups: [HookEventGroup] = []
     var commands: [CommandEntry] = []
+    var skills: [SkillEntry] = []
     var mcpServers: [McpServerEntry] = []
     var memoryFiles: [MemoryFile] = []
     var configLoading: Bool = false
@@ -322,11 +323,13 @@ final class SessionStore {
         await MainActor.run { configLoading = true }
         let hooks = await configService.loadHooks()
         let cmds = await configService.loadCommands()
+        let skls = await configService.loadSkills()
         let mcps = await configService.loadMcpServers()
         let memory = await configService.loadMemoryFiles(projectId: projectId)
         await MainActor.run {
             self.hookGroups = hooks
             self.commands = cmds
+            self.skills = skls
             self.mcpServers = mcps
             self.memoryFiles = memory
             self.configLoading = false

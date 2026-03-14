@@ -42,6 +42,17 @@ struct CommandEntry: Identifiable, Sendable {
     let sizeBytes: Int
 }
 
+// MARK: - Skill Models
+
+struct SkillEntry: Identifiable, Sendable {
+    var id: String { displayName }
+    let name: String
+    let displayName: String
+    let description: String?
+    let body: String
+    let sizeBytes: Int
+}
+
 // MARK: - Memory Models
 
 struct MemoryFile: Identifiable, Sendable {

@@ -10,8 +10,6 @@ struct SettingsSidebarContent: View {
         ("appearance", "paintbrush", "Appearance"),
         ("model", "cpu", "Model"),
         ("permissions", "shield", "Permissions"),
-        ("mcpServers", "point.3.connected.trianglepath.dotted", "MCP Servers"),
-        ("tools", "wrench", "Tools"),
         ("general", "gear", "General"),
         ("environment", "terminal", "Environment"),
         ("pricing", "dollarsign.circle", "Pricing"),
@@ -62,7 +60,7 @@ struct SettingsMainPanelView: View {
     @State private var settings: [String: Any]?
     @State private var loadError: String?
     @State private var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "mcpServers", "tools", "general", "environment", "pricing"
+        "appearance", "model", "permissions", "general", "environment", "pricing"
     ]
 
     private var settingsPath: String {
@@ -170,8 +168,6 @@ struct SettingsMainPanelView: View {
                     if shouldShow("appearance") { appearanceSection() }
                     if shouldShow("model") { modelSection(dict) }
                     if shouldShow("permissions") { permissionsSection(dict) }
-                    if shouldShow("mcpServers") { mcpServersSection(dict) }
-                    if shouldShow("tools") { toolsSection(dict) }
                     if shouldShow("general") { generalSection(dict) }
                     if shouldShow("environment") { environmentSection(dict) }
                     if shouldShow("pricing") { pricingSection() }
@@ -311,69 +307,6 @@ struct SettingsMainPanelView: View {
         }
     }
 
-    // MARK: - MCP Servers Section
-
-    @ViewBuilder
-    private func mcpServersSection(_ dict: [String: Any]) -> some View {
-        if let servers = dict["mcpServers"] as? [String: Any] {
-            settingsSection(
-                id: "mcpServers",
-                icon: "point.3.connected.trianglepath.dotted",
-                title: "MCP Servers (\(servers.count))"
-            ) {
-                VStack(spacing: 0) {
-                    let sortedKeys = servers.keys.sorted()
-                    ForEach(Array(sortedKeys.enumerated()), id: \.offset) { index, name in
-                        let serverDict = servers[name] as? [String: Any]
-                        let command = serverDict?["command"] as? String ?? ""
-                        let args = serverDict?["args"] as? [String] ?? []
-                        let commandPreview = ([command] + args).joined(separator: " ")
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(name)
-                                .font(.system(size: 12, weight: .medium))
-                            if !commandPreview.trimmingCharacters(in: .whitespaces).isEmpty {
-                                Text(commandPreview)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        if index < sortedKeys.count - 1 {
-                            Divider().padding(.horizontal, 12)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Tools Section
-
-    @ViewBuilder
-    private func toolsSection(_ dict: [String: Any]) -> some View {
-        if let tools = dict["enabledTools"] as? [String], !tools.isEmpty {
-            settingsSection(id: "tools", icon: "wrench", title: "Tools (\(tools.count))") {
-                FlowLayout(spacing: 6) {
-                    ForEach(tools, id: \.self) { tool in
-                        Text(tool)
-                            .font(.system(size: 11, design: .monospaced))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(AnyShapeStyle(.quaternary))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-            }
-        }
-    }
-
     // MARK: - General Section
 
     private func generalEntries(from dict: [String: Any]) -> [(key: String, value: String)] {
@@ -381,8 +314,8 @@ struct SettingsMainPanelView: View {
             "cleanupPeriodDays", "autoMemoryEnabled"
         ]
         let knownTopLevel: Set<String> = [
-            "model", "smallFastModel", "permissions", "mcpServers",
-            "enabledTools", "env", "hooks"
+            "model", "smallFastModel", "permissions",
+            "env", "hooks"
         ]
         var entries: [(key: String, value: String)] = []
         for key in dict.keys.sorted() {

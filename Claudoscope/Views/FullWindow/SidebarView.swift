@@ -8,6 +8,7 @@ struct SidebarView: View {
     @Binding var selectedPlanFilename: String?
     @Binding var selectedHookEventId: String?
     @Binding var selectedCommandName: String?
+    @Binding var selectedSkillName: String?
     @Binding var selectedMcpName: String?
     @Binding var selectedMemoryId: String?
     @Binding var selectedSettingsSection: String?
@@ -71,11 +72,17 @@ struct SidebarView: View {
                         hookGroups: store.hookGroups,
                         selectedEventId: $selectedHookEventId
                     )
-                case .commands, .skills:
+                case .commands:
                     CommandsSidebarContent(
                         filterText: filterText,
                         commands: store.commands,
                         selectedCommandName: $selectedCommandName
+                    )
+                case .skills:
+                    SkillsSidebarContent(
+                        filterText: filterText,
+                        skills: store.skills,
+                        selectedSkillName: $selectedSkillName
                     )
                 case .mcps:
                     McpsSidebarContent(

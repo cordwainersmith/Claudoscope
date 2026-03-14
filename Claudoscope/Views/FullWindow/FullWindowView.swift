@@ -13,6 +13,7 @@ struct FullWindowView: View {
     // Config state
     @State private var selectedHookEventId: String?
     @State private var selectedCommandName: String?
+    @State private var selectedSkillName: String?
     @State private var selectedMcpName: String?
     @State private var selectedMemoryId: String?
 
@@ -34,6 +35,7 @@ struct FullWindowView: View {
                 selectedPlanFilename: $selectedPlanFilename,
                 selectedHookEventId: $selectedHookEventId,
                 selectedCommandName: $selectedCommandName,
+                selectedSkillName: $selectedSkillName,
                 selectedMcpName: $selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
                 selectedSettingsSection: $selectedSettingsSection
@@ -47,6 +49,7 @@ struct FullWindowView: View {
                 selectedPlanFilename: $selectedPlanFilename,
                 selectedHookEventId: selectedHookEventId,
                 selectedCommandName: $selectedCommandName,
+                selectedSkillName: $selectedSkillName,
                 selectedMcpName: selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
                 selectedSettingsSection: $selectedSettingsSection

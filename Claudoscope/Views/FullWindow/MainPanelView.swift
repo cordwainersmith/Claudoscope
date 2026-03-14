@@ -11,6 +11,7 @@ struct MainPanelView: View {
     // Config
     let selectedHookEventId: String?
     @Binding var selectedCommandName: String?
+    @Binding var selectedSkillName: String?
     let selectedMcpName: String?
     @Binding var selectedMemoryId: String?
 
@@ -48,10 +49,15 @@ struct MainPanelView: View {
                     hookGroups: store.hookGroups,
                     selectedEventId: selectedHookEventId
                 )
-            case .commands, .skills:
+            case .commands:
                 CommandsMainPanelView(
                     commands: store.commands,
                     selectedCommandName: $selectedCommandName
+                )
+            case .skills:
+                SkillsMainPanelView(
+                    skills: store.skills,
+                    selectedSkillName: $selectedSkillName
                 )
             case .mcps:
                 McpsMainPanelView(

@@ -127,9 +127,9 @@ actor ConfigService {
         return entries
     }
 
-    // MARK: - Commands & Skills
+    // MARK: - Commands
 
-    /// Scan global commands from ~/.claude/commands/ AND plugin commands/skills.
+    /// Scan global commands from ~/.claude/commands/ AND plugin commands.
     func loadCommands() -> [CommandEntry] {
         var entries: [CommandEntry] = []
 
@@ -147,65 +147,55 @@ actor ConfigService {
         }
 
         // 2. Plugin commands from ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/commands/
-        let cacheDir = claudeDir
-            .appendingPathComponent("plugins")
-            .appendingPathComponent("cache")
-
-        if let marketplaces = try? fm.contentsOfDirectory(atPath: cacheDir.path) {
-            for marketplace in marketplaces {
-                let marketplaceDir = cacheDir.appendingPathComponent(marketplace)
-                guard let plugins = try? fm.contentsOfDirectory(atPath: marketplaceDir.path) else { continue }
-
-                for plugin in plugins {
-                    let pluginDir = marketplaceDir.appendingPathComponent(plugin)
-                    guard let versions = try? fm.contentsOfDirectory(atPath: pluginDir.path) else { continue }
-                    guard let latestVersion = versions.sorted().last else { continue }
-
-                    let versionDir = pluginDir.appendingPathComponent(latestVersion)
-
-                    // Scan commands
-                    let cmdsDir = versionDir.appendingPathComponent("commands")
-                    if let cmdFiles = try? fm.contentsOfDirectory(atPath: cmdsDir.path) {
-                        for cmdFile in cmdFiles where cmdFile.hasSuffix(".md") {
-                            let cmdName = String(cmdFile.dropLast(3))
-                            if let entry = readCommandFile(
-                                url: cmdsDir.appendingPathComponent(cmdFile),
-                                name: cmdName,
-                                pluginName: plugin
-                            ) {
-                                entries.append(entry)
-                            }
-                        }
-                    }
-
-                    // Scan skills (SKILL.md files in skills/<name>/)
-                    let skillsDir = versionDir.appendingPathComponent("skills")
-                    if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir.path) {
-                        for skillDir in skillDirs {
-                            let skillFile = skillsDir
-                                .appendingPathComponent(skillDir)
-                                .appendingPathComponent("SKILL.md")
-                            if let entry = readCommandFile(
-                                url: skillFile,
-                                name: skillDir,
-                                pluginName: plugin
-                            ) {
-                                entries.append(entry)
-                            }
-                        }
+        for (plugin, versionDir) in latestPluginVersionDirs() {
+            let cmdsDir = versionDir.appendingPathComponent("commands")
+            if let cmdFiles = try? fm.contentsOfDirectory(atPath: cmdsDir.path) {
+                for cmdFile in cmdFiles where cmdFile.hasSuffix(".md") {
+                    let cmdName = String(cmdFile.dropLast(3))
+                    if let entry = readCommandFile(
+                        url: cmdsDir.appendingPathComponent(cmdFile),
+                        name: cmdName,
+                        pluginName: plugin
+                    ) {
+                        entries.append(entry)
                     }
                 }
             }
         }
 
-        // 3. Global skills from ~/.claude/skills/
+        entries.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return entries
+    }
+
+    // MARK: - Skills
+
+    /// Scan skills from plugins and ~/.claude/skills/.
+    func loadSkills() -> [SkillEntry] {
+        var entries: [SkillEntry] = []
+
+        // 1. Plugin skills from ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/
+        for (plugin, versionDir) in latestPluginVersionDirs() {
+            let skillsDir = versionDir.appendingPathComponent("skills")
+            if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir.path) {
+                for skillDir in skillDirs {
+                    let skillFile = skillsDir
+                        .appendingPathComponent(skillDir)
+                        .appendingPathComponent("SKILL.md")
+                    if let entry = readSkillFile(url: skillFile, name: skillDir, pluginName: plugin) {
+                        entries.append(entry)
+                    }
+                }
+            }
+        }
+
+        // 2. Global skills from ~/.claude/skills/
         let globalSkillsDir = claudeDir.appendingPathComponent("skills")
         if let skillDirs = try? fm.contentsOfDirectory(atPath: globalSkillsDir.path) {
             for skillDir in skillDirs {
                 let skillFile = globalSkillsDir
                     .appendingPathComponent(skillDir)
                     .appendingPathComponent("SKILL.md")
-                if let entry = readCommandFile(url: skillFile, name: skillDir) {
+                if let entry = readSkillFile(url: skillFile, name: skillDir) {
                     entries.append(entry)
                 }
             }
@@ -213,6 +203,90 @@ actor ConfigService {
 
         entries.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         return entries
+    }
+
+    /// Resolve latest plugin version directories.
+    private func latestPluginVersionDirs() -> [(plugin: String, versionDir: URL)] {
+        let cacheDir = claudeDir
+            .appendingPathComponent("plugins")
+            .appendingPathComponent("cache")
+
+        var results: [(String, URL)] = []
+
+        guard let marketplaces = try? fm.contentsOfDirectory(atPath: cacheDir.path) else {
+            return results
+        }
+
+        for marketplace in marketplaces {
+            let marketplaceDir = cacheDir.appendingPathComponent(marketplace)
+            guard let plugins = try? fm.contentsOfDirectory(atPath: marketplaceDir.path) else { continue }
+
+            for plugin in plugins {
+                let pluginDir = marketplaceDir.appendingPathComponent(plugin)
+                guard let versions = try? fm.contentsOfDirectory(atPath: pluginDir.path) else { continue }
+                guard let latestVersion = versions.sorted().last else { continue }
+                results.append((plugin, pluginDir.appendingPathComponent(latestVersion)))
+            }
+        }
+
+        return results
+    }
+
+    private func readSkillFile(url: URL, name: String, pluginName: String? = nil) -> SkillEntry? {
+        guard fm.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let content = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let attrs = try? fm.attributesOfItem(atPath: url.path)
+        let sizeBytes = (attrs?[.size] as? Int) ?? data.count
+        let parsed = parseSkillContent(content)
+
+        return SkillEntry(
+            name: parsed.name ?? name,
+            displayName: pluginName != nil ? "\(parsed.name ?? name) (\(pluginName!))" : (parsed.name ?? name),
+            description: parsed.description,
+            body: parsed.body,
+            sizeBytes: sizeBytes
+        )
+    }
+
+    /// Parse a SKILL.md file, extracting frontmatter metadata and body content.
+    private func parseSkillContent(_ content: String) -> (name: String?, description: String?, body: String) {
+        let lines = content.components(separatedBy: "\n")
+        var name: String?
+        var description: String?
+        var bodyStartIndex = 0
+        var inFrontmatter = true
+
+        for (index, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if inFrontmatter {
+                if trimmed == "---" {
+                    bodyStartIndex = index + 1
+                    inFrontmatter = false
+                    continue
+                }
+                if trimmed.hasPrefix("name:") {
+                    name = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
+                    bodyStartIndex = index + 1
+                } else if trimmed.hasPrefix("description:") {
+                    description = String(trimmed.dropFirst(12)).trimmingCharacters(in: .whitespaces)
+                    bodyStartIndex = index + 1
+                } else if !trimmed.isEmpty && !trimmed.hasPrefix("name:") && !trimmed.hasPrefix("description:") {
+                    // First non-metadata line, treat everything from here as body
+                    inFrontmatter = false
+                    bodyStartIndex = index
+                }
+            }
+        }
+
+        let bodyLines = Array(lines[bodyStartIndex...])
+        let body = bodyLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return (name, description, body)
     }
 
     private func readCommandFile(url: URL, name: String, pluginName: String? = nil) -> CommandEntry? {
