@@ -388,7 +388,7 @@ struct CommandsMainPanelView: View {
 
             // Content
             ScrollView {
-                MarkdownContentView(content: command.content, fontSize: 12)
+                MarkdownContentView(content: command.content, fontSize: 14)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(24)
@@ -558,7 +558,7 @@ struct SkillsMainPanelView: View {
                         message: "This skill has no body content beyond its metadata."
                     )
                 } else {
-                    MarkdownContentView(content: skill.body, fontSize: 12)
+                    MarkdownContentView(content: skill.body, fontSize: 14)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(24)
