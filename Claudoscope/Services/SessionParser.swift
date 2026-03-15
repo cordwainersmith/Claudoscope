@@ -90,7 +90,7 @@ actor SessionParser {
             if record.type == .assistant {
                 assistantMessageCount += 1
 
-                if let usage = record.message?.usage {
+                if record.message?.stopReason != nil, let usage = record.message?.usage {
                     totalInputTokens += usage.inputTokens ?? 0
                     totalOutputTokens += usage.outputTokens ?? 0
                     totalCacheReadTokens += usage.cacheReadInputTokens ?? 0
@@ -220,7 +220,7 @@ actor SessionParser {
                     slug = s
                 }
 
-                if raw.type == .assistant, let usage = raw.message?.usage {
+                if raw.type == .assistant, raw.message?.stopReason != nil, let usage = raw.message?.usage {
                     // Deduplicate: skip records already counted from another file
                     if let uuid = raw.uuid {
                         if seenUUIDs.contains(uuid) { continue }

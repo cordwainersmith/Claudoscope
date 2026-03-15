@@ -30,22 +30,37 @@ struct ProjectScanner {
             for dirName in projectDirs {
                 group.addTask {
                     let dirURL = projectsDir.appendingPathComponent(dirName)
-                    guard let files = try? fm.contentsOfDirectory(atPath: dirURL.path) else {
+                    guard let topFiles = try? fm.contentsOfDirectory(atPath: dirURL.path) else {
                         return nil
                     }
 
-                    let jsonlFiles = files.filter { $0.hasSuffix(".jsonl") }
-                    if jsonlFiles.isEmpty { return nil }
+                    // Collect top-level .jsonl files and subagent .jsonl files
+                    var jsonlEntries: [(url: URL, sessionId: String)] = []
+
+                    for name in topFiles {
+                        if name.hasSuffix(".jsonl") {
+                            let sid = String(name.dropLast(6))
+                            jsonlEntries.append((dirURL.appendingPathComponent(name), sid))
+                        }
+                        // Check for subagent files inside session subdirectories
+                        let subagentsDir = dirURL.appendingPathComponent(name).appendingPathComponent("subagents")
+                        if let subFiles = try? fm.contentsOfDirectory(atPath: subagentsDir.path) {
+                            for subFile in subFiles where subFile.hasSuffix(".jsonl") {
+                                let subId = String(subFile.dropLast(6))
+                                jsonlEntries.append((subagentsDir.appendingPathComponent(subFile), subId))
+                            }
+                        }
+                    }
+
+                    if jsonlEntries.isEmpty { return nil }
 
                     var sessions: [SessionSummary] = []
 
-                    for fileName in jsonlFiles {
-                        let sessionId = String(fileName.dropLast(6)) // remove .jsonl
-                        let fileURL = dirURL.appendingPathComponent(fileName)
+                    for entry in jsonlEntries {
                         do {
                             let summary = try await parser.parseMetadata(
-                                url: fileURL,
-                                sessionId: sessionId,
+                                url: entry.url,
+                                sessionId: entry.sessionId,
                                 pricingTable: pricingTable
                             )
                             sessions.append(summary)

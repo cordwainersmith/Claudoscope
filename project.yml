@@ -25,7 +25,7 @@ targets:
         LSUIElement: true
         CFBundleIconFile: AppIcon
         CFBundleName: Claudoscope
-        CFBundleShortVersionString: "0.3.3"
+        CFBundleShortVersionString: "0.3.4"
         CFBundleVersion: "1"
     dependencies:
       - package: swift-collections
