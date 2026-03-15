@@ -30,7 +30,6 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
   - [Memory](#memory)
   - [Settings](#settings)
 - [Cost Estimation](#cost-estimation)
-- [Architecture](#architecture)
 - [License](#license)
 
 ## Requirements
@@ -159,84 +158,6 @@ The estimation process:
 4. **Cost formula**: for each session, cost = (input / 1M * rate) + (output / 1M * rate) + (cache_read / 1M * rate) + (cache_creation / 1M * rate)
 
 **Caveat**: these are estimates. Actual billed amounts depend on factors Claudoscope cannot observe, such as batch vs. real-time pricing tiers, committed-use discounts, or billing adjustments.
-
-## Architecture
-
-Claudoscope is a native macOS application built with SwiftUI and Swift 5.9. It has no web views, no Electron, no embedded servers.
-
-```
-Claudoscope/
-  ClaudoscopeApp.swift          -- @main entry, MenuBarExtra + NSWindow management
-  Models/
-    Session.swift               -- SessionSummary, ParsedSession
-    Analytics.swift             -- AnalyticsData, DailyUsage, ProjectCost, ModelUsage
-    Pricing.swift               -- PricingTables, model family detection, cost formulas
-    Plan.swift                  -- PlanSummary, PlanDetail
-    ConfigModels.swift          -- Hooks, Commands, Skills, MCPs, Memory file models
-    RailItem.swift              -- Navigation rail enum (Analytics, Sessions, Plans, ...)
-    ParsedRecord.swift          -- Raw JSONL record parsing types
-    ContentBlock.swift          -- Message content block types (text, tool_use, tool_result)
-    ...
-  Services/
-    SessionParser.swift         -- Actor: stream-parses JSONL session files
-    ProjectScanner.swift        -- Scans ~/.claude/projects/ for all sessions
-    ClaudeFileWatcher.swift     -- FSEvents-based real-time file watcher
-    SessionCache.swift          -- LRU cache (OrderedDictionary, capacity 20)
-    AnalyticsEngine.swift       -- Pure computation: sessions -> analytics aggregates
-    PlansService.swift          -- Reads plan files from ~/.claude/
-    TimelineService.swift       -- Reads session history entries
-    ConfigService.swift         -- Reads hooks, commands, skills, MCPs, memory
-  Store/
-    SessionStore.swift          -- Central @Observable store, owns watcher + Combine pipeline
-  Views/
-    Popover/                    -- Menu bar widget views
-      PopoverView.swift         -- Main popover layout
-      StatsStrip.swift          -- Today's stats row
-      SparklineChart.swift      -- Compact trend chart
-      ActiveSessionCard.swift   -- Currently active session
-      RecentSessionsList.swift  -- Recent sessions list
-    FullWindow/                 -- Dashboard window views
-      FullWindowView.swift      -- Three-column layout container
-      RailView.swift            -- Icon navigation rail
-      SidebarView.swift         -- Middle column (project/session/plan lists)
-      MainPanelView.swift       -- Right column (content display router)
-      ChatView.swift            -- Session conversation renderer
-      PlansViews.swift          -- Plan list + detail
-      TimelineViews.swift       -- Timeline history
-      ConfigViews.swift         -- Hooks, Commands, Skills, MCPs, Memory views
-      SettingsViews.swift       -- Appearance + Pricing settings
-    Shared/
-      EmptyStateView.swift      -- Placeholder for empty selections
-      MarkdownContentView.swift -- Markdown renderer for plans, skills, commands
-  Utilities/
-    FormatTokens.swift          -- Token count formatting (1.2M, 450K, etc.)
-    AppColors.swift             -- Shared color definitions
-  Resources/
-    menu-bar-icon.png           -- Menu bar template image
-    app-icon.png                -- App icon (Dock + About view)
-    claude-avatar.png           -- Claude avatar for chat bubbles
-```
-
-Key technical decisions:
-
-- **`@Observable` (not `ObservableObject`)**: uses the Swift 5.9 Observation framework for fine-grained reactivity without `@Published` boilerplate
-- **`SessionParser` is an actor**: ensures thread-safe JSONL parsing without manual lock management
-- **FSEvents via `FSEventStreamCreate`**: native macOS file system events for sub-second change detection, no polling
-- **`HStack(spacing: 0)` for layout**: the three-column dashboard uses a flat HStack rather than NavigationSplitView for precise control over column widths and divider behavior
-- **`MenuBarExtra(.window)`**: uses the window-style menu bar extra for a rich popover UI
-- **`PersistentWindow` (NSWindow subclass)**: manages Dock icon visibility, showing it when the dashboard is open and hiding it when closed
-- **LRU cache with `OrderedDictionary`**: from Apple's swift-collections package, provides O(1) access with insertion-order tracking for eviction
-- **No sandbox**: the app requires read access to `~/.claude/` which is outside the sandbox container
-
-Dependencies:
-
-- [swift-collections](https://github.com/apple/swift-collections) (1.1.0+) for `OrderedDictionary`
-
-Build tooling:
-
-- Swift Package Manager for dependency resolution
-- [XcodeGen](https://github.com/yonaskolb/XcodeGen) for Xcode project generation (`project.yml`)
-- Code signed with Developer ID Application certificate and hardened runtime enabled
 
 ## License
 
