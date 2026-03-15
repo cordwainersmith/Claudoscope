@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="c2.png" alt="Claudoscope" width="128" />
+  <img src="Claudoscope/Resources/app-icon.png" alt="Claudoscope" width="128" />
 </p>
 
 <h1 align="center">Claudoscope</h1>
@@ -213,7 +213,7 @@ Claudoscope/
     AppColors.swift             -- Shared color definitions
   Resources/
     menu-bar-icon.png           -- Menu bar template image
-    c2.png                      -- App icon (Dock + About view)
+    app-icon.png                -- App icon (Dock + About view)
     claude-avatar.png           -- Claude avatar for chat bubbles
 ```
 
