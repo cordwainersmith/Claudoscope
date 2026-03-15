@@ -59,7 +59,7 @@ The app runs as an accessory process (`LSUIElement = true`), meaning it lives in
 
 The menu bar widget provides a quick glance at your Claude Code activity without leaving what you are working on.
 
-<!-- ![Menu Bar Widget](screenshots/widget.png) -->
+![Menu Bar Widget](screenshots/widget.png)
 
 **What the widget shows:**
 
@@ -75,7 +75,7 @@ The dashboard is a three-column layout: a narrow icon rail on the left for navig
 
 ### Analytics
 
-<!-- ![Analytics Dashboard](screenshots/analytics.png) -->
+![Analytics Dashboard](screenshots/analytics.png)
 
 The analytics view aggregates token usage and cost data across all your Claude Code sessions. It provides:
 
@@ -101,8 +101,6 @@ The chat view renders the complete conversation thread with:
 
 ### Plans
 
-<!-- ![Plans View](screenshots/plans.png) -->
-
 The plans view lists all plan files created by Claude Code's `/plan` command. Plans are displayed with their title, creation date, and the project they belong to. Selecting a plan renders the full markdown content in the main panel.
 
 ### Timeline
@@ -119,7 +117,7 @@ The commands view lists all custom slash commands defined in your Claude Code co
 
 ### Skills
 
-<!-- ![Skills View](screenshots/skills.png) -->
+![Skills View](screenshots/skills.png)
 
 The skills view displays all installed Claude Code skills. Skills are shown with their name and trigger description. Selecting a skill renders its full definition and documentation in the main panel.
 
@@ -133,11 +131,19 @@ The memory view lists all CLAUDE.md and memory files that Claude Code uses for p
 
 ### Settings
 
-<!-- ![Settings](screenshots/settings.png) -->
+![Settings](screenshots/settings.png)
 
-Settings provides two configuration sections:
+The settings view reads your `~/.claude/settings.json` and presents each configuration section in an organized, browsable layout:
 
 - **Appearance**: switch between System, Light, and Dark themes. The selected theme applies to the dashboard window immediately.
+- **Model**: shows the currently configured default model.
+- **Permissions**: displays permission rules, including denied file patterns for read and edit operations.
+- **Security**: surfaces security-related flags such as YOLO mode status and dangerous permission prompt handling.
+- **Attribution**: attribution and credit configuration.
+- **Plugins**: lists all installed plugins with their source marketplaces, and shows any extra marketplace sources.
+- **Account**: displays account metadata including startup count, last release notes version, onboarding status, and key bindings.
+- **General**: transcript retention period, auto-memory toggle, and other general preferences.
+- **Environment**: environment-level configuration values.
 - **Pricing**: choose between Anthropic API and Vertex AI pricing, with region selection for Vertex (Global, us-east5, europe-west1, asia-southeast1). Changing the pricing configuration recalculates all cost estimates across the app.
 
 ## Cost Estimation
