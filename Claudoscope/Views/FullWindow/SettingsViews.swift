@@ -10,6 +10,10 @@ struct SettingsSidebarContent: View {
         ("appearance", "paintbrush", "Appearance"),
         ("model", "cpu", "Model"),
         ("permissions", "shield", "Permissions"),
+        ("security", "lock.shield", "Security"),
+        ("attribution", "signature", "Attribution"),
+        ("plugins", "puzzlepiece", "Plugins"),
+        ("account", "person.crop.circle", "Account"),
         ("general", "gear", "General"),
         ("environment", "terminal", "Environment"),
         ("pricing", "dollarsign.circle", "Pricing"),
@@ -60,7 +64,7 @@ struct SettingsMainPanelView: View {
     @State private var settings: [String: Any]?
     @State private var loadError: String?
     @State private var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "general", "environment", "pricing"
+        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "environment", "pricing"
     ]
 
     private var settingsPath: String {
@@ -115,6 +119,8 @@ struct SettingsMainPanelView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     if shouldShow("appearance") { appearanceSection() }
+                    if shouldShow("security") { securitySection() }
+                    if shouldShow("account") { accountSection() }
                     if shouldShow("general") { generalSection([:]) }
                     if shouldShow("pricing") { pricingSection() }
                 }
@@ -168,6 +174,10 @@ struct SettingsMainPanelView: View {
                     if shouldShow("appearance") { appearanceSection() }
                     if shouldShow("model") { modelSection(dict) }
                     if shouldShow("permissions") { permissionsSection(dict) }
+                    if shouldShow("security") { securitySection() }
+                    if shouldShow("attribution") { attributionSection() }
+                    if shouldShow("plugins") { pluginsSection() }
+                    if shouldShow("account") { accountSection() }
                     if shouldShow("general") { generalSection(dict) }
                     if shouldShow("environment") { environmentSection(dict) }
                     if shouldShow("pricing") { pricingSection() }
@@ -233,8 +243,8 @@ struct SettingsMainPanelView: View {
     private func modelSection(_ dict: [String: Any]) -> some View {
         let model = dict["model"] as? String
         let smallModel = dict["smallFastModel"] as? String
-        if model != nil || smallModel != nil {
-            settingsSection(id: "model", icon: "cpu", title: "Model") {
+        settingsSection(id: "model", icon: "cpu", title: "Model") {
+            if model != nil || smallModel != nil {
                 VStack(spacing: 0) {
                     if let model = model {
                         SettingsKeyValueRow(key: "model", value: model, mono: true)
@@ -244,6 +254,8 @@ struct SettingsMainPanelView: View {
                         SettingsKeyValueRow(key: "smallFastModel", value: smallModel, mono: true)
                     }
                 }
+            } else {
+                settingsEmptyHint("Using default model. Set \"model\" in settings.json to override.")
             }
         }
     }
@@ -252,11 +264,12 @@ struct SettingsMainPanelView: View {
 
     @ViewBuilder
     private func permissionsSection(_ dict: [String: Any]) -> some View {
-        if let permissions = dict["permissions"] as? [String: Any] {
-            let allowList = permissions["allow"] as? [String] ?? []
-            let denyList = permissions["deny"] as? [String] ?? []
+        let permissions = dict["permissions"] as? [String: Any]
+        let allowList = permissions?["allow"] as? [String] ?? []
+        let denyList = permissions?["deny"] as? [String] ?? []
 
-            settingsSection(id: "permissions", icon: "shield", title: "Permissions") {
+        settingsSection(id: "permissions", icon: "shield", title: "Permissions") {
+            if !allowList.isEmpty || !denyList.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     if !allowList.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
@@ -303,6 +316,8 @@ struct SettingsMainPanelView: View {
                     }
                 }
                 .padding(.vertical, 8)
+            } else {
+                settingsEmptyHint("No permission overrides configured. Claude Code will prompt for each tool.")
             }
         }
     }
@@ -315,7 +330,12 @@ struct SettingsMainPanelView: View {
         ]
         let knownTopLevel: Set<String> = [
             "model", "smallFastModel", "permissions",
-            "env", "hooks"
+            "env", "hooks",
+            "sandbox", "skipDangerousModePermissionPrompt",
+            "attribution", "includeCoAuthoredBy",
+            "autoUpdatesChannel",
+            "enabledPlugins", "extraKnownMarketplaces",
+            "skippedPlugins", "skippedMarketplaces", "strictKnownMarketplaces"
         ]
         var entries: [(key: String, value: String)] = []
         for key in dict.keys.sorted() {
@@ -363,8 +383,9 @@ struct SettingsMainPanelView: View {
 
     @ViewBuilder
     private func environmentSection(_ dict: [String: Any]) -> some View {
-        if let env = dict["env"] as? [String: Any], !env.isEmpty {
-            settingsSection(id: "environment", icon: "terminal", title: "Environment") {
+        let env = dict["env"] as? [String: Any] ?? [:]
+        settingsSection(id: "environment", icon: "terminal", title: "Environment") {
+            if !env.isEmpty {
                 VStack(spacing: 0) {
                     let sortedKeys = env.keys.sorted()
                     ForEach(Array(sortedKeys.enumerated()), id: \.offset) { index, key in
@@ -378,6 +399,8 @@ struct SettingsMainPanelView: View {
                         }
                     }
                 }
+            } else {
+                settingsEmptyHint("No environment variables configured. Add an \"env\" key to settings.json to inject variables into Claude Code's shell.")
             }
         }
     }
@@ -487,6 +510,314 @@ struct SettingsMainPanelView: View {
         return rows
     }
 
+    // MARK: - Security Section
+
+    @ViewBuilder
+    private func securitySection() -> some View {
+        let ext = store.extendedConfig
+        let yolo = ext?.skipDangerousModePermissionPrompt ?? false
+        let sandbox = ext?.sandbox
+        let hasUnsandboxed = !(sandbox?.unsandboxedCommands ?? []).isEmpty
+        let weakerSandbox = sandbox?.enableWeakerNestedSandbox ?? false
+        let isDefault = !yolo && !hasUnsandboxed && !weakerSandbox
+
+        settingsSection(id: "security", icon: "lock.shield", title: "Security") {
+            VStack(alignment: .leading, spacing: 8) {
+                if yolo {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                        Text("YOLO mode enabled: dangerous permission prompts are skipped")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(.horizontal, 12)
+                }
+
+                if hasUnsandboxed {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Unsandboxed Commands")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+
+                        FlowLayout(spacing: 6) {
+                            ForEach(sandbox!.unsandboxedCommands, id: \.self) { cmd in
+                                Text(cmd)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color.orange.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                    }
+                }
+
+                if weakerSandbox {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 10))
+                        Text("Weaker nested sandbox enabled")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 12)
+                }
+
+                if isDefault {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.green)
+                        Text("Default security posture")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    // MARK: - Attribution Section
+
+    @ViewBuilder
+    private func attributionSection() -> some View {
+        settingsSection(id: "attribution", icon: "signature", title: "Attribution") {
+            if let attr = store.extendedConfig?.attribution {
+                VStack(alignment: .leading, spacing: 8) {
+                    if let commit = attr.commitTemplate {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Commit Template")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+
+                            Text(commit)
+                                .font(.system(size: 11, design: .monospaced))
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(AnyShapeStyle(.quaternary))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .padding(.horizontal, 12)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    if let pr = attr.prTemplate {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("PR Template")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+
+                            Text(pr)
+                                .font(.system(size: 11, design: .monospaced))
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(AnyShapeStyle(.quaternary))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .padding(.horizontal, 12)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    if attr.hasDeprecatedCoAuthoredBy {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 10))
+                            Text("Deprecated: includeCoAuthoredBy is set. Use attribution.commitMessage instead.")
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(.yellow)
+                        .padding(.horizontal, 12)
+                    }
+                }
+                .padding(.vertical, 8)
+            } else {
+                settingsEmptyHint("No attribution templates configured.")
+            }
+        }
+    }
+
+    // MARK: - Plugins Section
+
+    @ViewBuilder
+    private func pluginsSection() -> some View {
+        let ext = store.extendedConfig
+        let plugins = ext?.plugins ?? []
+        let marketplaces = ext?.marketplaces ?? []
+
+        settingsSection(id: "plugins", icon: "puzzlepiece", title: "Plugins") {
+            if !plugins.isEmpty || !marketplaces.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !plugins.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Installed")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+
+                            FlowLayout(spacing: 6) {
+                                ForEach(plugins) { plugin in
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(plugin.enabled ? Color.green : Color.gray)
+                                            .frame(width: 6, height: 6)
+                                        Text(plugin.name)
+                                            .font(.system(size: 11, design: .monospaced))
+                                        if let mp = plugin.marketplace {
+                                            Text("@\(mp)")
+                                                .font(.system(size: 10))
+                                                .foregroundStyle(.tertiary)
+                                        }
+                                    }
+                                    .foregroundStyle(plugin.enabled ? .primary : .secondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(plugin.enabled ? Color.green.opacity(0.08) : Color.gray.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                        }
+                    }
+
+                    if !marketplaces.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Extra Marketplaces")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+
+                            VStack(spacing: 0) {
+                                ForEach(Array(marketplaces.enumerated()), id: \.element.id) { index, mp in
+                                    HStack {
+                                        Image(systemName: marketplaceIcon(mp.sourceType))
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 16)
+                                        Text(mp.name)
+                                            .font(.system(size: 12, weight: .medium))
+                                        Spacer()
+                                        Text(mp.detail)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                            .truncationMode(.middle)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 5)
+
+                                    if index < marketplaces.count - 1 {
+                                        Divider().padding(.horizontal, 12)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                        }
+                    }
+                }
+                .padding(.vertical, 8)
+            } else {
+                settingsEmptyHint("No plugins installed.")
+            }
+        }
+    }
+
+    private func marketplaceIcon(_ sourceType: String) -> String {
+        switch sourceType {
+        case "github": return "chevron.left.forwardslash.chevron.right"
+        case "npm": return "shippingbox"
+        case "directory": return "folder"
+        default: return "globe"
+        }
+    }
+
+    // MARK: - Account Section
+
+    @ViewBuilder
+    private func accountSection() -> some View {
+        settingsSection(id: "account", icon: "person.crop.circle", title: "Account") {
+            if let profile = store.extendedConfig?.profile {
+                VStack(spacing: 0) {
+                    let rows = accountRows(profile)
+                    ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                        if row.isBadge {
+                            HStack {
+                                Text(row.key)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.tertiary)
+                                Spacer()
+                                Text(row.value)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(Color.accentColor.opacity(0.15))
+                                    .foregroundStyle(Color.accentColor)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                        } else {
+                            SettingsKeyValueRow(key: row.key, value: row.value, mono: row.mono)
+                        }
+                        if index < rows.count - 1 {
+                            Divider().padding(.horizontal, 12)
+                        }
+                    }
+                }
+            } else {
+                settingsEmptyHint("No account data found. ~/.claude.json may not exist yet.")
+            }
+        }
+    }
+
+    private struct AccountRow {
+        let key: String
+        let value: String
+        var mono: Bool = false
+        var isBadge: Bool = false
+    }
+
+    private func accountRows(_ profile: ClaudeProfile) -> [AccountRow] {
+        var rows: [AccountRow] = []
+        if let email = profile.maskedEmail {
+            rows.append(AccountRow(key: "Account", value: email))
+        }
+        if let role = profile.orgRole {
+            rows.append(AccountRow(key: "Org Role", value: role))
+        }
+        if let n = profile.numStartups {
+            rows.append(AccountRow(key: "Startups", value: "\(n)"))
+        }
+        if let theme = profile.theme {
+            rows.append(AccountRow(key: "Theme", value: theme))
+        }
+        if let channel = profile.autoUpdatesChannel {
+            rows.append(AccountRow(key: "Updates Channel", value: channel, isBadge: true))
+        }
+        if let v = profile.lastReleaseNotesSeen {
+            rows.append(AccountRow(key: "Last Release Notes", value: v, mono: true))
+        }
+        if let onboarded = profile.hasCompletedOnboarding {
+            rows.append(AccountRow(key: "Onboarding Complete", value: onboarded ? "Yes" : "No"))
+        }
+        if let shift = profile.shiftEnterKeyBindingInstalled {
+            rows.append(AccountRow(key: "Shift+Enter Binding", value: shift ? "Installed" : "Not installed"))
+        }
+        return rows
+    }
+
     // MARK: - Section Builder
 
     @ViewBuilder
@@ -527,6 +858,20 @@ struct SettingsMainPanelView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(.quaternary, lineWidth: 1)
         )
+    }
+
+    // MARK: - Empty Hint
+
+    @ViewBuilder
+    private func settingsEmptyHint(_ message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "minus.circle")
+                .font(.system(size: 11))
+            Text(message)
+                .font(.system(size: 11))
+        }
+        .foregroundStyle(.tertiary)
+        .padding(12)
     }
 
     // MARK: - Helpers

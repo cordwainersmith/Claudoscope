@@ -95,7 +95,7 @@ struct FullWindowView: View {
                 await store.loadPlans()
             case .timeline:
                 await store.loadTimeline()
-            case .hooks, .commands, .mcps, .skills, .memory:
+            case .hooks, .commands, .mcps, .skills, .memory, .settings:
                 await store.loadConfig(projectId: selectedProjectId)
             default:
                 break

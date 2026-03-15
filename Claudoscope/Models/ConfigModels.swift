@@ -64,3 +64,52 @@ struct MemoryFile: Identifiable, Sendable {
     let content: String?
     let sizeBytes: Int?
 }
+
+// MARK: - Extended Config Models
+
+struct SandboxConfig: Sendable {
+    let unsandboxedCommands: [String]
+    let enableWeakerNestedSandbox: Bool
+}
+
+struct AttributionConfig: Sendable {
+    let commitTemplate: String?
+    let prTemplate: String?
+    let hasDeprecatedCoAuthoredBy: Bool
+}
+
+struct PluginInfo: Identifiable, Sendable {
+    var id: String { fullName }
+    let fullName: String
+    let name: String
+    let marketplace: String?
+    let enabled: Bool
+}
+
+struct MarketplaceSource: Identifiable, Sendable {
+    var id: String { name }
+    let name: String
+    let sourceType: String
+    let detail: String
+}
+
+struct ClaudeProfile: Sendable {
+    let numStartups: Int?
+    let theme: String?
+    let autoUpdatesChannel: String?
+    let hasCompletedOnboarding: Bool?
+    let lastOnboardingVersion: String?
+    let lastReleaseNotesSeen: String?
+    let shiftEnterKeyBindingInstalled: Bool?
+    let maskedEmail: String?
+    let orgRole: String?
+}
+
+struct ExtendedConfig: Sendable {
+    let sandbox: SandboxConfig?
+    let skipDangerousModePermissionPrompt: Bool
+    let attribution: AttributionConfig?
+    let plugins: [PluginInfo]
+    let marketplaces: [MarketplaceSource]
+    let profile: ClaudeProfile?
+}

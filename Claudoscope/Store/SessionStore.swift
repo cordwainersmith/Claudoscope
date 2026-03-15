@@ -54,6 +54,7 @@ final class SessionStore {
     var skills: [SkillEntry] = []
     var mcpServers: [McpServerEntry] = []
     var memoryFiles: [MemoryFile] = []
+    var extendedConfig: ExtendedConfig?
     var configLoading: Bool = false
 
     // Appearance
@@ -326,12 +327,14 @@ final class SessionStore {
         let skls = await configService.loadSkills()
         let mcps = await configService.loadMcpServers()
         let memory = await configService.loadMemoryFiles(projectId: projectId)
+        let extended = await configService.loadExtendedConfig()
         await MainActor.run {
             self.hookGroups = hooks
             self.commands = cmds
             self.skills = skls
             self.mcpServers = mcps
             self.memoryFiles = memory
+            self.extendedConfig = extended
             self.configLoading = false
         }
     }
