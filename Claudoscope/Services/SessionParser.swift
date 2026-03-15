@@ -4,6 +4,12 @@ import Foundation
 /// Port of server/services/session-parser.ts
 actor SessionParser {
     private let decoder = JSONDecoder()
+    private var seenUUIDs = Set<String>()
+
+    /// Clear seen UUIDs (call before a full rescan)
+    func resetDedup() {
+        seenUUIDs.removeAll()
+    }
 
     /// Full parse of a JSONL session file into a ParsedSession
     func parse(url: URL, sessionId: String) throws -> ParsedSession {
@@ -183,6 +189,7 @@ actor SessionParser {
         var firstTimestamp = ""
         var lastTimestamp = ""
         var firstLine = ""
+        var perMessageCost = 0.0
 
         let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
 
@@ -214,10 +221,36 @@ actor SessionParser {
                 }
 
                 if raw.type == .assistant, let usage = raw.message?.usage {
-                    totalInputTokens += usage.inputTokens ?? 0
-                    totalOutputTokens += usage.outputTokens ?? 0
-                    totalCacheReadTokens += usage.cacheReadInputTokens ?? 0
-                    totalCacheCreationTokens += usage.cacheCreationInputTokens ?? 0
+                    // Deduplicate: skip records already counted from another file
+                    if let uuid = raw.uuid {
+                        if seenUUIDs.contains(uuid) { continue }
+                        seenUUIDs.insert(uuid)
+                    }
+
+                    let msgInput = usage.inputTokens ?? 0
+                    let msgOutput = usage.outputTokens ?? 0
+                    let msgCacheRead = usage.cacheReadInputTokens ?? 0
+                    let msgCacheCreate = usage.cacheCreationInputTokens ?? 0
+
+                    // Split cache creation into 5m/1h tiers if available
+                    let msgCache5m = usage.cacheCreation?.ephemeral5mInputTokens ?? msgCacheCreate
+                    let msgCache1h = usage.cacheCreation?.ephemeral1hInputTokens ?? 0
+
+                    totalInputTokens += msgInput
+                    totalOutputTokens += msgOutput
+                    totalCacheReadTokens += msgCacheRead
+                    totalCacheCreationTokens += msgCacheCreate
+
+                    // Accumulate cost per-message using each message's actual model
+                    perMessageCost += estimateCostFromTokens(
+                        model: raw.message?.model,
+                        inputTokens: msgInput,
+                        outputTokens: msgOutput,
+                        cacheReadTokens: msgCacheRead,
+                        cacheCreation5mTokens: msgCache5m,
+                        cacheCreation1hTokens: msgCache1h,
+                        table: pricingTable
+                    )
 
                     if primaryModel == nil, let model = raw.message?.model {
                         primaryModel = model
@@ -237,14 +270,6 @@ actor SessionParser {
         }
 
         let title = deriveTitle(slug: slug, firstLine: firstLine, sessionId: sessionId)
-        let cost = estimateCostFromTokens(
-            model: primaryModel,
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-            cacheReadTokens: totalCacheReadTokens,
-            cacheCreationTokens: totalCacheCreationTokens,
-            table: pricingTable
-        )
 
         return SessionSummary(
             id: sessionId,
@@ -259,7 +284,7 @@ actor SessionParser {
             totalOutputTokens: totalOutputTokens,
             totalCacheReadTokens: totalCacheReadTokens,
             totalCacheCreationTokens: totalCacheCreationTokens,
-            estimatedCost: cost,
+            estimatedCost: perMessageCost,
             hasError: hasError
         )
     }

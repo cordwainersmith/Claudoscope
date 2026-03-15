@@ -114,17 +114,7 @@ final class SessionStore {
     }
 
     var todayCost: Double {
-        let table = pricingTable
-        return todaySessions.reduce(0.0) { total, s in
-            total + estimateCostFromTokens(
-                model: s.primaryModel,
-                inputTokens: s.totalInputTokens,
-                outputTokens: s.totalOutputTokens,
-                cacheReadTokens: s.totalCacheReadTokens,
-                cacheCreationTokens: s.totalCacheCreationTokens,
-                table: table
-            )
-        }
+        todaySessions.reduce(0.0) { $0 + $1.estimatedCost }
     }
 
     init() {
@@ -232,6 +222,24 @@ final class SessionStore {
         hasActiveSession = allSessionsWithProjects.contains { pair in
             guard let date = isoFormatter.date(from: pair.session.lastTimestamp) else { return false }
             return now.timeIntervalSince(date) < 60
+        }
+    }
+
+    /// Re-scan all sessions with the current pricing table (e.g. after pricing provider change)
+    func rescanAllSessions() {
+        Task {
+            let scanner = ProjectScanner(
+                claudeDir: claudeDir,
+                parser: parser,
+                pricingTable: pricingTable
+            )
+            let (scannedProjects, scannedSessions) = await scanner.scan()
+
+            await MainActor.run {
+                self.projects = scannedProjects
+                self.sessionsByProject = scannedSessions
+                self.recomputeAnalytics()
+            }
         }
     }
 

@@ -169,17 +169,29 @@ struct ToolResultTextBlock: Decodable, Sendable {
 
 // MARK: - Token Usage
 
+struct CacheCreationBreakdown: Decodable, Sendable {
+    let ephemeral5mInputTokens: Int?
+    let ephemeral1hInputTokens: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case ephemeral5mInputTokens = "ephemeral_5m_input_tokens"
+        case ephemeral1hInputTokens = "ephemeral_1h_input_tokens"
+    }
+}
+
 struct TokenUsageRaw: Decodable, Sendable {
     let inputTokens: Int?
     let outputTokens: Int?
     let cacheReadInputTokens: Int?
     let cacheCreationInputTokens: Int?
+    let cacheCreation: CacheCreationBreakdown?
 
     enum CodingKeys: String, CodingKey {
         case inputTokens = "input_tokens"
         case outputTokens = "output_tokens"
         case cacheReadInputTokens = "cache_read_input_tokens"
         case cacheCreationInputTokens = "cache_creation_input_tokens"
+        case cacheCreation = "cache_creation"
     }
 }
 

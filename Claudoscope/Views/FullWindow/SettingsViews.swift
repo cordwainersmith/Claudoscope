@@ -422,6 +422,7 @@ struct SettingsMainPanelView: View {
                         ForEach(PricingProvider.allCases, id: \.self) { provider in
                             Button {
                                 store.pricingProvider = provider
+                                store.rescanAllSessions()
                             } label: {
                                 Text(provider == .anthropic ? "Anthropic" : "Vertex AI")
                                     .font(.system(size: 12, weight: .medium))

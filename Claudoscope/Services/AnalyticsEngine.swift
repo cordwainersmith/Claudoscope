@@ -37,14 +37,7 @@ struct AnalyticsEngine {
             totalTokens += sessionTokens
             totalCacheTokens += session.totalCacheReadTokens + session.totalCacheCreationTokens
 
-            let cost = estimateCostFromTokens(
-                model: session.primaryModel,
-                inputTokens: session.totalInputTokens,
-                outputTokens: session.totalOutputTokens,
-                cacheReadTokens: session.totalCacheReadTokens,
-                cacheCreationTokens: session.totalCacheCreationTokens,
-                table: pricingTable
-            )
+            let cost = session.estimatedCost
             totalCost += cost
 
             // Daily usage
