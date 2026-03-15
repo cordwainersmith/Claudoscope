@@ -114,7 +114,17 @@ final class SessionStore {
     }
 
     var todayCost: Double {
-        todaySessions.reduce(0) { $0 + $1.estimatedCost }
+        let table = pricingTable
+        return todaySessions.reduce(0.0) { total, s in
+            total + estimateCostFromTokens(
+                model: s.primaryModel,
+                inputTokens: s.totalInputTokens,
+                outputTokens: s.totalOutputTokens,
+                cacheReadTokens: s.totalCacheReadTokens,
+                cacheCreationTokens: s.totalCacheCreationTokens,
+                table: table
+            )
+        }
     }
 
     init() {

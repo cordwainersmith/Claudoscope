@@ -14,7 +14,7 @@ struct AnalyticsEngine {
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         let filtered = sessions.filter { pair in
-            guard let date = isoFormatter.date(from: pair.session.firstTimestamp) else { return true }
+            guard let date = isoFormatter.date(from: pair.session.lastTimestamp) else { return true }
             if let fromDate, date < fromDate { return false }
             if let toDate, date > toDate { return false }
             return true

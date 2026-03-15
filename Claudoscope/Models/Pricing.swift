@@ -25,23 +25,23 @@ struct PricingTables {
         "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation: 18.75),
         "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation: 3.75),
         "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation: 1.25),
-        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.025,  cacheCreation: 0.3125),
+        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation: 0.30),
     ]
 
     static let vertexGlobal: [String: ModelPricing] = [
-        "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation: 0),
-        "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation: 0),
-        "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation: 0),
-        "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation: 0),
-        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.025,  cacheCreation: 0),
+        "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation: 6.25),
+        "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation: 18.75),
+        "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation: 3.75),
+        "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation: 1.25),
+        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation: 0.30),
     ]
 
     static let vertexRegional: [String: ModelPricing] = [
-        "opus":   ModelPricing(input: 5.50,  output: 27.50,  cacheRead: 0.55,   cacheCreation: 0),
-        "opus4":  ModelPricing(input: 16.50, output: 82.50,  cacheRead: 1.65,   cacheCreation: 0),
-        "sonnet": ModelPricing(input: 3.30,  output: 16.50,  cacheRead: 0.33,   cacheCreation: 0),
-        "haiku":  ModelPricing(input: 1.10,  output: 5.50,   cacheRead: 0.11,   cacheCreation: 0),
-        "haiku3": ModelPricing(input: 0.275, output: 1.375,  cacheRead: 0.0275, cacheCreation: 0),
+        "opus":   ModelPricing(input: 5.50,  output: 27.50,  cacheRead: 0.55,   cacheCreation: 6.875),
+        "opus4":  ModelPricing(input: 16.50, output: 82.50,  cacheRead: 1.65,   cacheCreation: 20.625),
+        "sonnet": ModelPricing(input: 3.30,  output: 16.50,  cacheRead: 0.33,   cacheCreation: 4.125),
+        "haiku":  ModelPricing(input: 1.10,  output: 5.50,   cacheRead: 0.11,   cacheCreation: 1.375),
+        "haiku3": ModelPricing(input: 0.275, output: 1.375,  cacheRead: 0.033,  cacheCreation: 0.33),
     ]
 
     static func table(provider: PricingProvider, region: VertexRegion) -> [String: ModelPricing] {
