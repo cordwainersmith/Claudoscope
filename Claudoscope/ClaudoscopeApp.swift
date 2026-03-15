@@ -16,17 +16,16 @@ struct ClaudoscopeApp: App {
     }
 }
 
-/// Loads the custom menu bar icon from bundle resources as a template image
+/// Loads the custom menu bar icon from bundle resources
 struct MenuBarIcon: View {
     var body: some View {
         if let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
            let nsImage = NSImage(contentsOf: url) {
-            let templateImage = nsImage
-            let _ = templateImage.isTemplate = true
-            Image(nsImage: templateImage)
-                .renderingMode(.template)
+            nsImage.isTemplate = false
+            return AnyView(Image(nsImage: nsImage)
+                .renderingMode(.original))
         } else {
-            Image(systemName: "chevron.left.forwardslash.chevron.right")
+            return AnyView(Image(systemName: "chevron.left.forwardslash.chevron.right"))
         }
     }
 }
@@ -45,7 +44,7 @@ struct MenuBarPopoverContent: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(1.5)
                 Spacer()
-                if let url = Bundle.main.url(forResource: "app-icon", withExtension: "png"),
+                if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
                    let image = NSImage(contentsOf: url) {
                     Image(nsImage: image)
                         .resizable()
@@ -213,8 +212,8 @@ final class MainWindowController {
         // Show the app in the Dock while the full window is open
         NSApplication.shared.setActivationPolicy(.regular)
 
-        // Use the c2 icon as the Dock icon
-        if let iconURL = Bundle.main.url(forResource: "app-icon", withExtension: "png"),
+        // Use the rounded icon as the Dock icon
+        if let iconURL = Bundle.main.url(forResource: "app-icon-rounded", withExtension: "png"),
            let iconImage = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = iconImage
         }
@@ -289,13 +288,13 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            if let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
+            if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
                let nsImage = NSImage(contentsOf: url) {
                 Image(nsImage: nsImage)
                     .resizable()
+                    .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 48, height: 48)
-                    .foregroundStyle(.secondary)
+                    .frame(width: 64, height: 64)
             }
 
             Text("Claudoscope")

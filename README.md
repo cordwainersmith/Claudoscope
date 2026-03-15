@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Claudoscope/Resources/app-icon.png" alt="Claudoscope" width="128" />
+  <img src="Claudoscope/Resources/logo-c-t.png" alt="Claudoscope" width="200" />
 </p>
 
 <h1 align="center">Claudoscope</h1>
@@ -39,13 +39,22 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
 
 ## Installation
 
-### Homebrew
+### Homebrew (recommended)
 
-> TBD -- Homebrew Cask formula is in progress and will be available soon.
+```bash
+brew tap cordwainersmith/claudoscope
+brew install --cask claudoscope
+```
+
+To update to the latest version:
+
+```bash
+brew upgrade --cask claudoscope
+```
 
 ### Manual
 
-Download the latest `Claudoscope.dmg` from the [Releases](../../releases) page, open it, and drag Claudoscope to your Applications folder.
+Download the latest `Claudoscope.dmg` from the [Releases](https://github.com/cordwainersmith/Claudoscope/releases) page, open it, and drag Claudoscope to your Applications folder.
 
 ## How It Works
 

@@ -23,6 +23,7 @@ targets:
       path: Claudoscope/Info.plist
       properties:
         LSUIElement: true
+        CFBundleIconFile: AppIcon
         CFBundleName: Claudoscope
         CFBundleShortVersionString: "1.0.0"
         CFBundleVersion: "1"
