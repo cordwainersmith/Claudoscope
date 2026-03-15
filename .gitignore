@@ -4,3 +4,11 @@
 *.xcodeproj/project.xcworkspace/xcuserdata/
 DerivedData/
 .DS_Store
+
+# Build output
+build/
+dist/
+
+# Distribution artifacts
+*.dmg
+*.zip

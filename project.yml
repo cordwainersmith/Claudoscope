@@ -29,12 +29,25 @@ targets:
     dependencies:
       - package: swift-collections
         product: OrderedCollections
+    entitlements:
+      path: Claudoscope/Claudoscope.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.files.user-selected.read-only: true
     settings:
       base:
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         PRODUCT_BUNDLE_IDENTIFIER: com.claudoscope.app
-        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Developer ID Application"
+        DEVELOPMENT_TEAM: "DN8M2CQ4D2"
         PRODUCT_NAME: Claudoscope
         GENERATE_INFOPLIST_FILE: false
         INFOPLIST_FILE: Claudoscope/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Claudoscope/Claudoscope.entitlements
+        ENABLE_HARDENED_RUNTIME: true
+        OTHER_CODE_SIGN_FLAGS: "--timestamp"
+      configs:
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: false

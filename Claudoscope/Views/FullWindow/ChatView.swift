@@ -611,7 +611,7 @@ struct ClaudeAvatarView: View {
     }
 
     private func loadAvatar() -> NSImage? {
-        guard let url = Bundle.module.url(forResource: "claude-avatar", withExtension: "png"),
+        guard let url = Bundle.main.url(forResource: "claude-avatar", withExtension: "png"),
               let image = NSImage(contentsOf: url) else {
             return nil
         }

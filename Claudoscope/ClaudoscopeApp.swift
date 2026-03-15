@@ -19,7 +19,7 @@ struct ClaudoscopeApp: App {
 /// Loads the custom menu bar icon from bundle resources as a template image
 struct MenuBarIcon: View {
     var body: some View {
-        if let url = Bundle.module.url(forResource: "menu-bar-icon", withExtension: "png"),
+        if let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
            let nsImage = NSImage(contentsOf: url) {
             let templateImage = nsImage
             let _ = templateImage.isTemplate = true
@@ -45,7 +45,7 @@ struct MenuBarPopoverContent: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(1.5)
                 Spacer()
-                if let url = Bundle.module.url(forResource: "c2", withExtension: "png"),
+                if let url = Bundle.main.url(forResource: "c2", withExtension: "png"),
                    let image = NSImage(contentsOf: url) {
                     Image(nsImage: image)
                         .resizable()
@@ -214,7 +214,7 @@ final class MainWindowController {
         NSApplication.shared.setActivationPolicy(.regular)
 
         // Use the c2 icon as the Dock icon
-        if let iconURL = Bundle.module.url(forResource: "c2", withExtension: "png"),
+        if let iconURL = Bundle.main.url(forResource: "c2", withExtension: "png"),
            let iconImage = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = iconImage
         }
@@ -289,7 +289,7 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            if let url = Bundle.module.url(forResource: "menu-bar-icon", withExtension: "png"),
+            if let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
                let nsImage = NSImage(contentsOf: url) {
                 Image(nsImage: nsImage)
                     .resizable()

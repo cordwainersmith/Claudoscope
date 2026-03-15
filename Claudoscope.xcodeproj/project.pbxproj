@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		0078AB17A98694129FCB966D /* ClaudoscopeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF3B6725B874F51D707C5BC /* ClaudoscopeApp.swift */; };
 		0098B79C8098B14B45704A11 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36BE905550D92E16D7F8C7F7 /* SessionStore.swift */; };
+		012240B962873B0C88D910A3 /* claude-avatar.png in Resources */ = {isa = PBXBuildFile; fileRef = 6CC992B504C32AC4D661A1F4 /* claude-avatar.png */; };
+		0BFDFF676D66495C6F616426 /* MarkdownContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BCC86F520EF64BB8A26071 /* MarkdownContentView.swift */; };
 		12C21DB934D77E944493C138 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D7971E0CD27E24EA4A480E6 /* Analytics.swift */; };
 		1A04BC4E3C893024EED68B80 /* ConfigModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 522BA7B67E66F746F6672F3D /* ConfigModels.swift */; };
 		30E3B81A8F61358B056FA8D6 /* FormatTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62E28D26880C9197EAA14012 /* FormatTokens.swift */; };
@@ -23,6 +25,7 @@
 		579735385E6C868F4B83E732 /* Pricing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81DF11D4977B85F512978EB4 /* Pricing.swift */; };
 		5B85C48489D0E6A23E63217E /* ParsedRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACA023984A7F32D855368F58 /* ParsedRecord.swift */; };
 		5C20B9BF06E70E9A61BB3619 /* SessionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF318D3FE5B15C30647264D9 /* SessionParser.swift */; };
+		60BD8C232D85B2E8A780BFCD /* c2.png in Resources */ = {isa = PBXBuildFile; fileRef = 53F9CCBA593C216AD8AD21CF /* c2.png */; };
 		624E3993324D7472C96E3861 /* AnyCodable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DC980FA29C54C37655D70B3 /* AnyCodable.swift */; };
 		66E55EA5799B70EA75EF584C /* Plan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B5AD5C97A1979D7B993D7FE /* Plan.swift */; };
 		69899BD60BE204259DAE3C5C /* HistoryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8671D0102C349DFC8FDB46DC /* HistoryEntry.swift */; };
@@ -35,11 +38,13 @@
 		8B78545961C5FD91EE3AE257 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = 288A5C98236E585662FBB57B /* Session.swift */; };
 		934E8FE6D6BCE9B1BF2B5B49 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 181C1FBE4BAD0ABA3659C9AE /* ChatView.swift */; };
 		9C6CEA7A046DC9A9E6D00468 /* OrderedCollections in Frameworks */ = {isa = PBXBuildFile; productRef = 699B3356404443E9AA17FF3E /* OrderedCollections */; };
+		A64E4264659BBDB071240573 /* menu-bar-icon.png in Resources */ = {isa = PBXBuildFile; fileRef = 7C3CB7F65088B3987E1EBF3C /* menu-bar-icon.png */; };
 		A93B5DD366ADD7F1709D8F62 /* ConfigService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979145E974E4729A1E40B58A /* ConfigService.swift */; };
 		B7EF95CAACF8FA4BDB4993F5 /* ClaudeFileWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A85179A753242972AC65061 /* ClaudeFileWatcher.swift */; };
 		BEC43A077BE1764FEC260B43 /* ConfigViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D0AAED2B9C455F6BD6B73B4 /* ConfigViews.swift */; };
 		C4008F40506E0930878C4BF4 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B8ED9E1782A21DED7480005 /* SidebarView.swift */; };
 		C91A03FFA519E5546BCA8B18 /* PlansService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D704F18BFB898F909BDA5A3F /* PlansService.swift */; };
+		CEAB50CF34D29A557C0CE9CB /* AppColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B90102CF321F322969CB19A /* AppColors.swift */; };
 		CF5E5F55B7AFFDCA1C0CAB44 /* SessionCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F1EAF206169C616DB85D6 /* SessionCache.swift */; };
 		D0FDAC29D72386E680F63277 /* ActiveSessionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C9CE37238209A1B9BD39F9 /* ActiveSessionCard.swift */; };
 		DD24D4F550C8ADD7DB47F373 /* TimelineViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2576DE9BDA4F24F91A1C3393 /* TimelineViews.swift */; };
@@ -63,7 +68,12 @@
 		4521BED18184910CC42F0908 /* Claudoscope.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Claudoscope.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4753514D47DD638135C36507 /* SparklineChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparklineChart.swift; sourceTree = "<group>"; };
 		522BA7B67E66F746F6672F3D /* ConfigModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigModels.swift; sourceTree = "<group>"; };
+		53F9CCBA593C216AD8AD21CF /* c2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = c2.png; sourceTree = "<group>"; };
 		62E28D26880C9197EAA14012 /* FormatTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatTokens.swift; sourceTree = "<group>"; };
+		6B90102CF321F322969CB19A /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
+		6CC992B504C32AC4D661A1F4 /* claude-avatar.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "claude-avatar.png"; sourceTree = "<group>"; };
+		71BCC86F520EF64BB8A26071 /* MarkdownContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownContentView.swift; sourceTree = "<group>"; };
+		7C3CB7F65088B3987E1EBF3C /* menu-bar-icon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "menu-bar-icon.png"; sourceTree = "<group>"; };
 		7EC97A918EADBAB1C517BE63 /* PopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverView.swift; sourceTree = "<group>"; };
 		81DF11D4977B85F512978EB4 /* Pricing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Pricing.swift; sourceTree = "<group>"; };
 		8201153D6428C111C053C5E0 /* Project.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Project.swift; sourceTree = "<group>"; };
@@ -80,6 +90,7 @@
 		E34C5690562ED67673585F47 /* RailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RailView.swift; sourceTree = "<group>"; };
 		E71F1EAF206169C616DB85D6 /* SessionCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionCache.swift; sourceTree = "<group>"; };
 		E95AC0FD38DD868798EF9378 /* RailItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RailItem.swift; sourceTree = "<group>"; };
+		EDB2311F6B6D56A237821670 /* Claudoscope.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Claudoscope.entitlements; sourceTree = "<group>"; };
 		EDF3B6725B874F51D707C5BC /* ClaudoscopeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudoscopeApp.swift; sourceTree = "<group>"; };
 		F045153FCF805F235FA7E5F7 /* StatsStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsStrip.swift; sourceTree = "<group>"; };
 		F270FF9B28AC36262E533231 /* AnalyticsEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsEngine.swift; sourceTree = "<group>"; };
@@ -132,6 +143,7 @@
 			isa = PBXGroup;
 			children = (
 				D9363FDF719F38B32889C5CE /* EmptyStateView.swift */,
+				71BCC86F520EF64BB8A26071 /* MarkdownContentView.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -164,6 +176,7 @@
 		81A5E81A0B3AC4E5CB96EF04 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				6B90102CF321F322969CB19A /* AppColors.swift */,
 				62E28D26880C9197EAA14012 /* FormatTokens.swift */,
 			);
 			path = Utilities;
@@ -180,6 +193,7 @@
 		B0532CCAA81332E49D99A1B1 /* Claudoscope */ = {
 			isa = PBXGroup;
 			children = (
+				EDB2311F6B6D56A237821670 /* Claudoscope.entitlements */,
 				EDF3B6725B874F51D707C5BC /* ClaudoscopeApp.swift */,
 				BA5BEE61B427A6D434155BAE /* Models */,
 				F9E6B78752B1AE0D50C683B5 /* Resources */,
@@ -228,6 +242,9 @@
 		F9E6B78752B1AE0D50C683B5 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				53F9CCBA593C216AD8AD21CF /* c2.png */,
+				6CC992B504C32AC4D661A1F4 /* claude-avatar.png */,
+				7C3CB7F65088B3987E1EBF3C /* menu-bar-icon.png */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -240,6 +257,7 @@
 			buildConfigurationList = 8AEE6F1D92924AE6A87C93B3 /* Build configuration list for PBXNativeTarget "Claudoscope" */;
 			buildPhases = (
 				924F786545EE7FAC97291788 /* Sources */,
+				EB14B6408AE21758CEDDDCE3 /* Resources */,
 				BFC217DFA59405C97A6DF3B2 /* Frameworks */,
 			);
 			buildRules = (
@@ -264,7 +282,8 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					4C925606D7F5E924B2AEE8AF = {
-						ProvisioningStyle = Automatic;
+						DevelopmentTeam = DN8M2CQ4D2;
+						ProvisioningStyle = Manual;
 					};
 				};
 			};
@@ -290,6 +309,19 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		EB14B6408AE21758CEDDDCE3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				60BD8C232D85B2E8A780BFCD /* c2.png in Resources */,
+				012240B962873B0C88D910A3 /* claude-avatar.png in Resources */,
+				A64E4264659BBDB071240573 /* menu-bar-icon.png in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		924F786545EE7FAC97291788 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -299,6 +331,7 @@
 				12C21DB934D77E944493C138 /* Analytics.swift in Sources */,
 				4730FEE3455F93FEDB12A869 /* AnalyticsEngine.swift in Sources */,
 				624E3993324D7472C96E3861 /* AnyCodable.swift in Sources */,
+				CEAB50CF34D29A557C0CE9CB /* AppColors.swift in Sources */,
 				934E8FE6D6BCE9B1BF2B5B49 /* ChatView.swift in Sources */,
 				B7EF95CAACF8FA4BDB4993F5 /* ClaudeFileWatcher.swift in Sources */,
 				0078AB17A98694129FCB966D /* ClaudoscopeApp.swift in Sources */,
@@ -311,6 +344,7 @@
 				3714014A23BD2DEA1ABC69DE /* FullWindowView.swift in Sources */,
 				69899BD60BE204259DAE3C5C /* HistoryEntry.swift in Sources */,
 				85C2E31841163209B794A6C0 /* MainPanelView.swift in Sources */,
+				0BFDFF676D66495C6F616426 /* MarkdownContentView.swift in Sources */,
 				5B85C48489D0E6A23E63217E /* ParsedRecord.swift in Sources */,
 				66E55EA5799B70EA75EF584C /* Plan.swift in Sources */,
 				C91A03FFA519E5546BCA8B18 /* PlansService.swift in Sources */,
@@ -342,8 +376,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = Claudoscope/Claudoscope.entitlements;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = DN8M2CQ4D2;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Claudoscope/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -351,6 +389,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_CODE_SIGN_FLAGS = "--timestamp";
 				PRODUCT_BUNDLE_IDENTIFIER = com.claudoscope.app;
 				PRODUCT_NAME = Claudoscope;
 				SDKROOT = macosx;
@@ -362,8 +401,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_ENTITLEMENTS = Claudoscope/Claudoscope.entitlements;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = DN8M2CQ4D2;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Claudoscope/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -371,6 +415,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_CODE_SIGN_FLAGS = "--timestamp";
 				PRODUCT_BUNDLE_IDENTIFIER = com.claudoscope.app;
 				PRODUCT_NAME = Claudoscope;
 				SDKROOT = macosx;
