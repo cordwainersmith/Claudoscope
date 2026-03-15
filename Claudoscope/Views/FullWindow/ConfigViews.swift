@@ -941,74 +941,82 @@ private struct McpServerCard: View {
 
 struct MemorySidebarContent: View {
     let filterText: String
+    let projects: [Project]
     let memoryFiles: [MemoryFile]
     @Binding var selectedMemoryId: String?
+    @Binding var selectedProjectId: String?
 
-    private var filtered: [MemoryFile] {
-        if filterText.isEmpty { return memoryFiles }
-        return memoryFiles.filter { file in
-            file.label.localizedCaseInsensitiveContains(filterText) ||
-            file.sublabel.localizedCaseInsensitiveContains(filterText)
-        }
+    private var filteredProjects: [Project] {
+        if filterText.isEmpty { return projects }
+        return projects.filter { $0.name.localizedCaseInsensitiveContains(filterText) }
+    }
+
+    private var showGlobal: Bool {
+        filterText.isEmpty || "global".localizedCaseInsensitiveContains(filterText)
     }
 
     var body: some View {
-        if filtered.isEmpty {
-            ConfigEmptyList(icon: "brain", text: "No memory files found")
-        } else {
-            LazyVStack(alignment: .leading, spacing: 2) {
-                ForEach(filtered) { file in
-                    MemoryFileRow(
-                        file: file,
-                        isSelected: selectedMemoryId == file.id
-                    ) {
-                        selectedMemoryId = file.id
-                    }
+        LazyVStack(alignment: .leading, spacing: 2) {
+            // Global entry
+            if showGlobal {
+                MemoryProjectRow(
+                    name: "Global",
+                    icon: "globe",
+                    fileCount: 1,
+                    isSelected: selectedProjectId == nil
+                ) {
+                    selectedProjectId = nil
+                    selectedMemoryId = nil
                 }
             }
-            .padding(.vertical, 4)
+
+            // Per-project entries
+            ForEach(filteredProjects) { project in
+                MemoryProjectRow(
+                    name: project.name,
+                    icon: "folder",
+                    fileCount: nil,
+                    isSelected: selectedProjectId == project.id
+                ) {
+                    selectedProjectId = project.id
+                    selectedMemoryId = nil
+                }
+            }
         }
+        .padding(.vertical, 4)
     }
 }
 
-private struct MemoryFileRow: View {
-    let file: MemoryFile
+private struct MemoryProjectRow: View {
+    let name: String
+    let icon: String
+    let fileCount: Int?
     let isSelected: Bool
     let onSelect: () -> Void
-
-    private var isAvailable: Bool {
-        file.content != nil
-    }
 
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
-                // Availability indicator
-                Circle()
-                    .fill(isAvailable ? (isSelected ? .white : .green) : (isSelected ? .white.opacity(0.4) : Color.secondary.opacity(0.3)))
-                    .frame(width: 6, height: 6)
+                Image(systemName: icon)
+                    .font(.system(size: 11))
+                    .foregroundStyle(isSelected ? .white : .secondary)
+                    .frame(width: 16)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(file.label)
-                        .font(.system(size: 12))
-                        .lineLimit(1)
-                        .foregroundStyle(isSelected ? .white : (isAvailable ? .primary : .secondary))
-
-                    Text(file.sublabel)
-                        .font(.system(size: 10))
-                        .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.tertiary))
-                }
+                Text(name)
+                    .font(.system(size: 12, weight: isSelected ? .medium : .regular))
+                    .lineLimit(1)
+                    .foregroundStyle(isSelected ? .white : .primary)
 
                 Spacer()
 
-                if let sizeBytes = file.sizeBytes {
-                    Text(formatConfigFileSize(sizeBytes))
+                if let count = fileCount {
+                    Text("\(count)")
                         .font(.system(size: 10))
                         .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.tertiary))
-                } else {
-                    Text("missing")
-                        .font(.system(size: 10))
-                        .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.5)) : AnyShapeStyle(.quaternary))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(Color.secondary.opacity(0.15)))
+                        .clipShape(Capsule())
                 }
             }
             .padding(.horizontal, 12)
@@ -1033,21 +1041,69 @@ struct MemoryMainPanelView: View {
     }
 
     var body: some View {
-        if let file = selectedFile {
+        if memoryFiles.isEmpty {
+            EmptyStateView(
+                icon: "brain",
+                title: "Select a scope",
+                message: "Choose Global or a project from the sidebar to view memory files."
+            )
+        } else if let file = selectedFile {
             memoryDetailContent(file)
-        } else if memoryFiles.isEmpty {
-            EmptyStateView(
-                icon: "brain",
-                title: "No memory files",
-                message: "Memory files (CLAUDE.md, MEMORY.md) were not found."
-            )
         } else {
-            EmptyStateView(
-                icon: "brain",
-                title: "Select a memory file",
-                message: "Choose a file from the sidebar to view its contents."
-            )
+            // Show file list for this scope
+            memoryFileList
         }
+    }
+
+    private var memoryFileList: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(memoryFiles) { file in
+                Button {
+                    selectedMemoryId = file.id
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(file.content != nil ? Color.green : Color.secondary.opacity(0.3))
+                            .frame(width: 6, height: 6)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(file.label)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.primary)
+
+                            Text(file.sublabel)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if let sizeBytes = file.sizeBytes {
+                            Text(formatConfigFileSize(sizeBytes))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text("missing")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.quaternary)
+                        }
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Divider().padding(.leading, 24)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -1095,8 +1151,8 @@ struct MemoryMainPanelView: View {
                 }
             } else {
                 EmptyStateView(
-                    icon: "doc.questionmark",
-                    title: "File not found",
+                    icon: "brain",
+                    title: "No memory available",
                     message: file.path
                 )
             }

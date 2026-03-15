@@ -39,6 +39,7 @@ struct FullWindowView: View {
                 selectedSkillName: $selectedSkillName,
                 selectedMcpName: $selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
+                selectedMemoryProjectId: $selectedMemoryProjectId,
                 selectedSettingsSection: $selectedSettingsSection
             )
 
@@ -87,6 +88,11 @@ struct FullWindowView: View {
                 store.selectedPlanDetail = nil
             }
         }
+        .onChange(of: selectedMemoryProjectId) { _, _ in
+            Task {
+                await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
+            }
+        }
     }
 
     private func loadDataForRail(_ rail: RailItem) {
@@ -96,7 +102,10 @@ struct FullWindowView: View {
                 await store.loadPlans()
             case .timeline:
                 await store.loadTimeline()
-            case .hooks, .commands, .mcps, .skills, .memory, .settings:
+            case .memory:
+                await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
+                await store.loadConfig(projectId: selectedProjectId)
+            case .hooks, .commands, .mcps, .skills, .settings:
                 await store.loadConfig(projectId: selectedProjectId)
             default:
                 break

@@ -406,7 +406,7 @@ actor ConfigService {
             files.append(makeMemoryFile(
                 id: "project",
                 label: "CLAUDE.md",
-                sublabel: "project",
+                sublabel: "repo",
                 url: URL(fileURLWithPath: decodedPath).appendingPathComponent("CLAUDE.md")
             ))
         }
@@ -419,7 +419,7 @@ actor ConfigService {
             files.append(makeMemoryFile(
                 id: "user-project",
                 label: "CLAUDE.md",
-                sublabel: "user project",
+                sublabel: "private",
                 url: projectDir.appendingPathComponent("CLAUDE.md")
             ))
         }

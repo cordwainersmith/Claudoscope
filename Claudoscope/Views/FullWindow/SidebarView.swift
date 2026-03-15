@@ -11,6 +11,7 @@ struct SidebarView: View {
     @Binding var selectedSkillName: String?
     @Binding var selectedMcpName: String?
     @Binding var selectedMemoryId: String?
+    @Binding var selectedMemoryProjectId: String?
     @Binding var selectedSettingsSection: String?
     @State private var filterText = ""
 
@@ -93,8 +94,10 @@ struct SidebarView: View {
                 case .memory:
                     MemorySidebarContent(
                         filterText: filterText,
+                        projects: store.projects,
                         memoryFiles: store.memoryFiles,
-                        selectedMemoryId: $selectedMemoryId
+                        selectedMemoryId: $selectedMemoryId,
+                        selectedProjectId: $selectedMemoryProjectId
                     )
                 case .settings:
                     SettingsSidebarContent(
