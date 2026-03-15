@@ -335,7 +335,8 @@ final class SessionStore {
         let hooks = await configService.loadHooks()
         let cmds = await configService.loadCommands()
         let skls = await configService.loadSkills()
-        let mcps = await configService.loadMcpServers()
+        let projectPath = projectId.flatMap { id in projects.first(where: { $0.id == id })?.path }
+        let mcps = await configService.loadMcpServers(projectPath: projectPath)
         let memory = await configService.loadMemoryFiles(projectId: projectId)
         let extended = await configService.loadExtendedConfig()
         await MainActor.run {
