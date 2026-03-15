@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct ClaudoscopeApp: App {
     @State private var store = SessionStore()
+    @State private var updateService = UpdateService()
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some Scene {
@@ -10,8 +11,12 @@ struct ClaudoscopeApp: App {
         MenuBarExtra {
             MenuBarPopoverContent()
                 .environment(store)
+                .environment(updateService)
+                .onAppear {
+                    updateService.startPeriodicChecks()
+                }
         } label: {
-            MenuBarIcon()
+            MenuBarIcon(hasUpdate: updateService.updateAvailable != nil)
         }
         .menuBarExtraStyle(.window)
     }
@@ -27,12 +32,24 @@ struct ClaudoscopeApp: App {
 
 /// Loads the custom menu bar icon from bundle resources
 struct MenuBarIcon: View {
+    var hasUpdate: Bool = false
+
     var body: some View {
         if let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
            let nsImage = NSImage(contentsOf: url) {
             nsImage.isTemplate = false
-            return AnyView(Image(nsImage: nsImage)
-                .renderingMode(.original))
+            return AnyView(
+                ZStack(alignment: .topTrailing) {
+                    Image(nsImage: nsImage)
+                        .renderingMode(.original)
+                    if hasUpdate {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 6, height: 6)
+                            .offset(x: 2, y: -2)
+                    }
+                }
+            )
         } else {
             return AnyView(Image(systemName: "chevron.left.forwardslash.chevron.right"))
         }
@@ -42,7 +59,9 @@ struct MenuBarIcon: View {
 /// The popover content that can open the full window via NSWindow
 struct MenuBarPopoverContent: View {
     @Environment(SessionStore.self) private var store
+    @Environment(UpdateService.self) private var updateService
     @State private var showAbout = false
+    @State private var showUpToDate = false
     @AppStorage("hasSeenRepositionTip") private var hasSeenTip = false
 
     var body: some View {
@@ -126,7 +145,7 @@ struct MenuBarPopoverContent: View {
                 // Recent sessions
                 if !store.recentSessions.isEmpty {
                     RecentSessionsList(sessions: store.recentSessions) { _ in
-                        MainWindowController.shared.open(store: store)
+                        MainWindowController.shared.open(store: store, updateService: updateService)
                     }
                     .padding(.vertical, 8)
                     Divider()
@@ -161,8 +180,52 @@ struct MenuBarPopoverContent: View {
             // Actions
             VStack(spacing: 0) {
                 PopoverMenuButton(label: "Dashboard", systemImage: "macwindow", shortcut: "Cmd+O") {
-                    MainWindowController.shared.open(store: store)
+                    MainWindowController.shared.open(store: store, updateService: updateService)
                 }
+
+                Divider()
+
+                Button {
+                    Task {
+                        showUpToDate = false
+                        await updateService.checkForUpdates()
+                        if updateService.updateAvailable == nil && updateService.error == nil {
+                            showUpToDate = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                showUpToDate = false
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 12))
+                            .frame(width: 16)
+                        Text(showUpToDate ? "You're up to date!" : "Check for Updates...")
+                            .font(.system(size: 12))
+                            .foregroundStyle(showUpToDate ? .green : .primary)
+                        Spacer()
+                        if updateService.isChecking {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else if showUpToDate {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.green)
+                        } else if updateService.updateAvailable != nil {
+                            Text("New")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(.orange))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
 
                 Divider()
 
@@ -214,7 +277,11 @@ final class MainWindowController {
 
     private var window: NSWindow?
 
-    func open(store: SessionStore) {
+    private var updateService: UpdateService?
+
+    func open(store: SessionStore, updateService: UpdateService? = nil) {
+        if let updateService { self.updateService = updateService }
+
         // If window exists and is visible, just bring it forward
         if let window, window.isVisible {
             window.makeKeyAndOrderFront(nil)
@@ -233,6 +300,7 @@ final class MainWindowController {
 
         let contentView = FullWindowView()
             .environment(store)
+            .environment(self.updateService ?? UpdateService())
             .frame(minWidth: 900, minHeight: 600)
 
         let hostingView = NSHostingView(rootView: contentView)
@@ -467,7 +535,7 @@ struct AboutOverlay: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
-                Text("Version 0.3.1")
+                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0")")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
 

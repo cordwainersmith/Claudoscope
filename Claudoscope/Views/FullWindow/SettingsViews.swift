@@ -17,6 +17,7 @@ struct SettingsSidebarContent: View {
         ("general", "gear", "General"),
         ("environment", "terminal", "Environment"),
         ("pricing", "dollarsign.circle", "Pricing"),
+        ("updates", "arrow.triangle.2.circlepath", "Updates"),
     ]
 
     private var filteredSections: [(id: String, icon: String, label: String)] {
@@ -64,7 +65,7 @@ struct SettingsMainPanelView: View {
     @State private var settings: [String: Any]?
     @State private var loadError: String?
     @State private var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "environment", "pricing"
+        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "environment", "pricing", "updates"
     ]
 
     private var settingsPath: String {
@@ -123,6 +124,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("account") { accountSection() }
                     if shouldShow("general") { generalSection([:]) }
                     if shouldShow("pricing") { pricingSection() }
+                    if shouldShow("updates") { updatesSection() }
                 }
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
@@ -181,6 +183,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("general") { generalSection(dict) }
                     if shouldShow("environment") { environmentSection(dict) }
                     if shouldShow("pricing") { pricingSection() }
+                    if shouldShow("updates") { updatesSection() }
                 }
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity)
@@ -509,6 +512,15 @@ struct SettingsMainPanelView: View {
             }
         }
         return rows
+    }
+
+    // MARK: - Updates Section
+
+    @ViewBuilder
+    private func updatesSection() -> some View {
+        settingsSection(id: "updates", icon: "arrow.triangle.2.circlepath", title: "Updates") {
+            UpdatesSectionContent()
+        }
     }
 
     // MARK: - Security Section
@@ -1057,5 +1069,120 @@ private struct FlowLayout: Layout {
             positions: positions,
             size: CGSize(width: totalWidth, height: currentY + lineHeight)
         )
+    }
+}
+
+// MARK: - Updates Section Content
+
+struct UpdatesSectionContent: View {
+    @Environment(UpdateService.self) private var updateService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Current version
+            HStack(spacing: 8) {
+                Text("Current version")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(updateService.currentVersion)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+            }
+            .padding(.horizontal, 12)
+
+            Divider()
+
+            // Auto-check toggle
+            HStack {
+                @Bindable var service = updateService
+                Toggle("Check for updates automatically", isOn: $service.autoCheckEnabled)
+                    .font(.system(size: 12))
+                    .toggleStyle(.checkbox)
+            }
+            .padding(.horizontal, 12)
+
+            Divider()
+
+            // Check now / update available
+            HStack(spacing: 8) {
+                if let update = updateService.updateAvailable {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 8, height: 8)
+                            Text("Version \(update.version) available")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        if let notes = update.releaseNotes, !notes.isEmpty {
+                            Text(notes.prefix(200) + (notes.count > 200 ? "..." : ""))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(3)
+                        }
+                    }
+
+                    Spacer()
+
+                    if updateService.isDownloading {
+                        VStack(spacing: 4) {
+                            ProgressView(value: updateService.downloadProgress)
+                                .frame(width: 100)
+                            Text("\(Int(updateService.downloadProgress * 100))%")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
+                        Button("Cancel") {
+                            updateService.cancelDownload()
+                        }
+                        .font(.system(size: 11))
+                    } else {
+                        Button("Download and Install") {
+                            Task { await updateService.downloadAndInstall() }
+                        }
+                        .font(.system(size: 12))
+                    }
+                } else {
+                    Text(updateService.updateAvailable == nil && !updateService.isChecking ? "You're up to date" : "")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button {
+                        Task { await updateService.checkForUpdates() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            if updateService.isChecking {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text("Check Now")
+                        }
+                    }
+                    .font(.system(size: 12))
+                    .disabled(updateService.isChecking)
+                }
+            }
+            .padding(.horizontal, 12)
+
+            // Error display
+            if let error = updateService.error {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                    Text(error)
+                        .font(.system(size: 11))
+                    Spacer()
+                    Button("Retry") {
+                        Task { await updateService.checkForUpdates() }
+                    }
+                    .font(.system(size: 11))
+                }
+                .foregroundStyle(.red)
+                .padding(.horizontal, 12)
+            }
+        }
+        .padding(.vertical, 8)
     }
 }

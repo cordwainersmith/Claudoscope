@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v0.3.2"><img src="https://img.shields.io/github/v/release/cordwainersmith/Claudoscope?color=blue" alt="Release"></a>
+  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v0.3.3"><img src="https://img.shields.io/github/v/release/cordwainersmith/Claudoscope?color=blue" alt="Release"></a>
   <a href="https://claudoscope.com/"><img src="https://img.shields.io/badge/website-claudoscope.com-6366f1" alt="Website"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2014.0+-000000?logo=apple&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/install-brew%20install%20--cask%20claudoscope-FBB040?logo=homebrew&logoColor=white" alt="Homebrew">
@@ -53,13 +53,19 @@ brew tap cordwainersmith/claudoscope
 brew install --cask claudoscope
 ```
 
-To update to the latest version:
+### Updating
+
+Claudoscope checks for updates automatically via GitHub Releases. When a new version is available, an indicator appears in the menu bar popover and in Settings > Updates. Clicking "Download and Install" downloads the new DMG, verifies its code signature, replaces the app, and relaunches. No manual steps required.
+
+You can also update via Homebrew:
 
 ```bash
 brew upgrade --cask claudoscope
 ```
 
-### Manual
+Or disable automatic checks entirely in Settings > Updates.
+
+### Manual install
 
 Download the latest `Claudoscope.dmg` from the [Releases](https://github.com/cordwainersmith/Claudoscope/releases) page, open it, and drag Claudoscope to your Applications folder.
 

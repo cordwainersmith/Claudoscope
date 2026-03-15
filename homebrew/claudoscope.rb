@@ -6,6 +6,7 @@ cask "claudoscope" do
   name "Claudoscope"
   desc "macOS menu bar companion for Claude Code sessions"
   homepage "https://github.com/cordwainersmith/Claudoscope"
+  auto_updates true
 
   depends_on macos: ">= :sonoma"
 
