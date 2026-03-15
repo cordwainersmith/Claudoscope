@@ -10,6 +10,8 @@ final class UpdateService {
     var downloadProgress: Double = 0
     var error: String?
 
+    var onUpdateFound: ((UpdateInfo) -> Void)?
+
     private var checkTimer: Timer?
     private var downloadTask: URLSessionDownloadTask?
 
@@ -19,6 +21,8 @@ final class UpdateService {
     private static let lastCheckKey = "lastUpdateCheckDate"
     private static let autoCheckKey = "autoCheckForUpdates"
     private static let checkInterval: TimeInterval = 24 * 60 * 60
+    private static let justUpdatedVersionKey = "justUpdatedToVersion"
+    private static let justUpdatedNotesKey = "justUpdatedReleaseNotes"
 
     struct UpdateInfo {
         let version: String
@@ -125,11 +129,13 @@ final class UpdateService {
 
             let releaseNotes = json["body"] as? String
 
-            updateAvailable = UpdateInfo(
+            let info = UpdateInfo(
                 version: remoteVersion,
                 downloadURL: downloadURL,
                 releaseNotes: releaseNotes
             )
+            updateAvailable = info
+            onUpdateFound?(info)
         } catch {
             self.error = error.localizedDescription
         }
@@ -210,12 +216,33 @@ final class UpdateService {
             // Remove backup
             try? FileManager.default.removeItem(at: backupURL)
 
+            // Store post-update info for the "What's New" popup after relaunch
+            UserDefaults.standard.set(update.version, forKey: Self.justUpdatedVersionKey)
+            if let notes = update.releaseNotes {
+                UserDefaults.standard.set(notes, forKey: Self.justUpdatedNotesKey)
+            }
+
             // Relaunch
             relaunch(at: currentAppURL)
         } catch {
             self.error = error.localizedDescription
             isDownloading = false
         }
+    }
+
+    struct JustUpdatedInfo {
+        let version: String
+        let releaseNotes: String?
+    }
+
+    func consumeJustUpdatedInfo() -> JustUpdatedInfo? {
+        guard let version = UserDefaults.standard.string(forKey: Self.justUpdatedVersionKey) else {
+            return nil
+        }
+        let notes = UserDefaults.standard.string(forKey: Self.justUpdatedNotesKey)
+        UserDefaults.standard.removeObject(forKey: Self.justUpdatedVersionKey)
+        UserDefaults.standard.removeObject(forKey: Self.justUpdatedNotesKey)
+        return JustUpdatedInfo(version: version, releaseNotes: notes)
     }
 
     func cancelDownload() {

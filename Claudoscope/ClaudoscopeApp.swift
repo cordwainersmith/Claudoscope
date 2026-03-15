@@ -12,7 +12,21 @@ struct ClaudoscopeApp: App {
             MenuBarPopoverContent()
                 .environment(store)
                 .environment(updateService)
-                .onAppear {
+                .task {
+                    // Show "What's New" if we just updated (runs once)
+                    if let info = updateService.consumeJustUpdatedInfo() {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        UpdateWindowController.shared.showWhatsNew(
+                            version: info.version,
+                            releaseNotes: info.releaseNotes
+                        )
+                    }
+
+                    // Auto-check shows popup when update found
+                    updateService.onUpdateFound = { update in
+                        UpdateWindowController.shared.showUpdateAvailable(update, updateService: updateService)
+                    }
+
                     updateService.startPeriodicChecks()
                 }
         } label: {
@@ -189,7 +203,9 @@ struct MenuBarPopoverContent: View {
                     Task {
                         showUpToDate = false
                         await updateService.checkForUpdates()
-                        if updateService.updateAvailable == nil && updateService.error == nil {
+                        if let update = updateService.updateAvailable {
+                            UpdateWindowController.shared.showUpdateAvailable(update, updateService: updateService)
+                        } else if updateService.error == nil {
                             showUpToDate = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                                 showUpToDate = false
@@ -504,6 +520,219 @@ struct OnboardingView: View {
         }
         .padding(24)
         .frame(width: 380)
+    }
+}
+
+// MARK: - Update Available Window
+
+final class UpdateWindowController {
+    static let shared = UpdateWindowController()
+
+    private var window: NSWindow?
+
+    func showUpdateAvailable(_ update: UpdateService.UpdateInfo, updateService: UpdateService) {
+        dismiss()
+
+        let contentView = UpdateAvailableView(
+            update: update,
+            updateService: updateService,
+            onDismiss: { self.dismiss() }
+        )
+
+        let hostingView = NSHostingView(rootView: contentView)
+
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 0),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Update Available"
+        window.contentView = hostingView
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        self.window = window
+    }
+
+    func showWhatsNew(version: String, releaseNotes: String?) {
+        dismiss()
+
+        let contentView = WhatsNewView(
+            version: version,
+            releaseNotes: releaseNotes,
+            onDismiss: { self.dismiss() }
+        )
+
+        let hostingView = NSHostingView(rootView: contentView)
+
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 0),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Claudoscope Updated"
+        window.contentView = hostingView
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        self.window = window
+    }
+
+    func dismiss() {
+        window?.close()
+        window = nil
+        NSApplication.shared.setActivationPolicy(.accessory)
+    }
+}
+
+struct UpdateAvailableView: View {
+    let update: UpdateService.UpdateInfo
+    let updateService: UpdateService
+    let onDismiss: () -> Void
+
+    private var logoImage: NSImage? {
+        guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
+              let img = NSImage(contentsOf: url) else { return nil }
+        img.isTemplate = false
+        return img
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if let nsImage = logoImage {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 48, height: 48)
+            }
+
+            VStack(spacing: 4) {
+                Text("Claudoscope \(update.version) is available")
+                    .font(.system(size: 15, weight: .semibold))
+
+                Text("You're currently on version \(updateService.currentVersion)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let notes = update.releaseNotes, !notes.isEmpty {
+                ScrollView {
+                    Text(notes)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: 150)
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(AnyShapeStyle(.quaternary))
+                )
+            }
+
+            HStack {
+                Button("Later") {
+                    onDismiss()
+                }
+
+                Spacer()
+
+                if updateService.isDownloading {
+                    ProgressView(value: updateService.downloadProgress)
+                        .frame(width: 80)
+                    Text("\(Int(updateService.downloadProgress * 100))%")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button("Download and Install") {
+                        Task { await updateService.downloadAndInstall() }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 400)
+    }
+}
+
+struct WhatsNewView: View {
+    let version: String
+    let releaseNotes: String?
+    let onDismiss: () -> Void
+
+    private var logoImage: NSImage? {
+        guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
+              let img = NSImage(contentsOf: url) else { return nil }
+        img.isTemplate = false
+        return img
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            if let nsImage = logoImage {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 48, height: 48)
+            }
+
+            VStack(spacing: 4) {
+                Text("Updated to Claudoscope \(version)")
+                    .font(.system(size: 15, weight: .semibold))
+
+                Text("The update was installed successfully.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let notes = releaseNotes, !notes.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("What's new")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+
+                    ScrollView {
+                        Text(notes)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 150)
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(AnyShapeStyle(.quaternary))
+                    )
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("OK") {
+                    onDismiss()
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(width: 400)
     }
 }
 

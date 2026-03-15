@@ -338,6 +338,13 @@ final class SessionStore {
 
     // MARK: - Config (hooks, commands, MCPs, memory)
 
+    func loadMemoryFiles(projectId: String?) async {
+        let memory = await configService.loadMemoryFiles(projectId: projectId)
+        await MainActor.run {
+            self.memoryFiles = memory
+        }
+    }
+
     func loadConfig(projectId: String?) async {
         await MainActor.run { configLoading = true }
         let hooks = await configService.loadHooks()

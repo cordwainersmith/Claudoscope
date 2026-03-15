@@ -411,7 +411,20 @@ actor ConfigService {
             ))
         }
 
-        // 3. MEMORY.md
+        // 3. User's private per-project CLAUDE.md
+        if let projectId {
+            let projectDir = claudeDir
+                .appendingPathComponent("projects")
+                .appendingPathComponent(projectId)
+            files.append(makeMemoryFile(
+                id: "user-project",
+                label: "CLAUDE.md",
+                sublabel: "user project",
+                url: projectDir.appendingPathComponent("CLAUDE.md")
+            ))
+        }
+
+        // 4. MEMORY.md
         if let projectId {
             let projectDir = claudeDir
                 .appendingPathComponent("projects")
@@ -584,11 +597,24 @@ actor ConfigService {
 
     private func decodeProjectPath(_ projectId: String) -> String? {
         guard projectId.hasPrefix("-") else { return nil }
-        let path = "/" + projectId.dropFirst().replacingOccurrences(of: "-", with: "/")
-        guard fm.fileExists(atPath: path) ||
-              fm.fileExists(atPath: URL(fileURLWithPath: path).deletingLastPathComponent().path) else {
-            return nil
+        let segments = projectId.dropFirst().split(separator: "-", omittingEmptySubsequences: false).map(String.init)
+        guard !segments.isEmpty else { return nil }
+
+        var resolved = ""
+        var i = 0
+        while i < segments.count {
+            var candidate = resolved + "/" + segments[i]
+            var j = i
+            // If this single segment isn't a directory, try joining with next segments via hyphen
+            while !fm.fileExists(atPath: candidate) && j + 1 < segments.count {
+                j += 1
+                candidate += "-" + segments[j]
+            }
+            resolved = candidate
+            i = j + 1
         }
-        return path
+
+        guard fm.fileExists(atPath: resolved) else { return nil }
+        return resolved
     }
 }

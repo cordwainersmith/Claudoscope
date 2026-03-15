@@ -16,6 +16,7 @@ struct FullWindowView: View {
     @State private var selectedSkillName: String?
     @State private var selectedMcpName: String?
     @State private var selectedMemoryId: String?
+    @State private var selectedMemoryProjectId: String? // nil = global
 
     // Settings state
     @State private var selectedSettingsSection: String?
