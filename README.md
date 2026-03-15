@@ -8,6 +8,13 @@
   A native macOS menu bar app for exploring, analyzing, and managing your Claude Code sessions.
 </p>
 
+<p align="center">
+  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v0.3.2"><img src="https://img.shields.io/github/v/release/cordwainersmith/Claudoscope?color=blue" alt="Release"></a>
+  <a href="https://claudoscope.com/"><img src="https://img.shields.io/badge/website-claudoscope.com-6366f1" alt="Website"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%2014.0+-000000?logo=apple&logoColor=white" alt="Platform">
+  <img src="https://img.shields.io/badge/install-brew%20install%20--cask%20claudoscope-FBB040?logo=homebrew&logoColor=white" alt="Homebrew">
+</p>
+
 ---
 
 Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation, analytics, plan browsing, timeline history, and complete visibility into your Claude Code configuration, all without sending any data off your machine.
