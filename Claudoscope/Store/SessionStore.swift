@@ -94,7 +94,7 @@ final class SessionStore {
         let todayPrefix = todayDateString()
         return allSessionsWithProjects
             .map(\.session)
-            .filter { $0.firstTimestamp.hasPrefix(todayPrefix) }
+            .filter { $0.lastTimestamp.hasPrefix(todayPrefix) }
     }
 
     /// Recent sessions (last 3, any date)

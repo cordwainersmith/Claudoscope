@@ -45,7 +45,7 @@ struct MenuBarPopoverContent: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(1.5)
                 Spacer()
-                if let url = Bundle.main.url(forResource: "c2", withExtension: "png"),
+                if let url = Bundle.main.url(forResource: "app-icon", withExtension: "png"),
                    let image = NSImage(contentsOf: url) {
                     Image(nsImage: image)
                         .resizable()
@@ -214,7 +214,7 @@ final class MainWindowController {
         NSApplication.shared.setActivationPolicy(.regular)
 
         // Use the c2 icon as the Dock icon
-        if let iconURL = Bundle.main.url(forResource: "c2", withExtension: "png"),
+        if let iconURL = Bundle.main.url(forResource: "app-icon", withExtension: "png"),
            let iconImage = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = iconImage
         }

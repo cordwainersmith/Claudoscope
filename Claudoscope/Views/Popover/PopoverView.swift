@@ -116,7 +116,7 @@ struct AppIconView: View {
     var size: CGFloat = 20
 
     var body: some View {
-        if let url = Bundle.main.url(forResource: "c2", withExtension: "png"),
+        if let url = Bundle.main.url(forResource: "app-icon", withExtension: "png"),
            let image = NSImage(contentsOf: url) {
             Image(nsImage: image)
                 .resizable()

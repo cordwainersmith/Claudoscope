@@ -12,3 +12,6 @@ dist/
 # Distribution artifacts
 *.dmg
 *.zip
+
+# Scripts
+scripts/
