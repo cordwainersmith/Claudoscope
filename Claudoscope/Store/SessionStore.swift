@@ -61,7 +61,7 @@ final class SessionStore {
     var appearance: AppAppearance = .system
 
     // Pricing configuration
-    var pricingProvider: PricingProvider = .vertex
+    var pricingProvider: PricingProvider = .anthropic
     var pricingRegion: VertexRegion = .global
 
     var pricingTable: [String: ModelPricing] {

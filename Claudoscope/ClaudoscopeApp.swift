@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct ClaudoscopeApp: App {
     @State private var store = SessionStore()
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     var body: some Scene {
         // Menu bar popover (always present)
@@ -13,6 +14,14 @@ struct ClaudoscopeApp: App {
             MenuBarIcon()
         }
         .menuBarExtraStyle(.window)
+    }
+
+    init() {
+        if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                OnboardingWindowController.shared.show()
+            }
+        }
     }
 }
 
@@ -167,8 +176,12 @@ struct MenuBarPopoverContent: View {
             }
         }
         .frame(width: 280)
-        .sheet(isPresented: $showAbout) {
-            AboutView()
+        .overlay {
+            if showAbout {
+                AboutOverlay {
+                    showAbout = false
+                }
+            }
         }
     }
 
@@ -281,42 +294,202 @@ struct PopoverMenuButton: View {
     }
 }
 
-// MARK: - About View
+// MARK: - Onboarding Window
 
-struct AboutView: View {
-    @Environment(\.dismiss) private var dismiss
+final class OnboardingWindowController {
+    static let shared = OnboardingWindowController()
+
+    private var window: NSWindow?
+
+    func show() {
+        guard window == nil else { return }
+
+        let contentView = OnboardingView {
+            self.dismiss()
+        }
+
+        let hostingView = NSHostingView(rootView: contentView)
+
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 0),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Welcome to Claudoscope"
+        window.contentView = hostingView
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+
+        // Show briefly in Dock so the window is visible
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+
+        self.window = window
+    }
+
+    private func dismiss() {
+        window?.close()
+        window = nil
+        NSApplication.shared.setActivationPolicy(.accessory)
+    }
+}
+
+struct OnboardingView: View {
+    let onDismiss: () -> Void
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+    @State private var dontShowAgain = false
+
+    private var logoImage: NSImage? {
+        guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
+              let img = NSImage(contentsOf: url) else { return nil }
+        img.isTemplate = false
+        return img
+    }
+
+    private var menuBarImage: NSImage? {
+        guard let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
+              let img = NSImage(contentsOf: url) else { return nil }
+        img.isTemplate = false
+        return img
+    }
 
     var body: some View {
-        VStack(spacing: 16) {
-            if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
-               let nsImage = NSImage(contentsOf: url) {
+        VStack(spacing: 20) {
+            // App icon
+            if let nsImage = logoImage {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 64, height: 64)
+                    .frame(width: 56, height: 56)
             }
 
-            Text("Claudoscope")
-                .font(.system(size: 18, weight: .medium))
+            Text("Claudoscope lives in your menu bar")
+                .font(.system(size: 16, weight: .semibold))
 
-            Text("Session explorer for Claude Code")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+            // Menu bar icon illustration
+            HStack(spacing: 10) {
+                Text("Look for this icon:")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
 
-            Text("Version 0.3.1")
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+                if let nsImage = menuBarImage {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 22, height: 22)
+                        .padding(4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(.quaternary)
+                        )
+                }
+
+                Text("in your menu bar")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
+
+            // Notch tip
+            VStack(spacing: 8) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.orange)
+
+                    Text("If you can't see it, the icon might be hidden behind the notch. Hold **\u{2318} Cmd** and drag other menu bar icons to the left to make room.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.orange.opacity(0.08))
+                    .strokeBorder(Color.orange.opacity(0.15), lineWidth: 1)
+            )
 
             Divider()
-                .frame(width: 120)
 
-            Button("OK") {
-                dismiss()
+            // Don't show again + Got it
+            HStack {
+                Toggle("Don't show this again", isOn: $dontShowAgain)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button("Got it") {
+                    if dontShowAgain {
+                        hasSeenOnboarding = true
+                    }
+                    onDismiss()
+                }
+                .keyboardShortcut(.defaultAction)
             }
-            .keyboardShortcut(.defaultAction)
         }
-        .padding(32)
-        .frame(width: 280)
+        .padding(24)
+        .frame(width: 380)
+    }
+}
+
+// MARK: - About View
+
+struct AboutOverlay: View {
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            // Tap anywhere to dismiss
+            Color.black.opacity(0.4)
+                .onTapGesture { onDismiss() }
+
+            VStack(spacing: 12) {
+                if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
+                   let nsImage = NSImage(contentsOf: url) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 56, height: 56)
+                }
+
+                Text("Claudoscope")
+                    .font(.system(size: 16, weight: .medium))
+
+                Text("Session explorer for Claude Code")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+
+                Text("Version 0.3.1")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+
+                Link(destination: URL(string: "https://github.com/cordwainersmith/Claudoscope")!) {
+                    Text("github.com/cordwainersmith/Claudoscope")
+                        .font(.system(size: 11))
+                    .foregroundStyle(.blue)
+                }
+                .onHover { hovering in
+                    if hovering {
+                        NSCursor.pointingHand.push()
+                    } else {
+                        NSCursor.pop()
+                    }
+                }
+            }
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThickMaterial)
+            )
+        }
+        .transition(.opacity)
     }
 }
