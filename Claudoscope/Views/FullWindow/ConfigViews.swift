@@ -663,140 +663,178 @@ struct McpsMainPanelView: View {
     let mcpServers: [McpServerEntry]
     let selectedMcpName: String?
 
-    private var selectedServer: McpServerEntry? {
-        guard let name = selectedMcpName else { return nil }
-        return mcpServers.first { $0.name == name }
-    }
+    @State private var expandedServer: String?
 
     var body: some View {
-        if let server = selectedServer {
-            mcpDetailContent(server)
-        } else if mcpServers.isEmpty {
+        if mcpServers.isEmpty {
             EmptyStateView(
                 icon: "point.3.connected.trianglepath.dotted",
                 title: "No MCP servers",
                 message: "MCP servers are defined in ~/.claude/settings.json under the \"mcpServers\" key."
             )
         } else {
-            EmptyStateView(
-                icon: "point.3.connected.trianglepath.dotted",
-                title: "Select a server",
-                message: "Choose an MCP server from the sidebar to view its configuration."
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func mcpDetailContent(_ server: McpServerEntry) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(.green)
-                    .frame(width: 8, height: 8)
-
-                Text(server.name)
-                    .font(.system(size: 14, weight: .medium))
-
-                Spacer()
-
-                if let level = server.level {
-                    Text(level)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            .background(.bar)
-
-            Divider()
-
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Type card
-                    ConfigCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ConfigSectionHeader(title: "TYPE")
-                            Text(server.url != nil ? "HTTP (SSE)" : "Stdio")
-                                .font(.system(size: 12))
-                        }
-                    }
+                let columns = [
+                    GridItem(.adaptive(minimum: 280, maximum: 400), spacing: 12)
+                ]
 
-                    // Connection details
-                    if let url = server.url {
-                        ConfigCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                ConfigSectionHeader(title: "URL")
-                                Text(url)
-                                    .font(.system(size: 12, design: .monospaced))
-                                    .textSelection(.enabled)
-                            }
-                        }
-                    }
-
-                    if let command = server.command {
-                        ConfigCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                ConfigSectionHeader(title: "COMMAND")
-                                HStack(spacing: 0) {
-                                    Text(command)
-                                        .font(.system(size: 12, design: .monospaced))
-
-                                    if !server.args.isEmpty {
-                                        Text(" " + server.args.joined(separator: " "))
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                                .textSelection(.enabled)
-                            }
-                        }
-                    }
-
-                    if !server.args.isEmpty {
-                        ConfigCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                ConfigSectionHeader(title: "ARGUMENTS")
-                                ForEach(Array(server.args.enumerated()), id: \.offset) { index, arg in
-                                    HStack(spacing: 8) {
-                                        Text("\(index)")
-                                            .font(.system(size: 10, design: .monospaced))
-                                            .foregroundStyle(.tertiary)
-                                            .frame(width: 20, alignment: .trailing)
-                                        Text(arg)
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .textSelection(.enabled)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Environment variables (masked)
-                    if !server.env.isEmpty {
-                        ConfigCard {
-                            VStack(alignment: .leading, spacing: 8) {
-                                ConfigSectionHeader(title: "ENVIRONMENT")
-                                ForEach(server.env.keys.sorted(), id: \.self) { key in
-                                    HStack(spacing: 8) {
-                                        Text(key)
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .foregroundStyle(.primary)
-                                        Spacer()
-                                        Text(maskEnvValue(server.env[key] ?? ""))
-                                            .font(.system(size: 12, design: .monospaced))
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(mcpServers) { server in
+                        McpServerCard(
+                            server: server,
+                            isExpanded: expandedServer == server.name
+                        ) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                expandedServer = expandedServer == server.name ? nil : server.name
                             }
                         }
                     }
                 }
                 .padding(24)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct McpServerCard: View {
+    let server: McpServerEntry
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    private var serverType: String {
+        if server.url != nil { return "HTTP" }
+        return "stdio"
+    }
+
+    private var connectionString: String {
+        if let url = server.url { return url }
+        if let command = server.command {
+            if server.args.isEmpty { return command }
+            return command + " " + server.args.joined(separator: " ")
+        }
+        return ""
+    }
+
+    var body: some View {
+        Button(action: onToggle) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Card header
+                HStack(spacing: 10) {
+                    // Icon area
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(server.url != nil ? Color.blue.opacity(0.12) : Color.green.opacity(0.12))
+                            .frame(width: 36, height: 36)
+
+                        Image(systemName: server.url != nil ? "globe" : "terminal")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(server.url != nil ? .blue : .green)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(server.name)
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+
+                        HStack(spacing: 6) {
+                            Text(serverType)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(server.url != nil ? .blue : .green)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background((server.url != nil ? Color.blue : Color.green).opacity(0.1))
+                                .clipShape(Capsule())
+
+                            if let level = server.level {
+                                Text(level)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(isExpanded ? .degrees(180) : .zero)
+                }
+                .padding(14)
+
+                // Connection preview (always visible)
+                if !connectionString.isEmpty {
+                    Divider().padding(.horizontal, 14)
+
+                    Text(connectionString)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(isExpanded ? nil : 1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                }
+
+                // Expanded details
+                if isExpanded {
+                    Divider().padding(.horizontal, 14)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        if !server.args.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("ARGUMENTS")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.tertiary)
+
+                                ForEach(Array(server.args.enumerated()), id: \.offset) { index, arg in
+                                    HStack(spacing: 6) {
+                                        Text("\(index)")
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(.tertiary)
+                                            .frame(width: 16, alignment: .trailing)
+                                        Text(arg)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .textSelection(.enabled)
+                                            .lineLimit(2)
+                                    }
+                                }
+                            }
+                        }
+
+                        if !server.env.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("ENVIRONMENT")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.tertiary)
+
+                                ForEach(server.env.keys.sorted(), id: \.self) { key in
+                                    HStack(spacing: 6) {
+                                        Text(key)
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text(maskEnvValue(server.env[key] ?? ""))
+                                            .font(.system(size: 11, design: .monospaced))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
     }
 }
 
