@@ -49,6 +49,7 @@ struct SkillEntry: Identifiable, Sendable {
     let name: String
     let displayName: String
     let description: String?
+    let metadata: [String: String]
     let body: String
     let sizeBytes: Int
 }

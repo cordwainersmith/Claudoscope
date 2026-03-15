@@ -9,6 +9,7 @@ private enum MarkdownBlock: Identifiable {
     case unorderedList(items: [ListItem])
     case orderedList(items: [ListItem])
     case blockquote(text: String)
+    case table(headers: [String], rows: [[String]])
     case horizontalRule
     case empty
 
@@ -20,6 +21,7 @@ private enum MarkdownBlock: Identifiable {
         case .unorderedList(let items): return "ul-\(items.hashValue)"
         case .orderedList(let items): return "ol-\(items.hashValue)"
         case .blockquote(let text): return "bq-\(text.hashValue)"
+        case .table(let headers, _): return "tbl-\(headers.hashValue)"
         case .horizontalRule: return "hr-\(UUID().uuidString)"
         case .empty: return "empty-\(UUID().uuidString)"
         }
@@ -71,6 +73,9 @@ struct MarkdownContentView: View {
         case .blockquote(let text):
             blockquoteView(text)
 
+        case .table(let headers, let rows):
+            tableView(headers: headers, rows: rows)
+
         case .horizontalRule:
             Divider()
                 .padding(.vertical, 4)
@@ -78,6 +83,51 @@ struct MarkdownContentView: View {
         case .empty:
             EmptyView()
         }
+    }
+
+    // MARK: - Table
+
+    private func tableView(headers: [String], rows: [[String]]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header row
+                HStack(spacing: 0) {
+                    ForEach(Array(headers.enumerated()), id: \.offset) { _, header in
+                        Text(header)
+                            .font(.system(size: fontSize - 1, weight: .semibold))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .frame(minWidth: 80, alignment: .leading)
+                    }
+                }
+                .background(Color.primary.opacity(0.06))
+
+                Divider()
+
+                // Data rows
+                ForEach(Array(rows.enumerated()), id: \.offset) { rowIdx, row in
+                    HStack(spacing: 0) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                            inlineMarkdownText(cell)
+                                .font(.system(size: fontSize - 1))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .frame(minWidth: 80, alignment: .leading)
+                        }
+                    }
+                    .background(rowIdx % 2 == 1 ? Color.primary.opacity(0.02) : .clear)
+
+                    if rowIdx < rows.count - 1 {
+                        Divider().opacity(0.5)
+                    }
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
     }
 
     // MARK: - Heading
@@ -170,6 +220,313 @@ struct MarkdownContentView: View {
     }
 }
 
+// MARK: - Rich Markdown Content View
+
+/// A styled markdown view with accent-bordered headings, callout banners,
+/// labeled code blocks, and more visual breathing room.
+struct RichMarkdownContentView: View {
+    let content: String
+    var fontSize: CGFloat = 13
+
+    private var blocks: [MarkdownBlock] {
+        parseMarkdown(content)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                richBlockView(block)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func richBlockView(_ block: MarkdownBlock) -> some View {
+        switch block {
+        case .heading(let level, let text):
+            richHeadingView(level: level, text: text)
+
+        case .paragraph(let text):
+            if let callout = detectCallout(text) {
+                calloutView(callout)
+            } else {
+                richInlineMarkdownText(text)
+                    .font(.system(size: fontSize))
+                    .padding(.leading, 4)
+            }
+
+        case .codeBlock(let language, let code):
+            richCodeBlockView(language: language, code: code)
+
+        case .unorderedList(let items):
+            richListView(items: items, ordered: false)
+
+        case .orderedList(let items):
+            richListView(items: items, ordered: true)
+
+        case .blockquote(let text):
+            richBlockquoteView(text)
+
+        case .table(let headers, let rows):
+            richTableView(headers: headers, rows: rows)
+
+        case .horizontalRule:
+            Divider()
+                .padding(.vertical, 6)
+
+        case .empty:
+            EmptyView()
+        }
+    }
+
+    // MARK: - Heading with accent bar
+
+    @ViewBuilder
+    private func richHeadingView(level: Int, text: String) -> some View {
+        let size: CGFloat = switch level {
+        case 1: fontSize + 7
+        case 2: fontSize + 4
+        case 3: fontSize + 2
+        default: fontSize + 1
+        }
+
+        let accentColor: Color = switch level {
+        case 1: .blue
+        case 2: .blue.opacity(0.7)
+        default: .blue.opacity(0.4)
+        }
+
+        VStack(alignment: .leading, spacing: 0) {
+            if level <= 2 {
+                // Add spacing before major headings (but not if it's the first block)
+                Spacer().frame(height: 4)
+            }
+
+            HStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(accentColor)
+                    .frame(width: 3)
+
+                richInlineMarkdownText(text)
+                    .font(.system(size: size, weight: level <= 2 ? .semibold : .medium))
+                    .padding(.leading, 10)
+            }
+
+            if level <= 2 {
+                Rectangle()
+                    .fill(.quaternary)
+                    .frame(height: 1)
+                    .padding(.top, 6)
+            }
+        }
+    }
+
+    // MARK: - Callout detection and rendering
+
+    private struct CalloutInfo {
+        let keyword: String
+        let message: String
+        let icon: String
+        let tint: Color
+    }
+
+    private func detectCallout(_ text: String) -> CalloutInfo? {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let patterns: [(prefix: String, icon: String, tint: Color)] = [
+            ("CRITICAL:", "exclamationmark.octagon.fill", .red),
+            ("IMPORTANT:", "exclamationmark.triangle.fill", .orange),
+            ("WARNING:", "exclamationmark.triangle.fill", .orange),
+            ("NOTE:", "info.circle.fill", .blue),
+            ("TIP:", "lightbulb.fill", .yellow),
+        ]
+
+        for pattern in patterns {
+            if trimmed.hasPrefix(pattern.prefix) {
+                let message = String(trimmed.dropFirst(pattern.prefix.count)).trimmingCharacters(in: .whitespaces)
+                return CalloutInfo(
+                    keyword: String(pattern.prefix.dropLast()),
+                    message: message,
+                    icon: pattern.icon,
+                    tint: pattern.tint
+                )
+            }
+        }
+        return nil
+    }
+
+    private func calloutView(_ callout: CalloutInfo) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: callout.icon)
+                .font(.system(size: 13))
+                .foregroundStyle(callout.tint)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(callout.keyword)
+                    .font(.system(size: fontSize - 1, weight: .bold))
+                    .foregroundStyle(callout.tint)
+
+                richInlineMarkdownText(callout.message)
+                    .font(.system(size: fontSize))
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(callout.tint.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(callout.tint.opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    // MARK: - Code block with language label
+
+    private func richCodeBlockView(language: String?, code: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let lang = language, !lang.isEmpty {
+                HStack {
+                    Text(lang)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.primary.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(code)
+                    .font(.system(size: fontSize - 1, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, language != nil ? 8 : 12)
+        }
+        .background(Color.primary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
+    }
+
+    // MARK: - List
+
+    @ViewBuilder
+    private func richListView(items: [ListItem], ordered: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    let leadingPad = CGFloat(item.indent) * 16
+
+                    if ordered {
+                        Text("\(index + 1).")
+                            .font(.system(size: fontSize - 1))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 20 + leadingPad, alignment: .trailing)
+                    } else {
+                        Text("\u{2022}")
+                            .font(.system(size: fontSize))
+                            .foregroundStyle(.blue.opacity(0.6))
+                            .frame(width: 12 + leadingPad, alignment: .trailing)
+                    }
+
+                    richInlineMarkdownText(item.text)
+                        .font(.system(size: fontSize))
+                }
+            }
+        }
+        .padding(.leading, 4)
+    }
+
+    // MARK: - Blockquote
+
+    private func richBlockquoteView(_ text: String) -> some View {
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Color.blue.opacity(0.3))
+                .frame(width: 3)
+
+            richInlineMarkdownText(text)
+                .font(.system(size: fontSize))
+                .foregroundStyle(.secondary)
+                .padding(.leading, 12)
+                .padding(.vertical, 4)
+        }
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - Table
+
+    private func richTableView(headers: [String], rows: [[String]]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header row
+                HStack(spacing: 0) {
+                    ForEach(Array(headers.enumerated()), id: \.offset) { _, header in
+                        Text(header)
+                            .font(.system(size: fontSize - 1, weight: .semibold))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .frame(minWidth: 100, alignment: .leading)
+                    }
+                }
+                .background(Color.primary.opacity(0.06))
+
+                Divider()
+
+                // Data rows
+                ForEach(Array(rows.enumerated()), id: \.offset) { rowIdx, row in
+                    HStack(spacing: 0) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { colIdx, cell in
+                            // First column slightly bolder
+                            if colIdx == 0 {
+                                richInlineMarkdownText(cell)
+                                    .font(.system(size: fontSize - 1, weight: .medium, design: .monospaced))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .frame(minWidth: 100, alignment: .leading)
+                            } else {
+                                richInlineMarkdownText(cell)
+                                    .font(.system(size: fontSize - 1))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .frame(minWidth: 100, alignment: .leading)
+                            }
+                        }
+                    }
+                    .background(rowIdx % 2 == 1 ? Color.primary.opacity(0.02) : .clear)
+
+                    if rowIdx < rows.count - 1 {
+                        Divider().opacity(0.4)
+                    }
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
+    }
+
+    // MARK: - Inline Markdown
+
+    private func richInlineMarkdownText(_ text: String) -> Text {
+        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            return Text(attributed)
+        }
+        return Text(text)
+    }
+}
+
 // MARK: - Markdown Parser
 
 private func parseMarkdown(_ input: String) -> [MarkdownBlock] {
@@ -205,6 +562,27 @@ private func parseMarkdown(_ input: String) -> [MarkdownBlock] {
                 code: codeLines.joined(separator: "\n")
             ))
             continue
+        }
+
+        // Table: starts with a pipe-delimited line, followed by a separator line
+        if trimmed.hasPrefix("|") && i + 1 < lines.count {
+            let nextTrimmed = lines[i + 1].trimmingCharacters(in: .whitespaces)
+            if nextTrimmed.hasPrefix("|") && nextTrimmed.range(of: #"[-:]{3,}"#, options: .regularExpression) != nil {
+                let headerCells = parseTableRow(trimmed)
+                var dataRows: [[String]] = []
+                i += 2 // skip header + separator
+                while i < lines.count {
+                    let rowLine = lines[i].trimmingCharacters(in: .whitespaces)
+                    if rowLine.hasPrefix("|") {
+                        dataRows.append(parseTableRow(rowLine))
+                        i += 1
+                    } else {
+                        break
+                    }
+                }
+                blocks.append(.table(headers: headerCells, rows: dataRows))
+                continue
+            }
         }
 
         // Horizontal rule
@@ -308,7 +686,7 @@ private func parseMarkdown(_ input: String) -> [MarkdownBlock] {
         while i < lines.count {
             let l = lines[i]
             let lt = l.trimmingCharacters(in: .whitespaces)
-            if lt.isEmpty || lt.hasPrefix("```") || lt.hasPrefix("#") || lt.hasPrefix(">") ||
+            if lt.isEmpty || lt.hasPrefix("```") || lt.hasPrefix("#") || lt.hasPrefix(">") || lt.hasPrefix("|") ||
                lt.range(of: #"^[-*+] "#, options: .regularExpression) != nil ||
                lt.range(of: #"^\d+[.)]\s"#, options: .regularExpression) != nil ||
                lt.range(of: #"^[-*_]{3,}$"#, options: .regularExpression) != nil {
@@ -323,4 +701,12 @@ private func parseMarkdown(_ input: String) -> [MarkdownBlock] {
     }
 
     return blocks
+}
+
+/// Split a markdown table row like "| A | B | C |" into ["A", "B", "C"].
+private func parseTableRow(_ line: String) -> [String] {
+    var trimmed = line.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix("|") { trimmed = String(trimmed.dropFirst()) }
+    if trimmed.hasSuffix("|") { trimmed = String(trimmed.dropLast()) }
+    return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
 }

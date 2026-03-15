@@ -388,7 +388,7 @@ struct CommandsMainPanelView: View {
 
             // Content
             ScrollView {
-                MarkdownContentView(content: command.content, fontSize: 14)
+                RichMarkdownContentView(content: command.content)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(24)
@@ -549,23 +549,120 @@ struct SkillsMainPanelView: View {
                 Divider()
             }
 
-            // Body content rendered as markdown
+            // Body content
             ScrollView {
-                if skill.body.isEmpty {
+                if skill.body.isEmpty && skill.metadata.isEmpty {
                     EmptyStateView(
                         icon: "doc.text",
                         title: "No content",
                         message: "This skill has no body content beyond its metadata."
                     )
                 } else {
-                    MarkdownContentView(content: skill.body, fontSize: 14)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(24)
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Metadata card
+                        if !skill.metadata.isEmpty {
+                            SkillMetadataCard(metadata: skill.metadata)
+                        }
+
+                        if !skill.body.isEmpty {
+                            RichMarkdownContentView(content: skill.body)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(24)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Skill Metadata Card
+
+private struct SkillMetadataCard: View {
+    let metadata: [String: String]
+
+    // Keys to display with nice labels and icons
+    private static let knownKeys: [(key: String, label: String, icon: String)] = [
+        ("author", "Author", "person"),
+        ("version", "Version", "tag"),
+        ("mcp-server", "MCP Server", "point.3.connected.trianglepath.dotted"),
+        ("user-invokable", "User Invokable", "person.crop.circle.badge.checkmark"),
+        ("args", "Arguments", "list.bullet.rectangle"),
+    ]
+
+    private var sortedEntries: [(label: String, icon: String, value: String)] {
+        var entries: [(label: String, icon: String, value: String)] = []
+        var seen: Set<String> = []
+
+        // Known keys first, in order
+        for known in Self.knownKeys {
+            if let value = metadata[known.key] {
+                entries.append((known.label, known.icon, value))
+                seen.insert(known.key)
+            }
+        }
+
+        // Remaining keys
+        for key in metadata.keys.sorted() where !seen.contains(key) {
+            entries.append((key.capitalized, "info.circle", metadata[key]!))
+        }
+
+        return entries
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                Text("Metadata")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+
+            Divider().padding(.horizontal, 14)
+
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(sortedEntries.enumerated()), id: \.offset) { idx, entry in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: entry.icon)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .frame(width: 14, alignment: .center)
+                            .padding(.top, 2)
+
+                        Text(entry.label)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 100, alignment: .leading)
+
+                        Text(entry.value)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+
+                    if idx < sortedEntries.count - 1 {
+                        Divider().opacity(0.4).padding(.horizontal, 14)
+                    }
+                }
+            }
+            .padding(.bottom, 6)
+        }
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
     }
 }
 
