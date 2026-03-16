@@ -300,18 +300,12 @@ final class MainWindowController {
 
         // If window exists and is visible, just bring it forward
         if let window, window.isVisible {
-            window.makeKeyAndOrderFront(nil)
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            DispatchQueue.main.async {
+                self.showInDockSync()
+                window.makeKeyAndOrderFront(nil)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
             return
-        }
-
-        // Show the app in the Dock while the full window is open
-        NSApplication.shared.setActivationPolicy(.regular)
-
-        // Use the rounded icon as the Dock icon
-        if let iconURL = Bundle.main.url(forResource: "app-icon-rounded", withExtension: "png"),
-           let iconImage = NSImage(contentsOf: iconURL) {
-            NSApplication.shared.applicationIconImage = iconImage
         }
 
         let contentView = FullWindowView()
@@ -333,15 +327,30 @@ final class MainWindowController {
         window.center()
         window.setFrameAutosaveName("ClaudoscopeMainWindow")
         window.appearance = store.appearance.nsAppearance
-        window.makeKeyAndOrderFront(nil)
-
-        NSApplication.shared.activate(ignoringOtherApps: true)
 
         self.window = window
+
+        // Delay showing in Dock and presenting the window until the next
+        // run loop iteration so the MenuBarExtra popover has finished
+        // dismissing and won't revert the activation policy back to .accessory.
+        DispatchQueue.main.async {
+            self.showInDockSync()
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+        }
     }
 
     func applyAppearance(_ appearance: AppAppearance) {
         window?.appearance = appearance.nsAppearance
+    }
+
+    private func showInDockSync() {
+        NSApplication.shared.setActivationPolicy(.regular)
+
+        if let iconURL = Bundle.main.url(forResource: "app-icon-rounded", withExtension: "png"),
+           let iconImage = NSImage(contentsOf: iconURL) {
+            NSApplication.shared.applicationIconImage = iconImage
+        }
     }
 }
 
