@@ -1138,7 +1138,7 @@ struct UpdatesSectionContent: View {
                         .font(.system(size: 11))
                     } else {
                         Button("Download and Install") {
-                            Task { await updateService.downloadAndInstall() }
+                            updateService.downloadAndInstall()
                         }
                         .font(.system(size: 12))
                     }

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.5]
+- Added "Skip This Version" option to update popup
+- "Later" now clears badge and re-prompts on next check cycle
+- Fixed update popup showing twice on manual "Check for Updates"
+- Fixed Dock icon disappearing when dismissing update popup while main window is open
+- Fixed download cancel button not working
+- Fixed URLSession leak during update downloads
+- Skip redundant update check on launch if checked within the last hour
+
 ## [0.4.4]
 - Support tracking multiple active sessions simultaneously in the menu bar popover
 - Active sessions display in a unified card with compact rows and a pulsing indicator

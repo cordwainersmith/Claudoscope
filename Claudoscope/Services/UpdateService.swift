@@ -13,13 +13,14 @@ final class UpdateService {
     var onUpdateFound: ((UpdateInfo) -> Void)?
 
     private var checkTimer: Timer?
-    private var downloadTask: URLSessionDownloadTask?
+    private var downloadingTask: Task<Void, Never>?
 
     private static let repoOwner = "cordwainersmith"
     private static let repoName = "Claudoscope"
     private static let teamID = "DN8M2CQ4D2"
     private static let lastCheckKey = "lastUpdateCheckDate"
     private static let autoCheckKey = "autoCheckForUpdates"
+    private static let skippedVersionKey = "skippedUpdateVersion"
     private static let checkInterval: TimeInterval = 24 * 60 * 60
     private static let justUpdatedVersionKey = "justUpdatedToVersion"
 
@@ -46,6 +47,18 @@ final class UpdateService {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     }
 
+    var skippedVersion: String? {
+        UserDefaults.standard.string(forKey: Self.skippedVersionKey)
+    }
+
+    func skipVersion(_ version: String) {
+        UserDefaults.standard.set(version, forKey: Self.skippedVersionKey)
+    }
+
+    func clearSkippedVersion() {
+        UserDefaults.standard.removeObject(forKey: Self.skippedVersionKey)
+    }
+
     init() {
         // Default to auto-check enabled
         if UserDefaults.standard.object(forKey: Self.autoCheckKey) == nil {
@@ -56,10 +69,14 @@ final class UpdateService {
     func startPeriodicChecks() {
         guard autoCheckEnabled else { return }
 
-        // Check after a short delay on launch
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            guard let self else { return }
-            Task { await self.checkForUpdates() }
+        // Skip the launch check if we checked less than 1 hour ago
+        let lastCheck = UserDefaults.standard.double(forKey: Self.lastCheckKey)
+        let sinceLastCheck = Date().timeIntervalSince1970 - lastCheck
+        if lastCheck == 0 || sinceLastCheck > 3600 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                guard let self else { return }
+                Task { await self.checkForUpdates() }
+            }
         }
 
         schedulePeriodicCheck()
@@ -125,14 +142,23 @@ final class UpdateService {
                 releaseNotes: releaseNotes
             )
             updateAvailable = info
-            onUpdateFound?(info)
+
+            if remoteVersion == skippedVersion {
+                // Skipped version: set updateAvailable (for badge/settings) but no popup
+            } else {
+                // New version (or newer than skipped): clear any old skip and show popup
+                if skippedVersion != nil {
+                    clearSkippedVersion()
+                }
+                onUpdateFound?(info)
+            }
         } catch {
             self.error = error.localizedDescription
         }
     }
 
     @MainActor
-    func downloadAndInstall() async {
+    func downloadAndInstall() {
         guard let update = updateAvailable else { return }
         guard !isDownloading else { return }
 
@@ -140,6 +166,13 @@ final class UpdateService {
         downloadProgress = 0
         error = nil
 
+        downloadingTask = Task { @MainActor in
+            await _performDownloadAndInstall(update: update)
+        }
+    }
+
+    @MainActor
+    private func _performDownloadAndInstall(update: UpdateInfo) async {
         do {
             // Download DMG to temp directory
             let tempDir = FileManager.default.temporaryDirectory
@@ -236,8 +269,8 @@ final class UpdateService {
     }
 
     func cancelDownload() {
-        downloadTask?.cancel()
-        downloadTask = nil
+        downloadingTask?.cancel()
+        downloadingTask = nil
         isDownloading = false
         downloadProgress = 0
     }
@@ -252,6 +285,7 @@ final class UpdateService {
         }
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         let (tempURL, response) = try await session.download(from: url)
+        session.finishTasksAndInvalidate()
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw UpdateError.downloadFailed

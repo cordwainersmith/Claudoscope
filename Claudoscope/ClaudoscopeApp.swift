@@ -202,10 +202,12 @@ struct MenuBarPopoverContent: View {
                 Button {
                     Task {
                         showUpToDate = false
+                        // Clear any skipped version for manual checks so the popup always shows
+                        updateService.clearSkippedVersion()
                         await updateService.checkForUpdates()
-                        if let update = updateService.updateAvailable {
-                            UpdateWindowController.shared.showUpdateAvailable(update, updateService: updateService)
-                        } else if updateService.error == nil {
+                        // onUpdateFound already shows the popup if an update is found,
+                        // so only handle the "up to date" feedback path here
+                        if updateService.updateAvailable == nil, updateService.error == nil {
                             showUpToDate = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                                 showUpToDate = false
@@ -545,7 +547,11 @@ final class UpdateWindowController {
         let contentView = UpdateAvailableView(
             update: update,
             updateService: updateService,
-            onDismiss: { self.dismiss() }
+            onDismiss: { self.dismiss() },
+            onSkip: {
+                updateService.skipVersion(update.version)
+                self.dismiss()
+            }
         )
 
         let hostingView = NSHostingView(rootView: contentView)
@@ -600,9 +606,16 @@ final class UpdateWindowController {
     }
 
     func dismiss() {
+        let dismissingWindow = window
         window?.close()
         window = nil
-        NSApplication.shared.setActivationPolicy(.accessory)
+        // Only revert to accessory if no other app windows are visible
+        let hasOtherVisibleWindow = NSApp.windows.contains { w in
+            w !== dismissingWindow && w.isVisible && w.level == .normal
+        }
+        if !hasOtherVisibleWindow {
+            NSApplication.shared.setActivationPolicy(.accessory)
+        }
     }
 }
 
@@ -610,6 +623,7 @@ struct UpdateAvailableView: View {
     let update: UpdateService.UpdateInfo
     let updateService: UpdateService
     let onDismiss: () -> Void
+    var onSkip: (() -> Void)?
 
     private var logoImage: NSImage? {
         guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
@@ -653,24 +667,40 @@ struct UpdateAvailableView: View {
                 )
             }
 
-            HStack {
-                Button("Later") {
-                    onDismiss()
+            VStack(spacing: 8) {
+                HStack {
+                    Button("Later") {
+                        updateService.updateAvailable = nil
+                        onDismiss()
+                    }
+
+                    Spacer()
+
+                    if updateService.isDownloading {
+                        ProgressView(value: updateService.downloadProgress)
+                            .frame(width: 80)
+                        Text("\(Int(updateService.downloadProgress * 100))%")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Button("Download and Install") {
+                            updateService.downloadAndInstall()
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
                 }
 
-                Spacer()
-
-                if updateService.isDownloading {
-                    ProgressView(value: updateService.downloadProgress)
-                        .frame(width: 80)
-                    Text("\(Int(updateService.downloadProgress * 100))%")
-                        .font(.system(size: 11, design: .monospaced))
+                if !updateService.isDownloading {
+                    HStack {
+                        Button("Skip This Version") {
+                            updateService.updateAvailable = nil
+                            onSkip?()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                } else {
-                    Button("Download and Install") {
-                        Task { await updateService.downloadAndInstall() }
+                        Spacer()
                     }
-                    .keyboardShortcut(.defaultAction)
                 }
             }
         }
