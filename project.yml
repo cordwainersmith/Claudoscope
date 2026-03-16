@@ -25,8 +25,8 @@ targets:
         LSUIElement: true
         CFBundleIconFile: AppIcon
         CFBundleName: Claudoscope
-        CFBundleShortVersionString: "0.3.7"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
     dependencies:
       - package: swift-collections
         product: OrderedCollections
@@ -37,6 +37,8 @@ targets:
         com.apple.security.files.user-selected.read-only: true
     settings:
       base:
+        MARKETING_VERSION: "0.3.8"
+        CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         PRODUCT_BUNDLE_IDENTIFIER: com.claudoscope.app
