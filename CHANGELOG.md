@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.9]
+- Added bundled changelog for reliable "What's New" popup after updates
+- Added download count badge to README
+- Added changelog gate to release script
+- Fixed today's sessions filter to use proper date comparison
+- Fixed watcher re-parse UUID deduplication reset
+- Fixed project ID derivation for subagent paths
+
 ## [0.3.8]
 - Added download tracking for Homebrew installs
 - Fixed Dock icon not appearing when opening Dashboard
