@@ -345,12 +345,13 @@ final class MainWindowController {
     }
 
     private func showInDockSync() {
-        NSApplication.shared.setActivationPolicy(.regular)
-
+        // Set icon before changing policy so macOS has it ready
+        // when the app appears in the Dock.
         if let iconURL = Bundle.main.url(forResource: "app-icon-rounded", withExtension: "png"),
            let iconImage = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = iconImage
         }
+        NSApplication.shared.setActivationPolicy(.regular)
     }
 }
 
