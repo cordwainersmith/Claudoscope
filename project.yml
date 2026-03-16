@@ -19,6 +19,9 @@ targets:
       - path: Claudoscope
         excludes:
           - Info.plist
+      - path: CHANGELOG.md
+        type: file
+        buildPhase: resources
     info:
       path: Claudoscope/Info.plist
       properties:

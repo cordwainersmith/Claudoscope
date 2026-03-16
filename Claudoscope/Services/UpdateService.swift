@@ -22,7 +22,6 @@ final class UpdateService {
     private static let autoCheckKey = "autoCheckForUpdates"
     private static let checkInterval: TimeInterval = 24 * 60 * 60
     private static let justUpdatedVersionKey = "justUpdatedToVersion"
-    private static let justUpdatedNotesKey = "justUpdatedReleaseNotes"
 
     struct UpdateInfo {
         let version: String
@@ -103,8 +102,7 @@ final class UpdateService {
             }
 
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let tagName = json["tag_name"] as? String,
-                  let assets = json["assets"] as? [[String: Any]] else {
+                  let tagName = json["tag_name"] as? String else {
                 error = "Unexpected response format"
                 return
             }
@@ -116,16 +114,8 @@ final class UpdateService {
                 return
             }
 
-            // Find the DMG asset
-            guard let dmgAsset = assets.first(where: { asset in
-                guard let name = asset["name"] as? String else { return false }
-                return name.hasSuffix(".dmg")
-            }),
-            let downloadURLString = dmgAsset["browser_download_url"] as? String,
-            let downloadURL = URL(string: downloadURLString) else {
-                error = "No DMG found in release"
-                return
-            }
+            // Build download URL through the Worker for tracking
+            let downloadURL = URL(string: "https://dl.claudoscope.com/v\(remoteVersion)/Claudoscope.dmg?type=update")!
 
             let releaseNotes = json["body"] as? String
 
@@ -216,11 +206,10 @@ final class UpdateService {
             // Remove backup
             try? FileManager.default.removeItem(at: backupURL)
 
-            // Store post-update info for the "What's New" popup after relaunch
+            // Store version for the "What's New" popup after relaunch
+            // (notes come from bundled CHANGELOG.md, no need to persist them)
             UserDefaults.standard.set(update.version, forKey: Self.justUpdatedVersionKey)
-            if let notes = update.releaseNotes {
-                UserDefaults.standard.set(notes, forKey: Self.justUpdatedNotesKey)
-            }
+            UserDefaults.standard.synchronize()
 
             // Relaunch
             relaunch(at: currentAppURL)
@@ -239,9 +228,10 @@ final class UpdateService {
         guard let version = UserDefaults.standard.string(forKey: Self.justUpdatedVersionKey) else {
             return nil
         }
-        let notes = UserDefaults.standard.string(forKey: Self.justUpdatedNotesKey)
+        let notes = ChangelogParser.bundledNotes(for: version)
         UserDefaults.standard.removeObject(forKey: Self.justUpdatedVersionKey)
-        UserDefaults.standard.removeObject(forKey: Self.justUpdatedNotesKey)
+        // Clean up legacy key from older versions
+        UserDefaults.standard.removeObject(forKey: "justUpdatedReleaseNotes")
         return JustUpdatedInfo(version: version, releaseNotes: notes)
     }
 

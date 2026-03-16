@@ -92,10 +92,16 @@ final class SessionStore {
 
     /// Today's sessions
     var todaySessions: [SessionSummary] {
-        let todayPrefix = todayDateString()
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: Date())
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return allSessionsWithProjects
             .map(\.session)
-            .filter { $0.lastTimestamp.hasPrefix(todayPrefix) }
+            .filter { session in
+                guard let date = isoFormatter.date(from: session.lastTimestamp) else { return false }
+                return date >= startOfToday
+            }
     }
 
     /// Recent sessions (last 3, any date)
@@ -166,10 +172,21 @@ final class SessionStore {
         switch change {
         case .sessionUpdated(let url), .sessionCreated(let url):
             let sessionId = url.deletingPathExtension().lastPathComponent
-            let projectId = url.deletingLastPathComponent().lastPathComponent
+
+            // Derive projectId by finding the "projects" path component
+            let components = url.pathComponents
+            let projectId: String
+            if let idx = components.lastIndex(of: "projects"), idx + 1 < components.count {
+                projectId = components[idx + 1]
+            } else {
+                projectId = url.deletingLastPathComponent().lastPathComponent
+            }
 
             // Invalidate cache
             await cache.invalidate(sessionId)
+
+            // Reset UUID dedup so re-parsed records aren't skipped
+            await parser.resetDedup()
 
             // Re-parse metadata
             do {
@@ -298,12 +315,6 @@ final class SessionStore {
         } catch {
             // Handle error
         }
-    }
-
-    private func todayDateString() -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
     }
 
     // MARK: - Plans

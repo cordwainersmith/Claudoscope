@@ -19,5 +19,8 @@ docs/
 # Node modules
 node_modules/
 
+# Wrangler local state
+.wrangler/
+
 # Claude Code config
 CLAUDE.md

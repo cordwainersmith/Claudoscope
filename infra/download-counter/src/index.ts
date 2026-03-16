@@ -24,6 +24,32 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    // GET /badge - public shields.io endpoint badge
+    if (url.pathname === "/badge") {
+      const totalRaw = parseInt((await env.DOWNLOAD_COUNTS.get("downloads:total")) || "0", 10);
+      let message: string;
+      if (totalRaw >= 1000) {
+        message = (totalRaw / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+      } else {
+        message = String(totalRaw);
+      }
+
+      return new Response(
+        JSON.stringify({
+          schemaVersion: 1,
+          label: "downloads",
+          message,
+          color: "blue",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "max-age=300",
+          },
+        }
+      );
+    }
+
     // GET /stats - protected stats endpoint
     if (url.pathname === "/stats") {
       const auth = request.headers.get("Authorization");
@@ -56,6 +82,7 @@ export default {
 
     const ua = request.headers.get("User-Agent") || "";
     const category = classifyUserAgent(ua);
+    const type = url.searchParams.get("type") === "update" ? "update" : "download";
 
     // Fire-and-forget KV writes
     ctx.waitUntil(
@@ -65,6 +92,7 @@ export default {
             incrementCounter(env.DOWNLOAD_COUNTS, `downloads:${version}`),
             incrementCounter(env.DOWNLOAD_COUNTS, "downloads:total"),
             incrementCounter(env.DOWNLOAD_COUNTS, `downloads:ua:${category}`),
+            incrementCounter(env.DOWNLOAD_COUNTS, `downloads:type:${type}`),
           ]);
         } catch {
           // KV failure must not affect the redirect
