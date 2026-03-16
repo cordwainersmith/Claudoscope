@@ -300,14 +300,13 @@ final class MainWindowController {
 
         // If window exists and is visible, just bring it forward
         if let window, window.isVisible {
-            showInDockSync()
-            window.makeKeyAndOrderFront(nil)
-            NSApplication.shared.activate(ignoringOtherApps: true)
+            DispatchQueue.main.async {
+                self.showInDockSync()
+                window.makeKeyAndOrderFront(nil)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
             return
         }
-
-        // Show in Dock synchronously (before the popover starts dismissing)
-        showInDockSync()
 
         let contentView = FullWindowView()
             .environment(store)
@@ -328,17 +327,16 @@ final class MainWindowController {
         window.center()
         window.setFrameAutosaveName("ClaudoscopeMainWindow")
         window.appearance = store.appearance.nsAppearance
-        window.makeKeyAndOrderFront(nil)
-
-        NSApplication.shared.activate(ignoringOtherApps: true)
 
         self.window = window
 
-        // Re-apply after a short delay as a safety net: the MenuBarExtra
-        // popover dismissal can race and revert the policy to .accessory.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard self?.window?.isVisible == true else { return }
-            self?.showInDockSync()
+        // Defer showing in Dock and presenting the window to the next run
+        // loop iteration so the MenuBarExtra popover finishes dismissing
+        // first and won't revert the activation policy back to .accessory.
+        DispatchQueue.main.async {
+            self.showInDockSync()
+            window.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 
@@ -640,20 +638,16 @@ struct UpdateAvailableView: View {
             }
 
             if let notes = update.releaseNotes, !notes.isEmpty {
-                ScrollView {
-                    Text(notes)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-                .frame(maxHeight: 150)
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(AnyShapeStyle(.quaternary))
-                )
+                Text(notes)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(AnyShapeStyle(.quaternary))
+                    )
             }
 
             HStack {
@@ -719,20 +713,16 @@ struct WhatsNewView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
 
-                    ScrollView {
-                        Text(notes)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .textSelection(.enabled)
-                    }
-                    .frame(maxHeight: 150)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(AnyShapeStyle(.quaternary))
-                    )
+                    Text(notes)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(AnyShapeStyle(.quaternary))
+                        )
                 }
             }
 

@@ -1,8 +1,11 @@
 # Changelog
 
+## [0.4.1]
+- Fixed Dock icon not appearing when opening Dashboard
+- Fixed release notes text not rendering in update popups (removed broken ScrollView)
+
 ## [0.4.0]
-- Fixed Dock icon not appearing when opening Dashboard (reverted to synchronous activation policy)
-- Fixed "What's New" changelog text not rendering after updates
+- (Yanked, fixes were incorrect)
 
 ## [0.3.9]
 - Added bundled changelog for reliable "What's New" popup after updates
