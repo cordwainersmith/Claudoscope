@@ -33,9 +33,9 @@ struct PopoverView: View {
 
             Divider()
 
-            // Active session (if any)
-            if let activeSession = findActiveSession() {
-                ActiveSessionCard(session: activeSession)
+            // Active sessions (if any)
+            if !activeSessions.isEmpty {
+                ActiveSessionsCard(sessions: activeSessions)
                     .padding(.vertical, 8)
                 Divider()
             }
@@ -96,14 +96,18 @@ struct PopoverView: View {
         .frame(width: 280)
     }
 
-    private func findActiveSession() -> SessionSummary? {
+    private var activeSessions: [SessionSummary] {
+        findActiveSessions()
+    }
+
+    private func findActiveSessions() -> [SessionSummary] {
         let now = Date()
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         return store.allSessionsWithProjects
             .map(\.session)
-            .first { session in
+            .filter { session in
                 guard let date = isoFormatter.date(from: session.lastTimestamp) else { return false }
                 return now.timeIntervalSince(date) < 60
             }

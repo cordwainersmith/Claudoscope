@@ -149,9 +149,9 @@ struct MenuBarPopoverContent: View {
 
                 Divider()
 
-                // Active session (if any)
-                if let activeSession = findActiveSession() {
-                    ActiveSessionCard(session: activeSession)
+                // Active sessions (if any)
+                if !activeSessions.isEmpty {
+                    ActiveSessionsCard(sessions: activeSessions)
                         .padding(.vertical, 8)
                     Divider()
                 }
@@ -264,14 +264,14 @@ struct MenuBarPopoverContent: View {
         }
     }
 
-    private func findActiveSession() -> SessionSummary? {
+    private var activeSessions: [SessionSummary] {
         let now = Date()
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         return store.allSessionsWithProjects
             .map(\.session)
-            .first { session in
+            .filter { session in
                 guard let date = isoFormatter.date(from: session.lastTimestamp) else { return false }
                 return now.timeIntervalSince(date) < 60
             }
@@ -638,16 +638,19 @@ struct UpdateAvailableView: View {
             }
 
             if let notes = update.releaseNotes, !notes.isEmpty {
-                Text(notes)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(AnyShapeStyle(.quaternary))
-                    )
+                ScrollView {
+                    Text(notes)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(10)
+                }
+                .frame(maxHeight: 160)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(AnyShapeStyle(.quaternary))
+                )
             }
 
             HStack {
@@ -713,16 +716,19 @@ struct WhatsNewView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
 
-                    Text(notes)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .padding(10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(AnyShapeStyle(.quaternary))
-                        )
+                    ScrollView {
+                        Text(notes)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                            .padding(10)
+                    }
+                    .frame(maxHeight: 160)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(AnyShapeStyle(.quaternary))
+                    )
                 }
             }
 

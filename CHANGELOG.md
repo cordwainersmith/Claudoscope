@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.4]
+- Support tracking multiple active sessions simultaneously in the menu bar popover
+- Active sessions display in a unified card with compact rows and a pulsing indicator
+- Scrollable active sessions section when more than 4 sessions are running
+
 ## [0.4.3]
 - Fixed release notes text not rendering in update and What's New popups
 - Improved auto-update relaunch to avoid overlapping processes
