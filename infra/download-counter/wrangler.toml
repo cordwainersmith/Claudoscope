@@ -1,0 +1,11 @@
+name = "claudoscope-download-counter"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[[routes]]
+pattern = "dl.claudoscope.com"
+custom_domain = true
+
+[[kv_namespaces]]
+binding = "DOWNLOAD_COUNTS"
+id = "dee1b4cd33134d47a624ff8605a9835b"

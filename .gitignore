@@ -16,5 +16,8 @@ dist/
 scripts/
 docs/
 
+# Node modules
+node_modules/
+
 # Claude Code config
 CLAUDE.md
