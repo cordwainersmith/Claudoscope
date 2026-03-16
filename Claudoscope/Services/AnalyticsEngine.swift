@@ -84,8 +84,9 @@ struct AnalyticsEngine {
                 )
             }
 
-            // Model distribution
+            // Model distribution (skip sessions with no detected model)
             let family = getModelFamily(session.primaryModel)
+            guard family != "unknown" else { continue }
             if var mu = modelMap[family] {
                 mu.turnCount += 1
                 mu.totalInputTokens += session.totalInputTokens

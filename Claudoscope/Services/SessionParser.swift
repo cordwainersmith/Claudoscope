@@ -183,7 +183,7 @@ actor SessionParser {
         var totalOutputTokens = 0
         var totalCacheReadTokens = 0
         var totalCacheCreationTokens = 0
-        var primaryModel: String?
+        var modelOutputTokens: [String: Int] = [:]
         var hasError = false
         var slug: String?
         var firstTimestamp = ""
@@ -252,8 +252,8 @@ actor SessionParser {
                         table: pricingTable
                     )
 
-                    if primaryModel == nil, let model = raw.message?.model {
-                        primaryModel = model
+                    if let model = raw.message?.model {
+                        modelOutputTokens[model, default: 0] += msgOutput
                     }
                 }
 
@@ -270,6 +270,7 @@ actor SessionParser {
         }
 
         let title = deriveTitle(slug: slug, firstLine: firstLine, sessionId: sessionId)
+        let primaryModel = modelOutputTokens.max(by: { $0.value < $1.value })?.key
 
         return SessionSummary(
             id: sessionId,

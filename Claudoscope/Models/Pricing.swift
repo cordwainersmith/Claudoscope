@@ -72,7 +72,7 @@ private func isVersion45OrHigher(_ model: String) -> Bool {
 }
 
 func getModelFamily(_ model: String?) -> String {
-    guard let model = model?.lowercased() else { return "sonnet" }
+    guard let model = model?.lowercased() else { return "unknown" }
     if model.contains("opus") {
         return isVersion45OrHigher(model) ? "opus" : "opus4"
     }
@@ -80,7 +80,7 @@ func getModelFamily(_ model: String?) -> String {
         return isVersion45OrHigher(model) ? "haiku" : "haiku3"
     }
     if model.contains("sonnet") { return "sonnet" }
-    return "sonnet"
+    return "unknown"
 }
 
 func getModelPricing(_ model: String?, table: [String: ModelPricing]) -> ModelPricing {
