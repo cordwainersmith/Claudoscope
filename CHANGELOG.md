@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.0]
+- Fixed Dock icon not appearing when opening Dashboard (reverted to synchronous activation policy)
+- Fixed "What's New" changelog text not rendering after updates
+
 ## [0.3.9]
 - Added bundled changelog for reliable "What's New" popup after updates
 - Added download count badge to README
