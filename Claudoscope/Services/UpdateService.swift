@@ -304,13 +304,16 @@ final class UpdateService {
     }
 
     private func relaunch(at appURL: URL) {
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: appURL, configuration: config) { _, _ in
-            DispatchQueue.main.async {
-                NSApp.terminate(nil)
-            }
-        }
+        // Wait for the current process to fully exit before launching the
+        // new app. Running both simultaneously (createsNewApplicationInstance)
+        // corrupts the Dock icon state for LSUIElement apps.
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let path = appURL.path
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = ["-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.1; done; open \"\(path)\""]
+        try? task.run()
+        NSApp.terminate(nil)
     }
 
     private func isNewerVersion(_ remote: String, than local: String) -> Bool {

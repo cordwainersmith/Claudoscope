@@ -1,9 +1,8 @@
 # Changelog
 
-## [0.4.2]
-- Fixed Dock icon not rendering after auto-update (set icon before activation policy)
-- Fixed Dock icon not appearing when opening Dashboard
-- Fixed release notes text not rendering in update popups
+## [0.4.3]
+- Fixed release notes text not rendering in update and What's New popups
+- Improved auto-update relaunch to avoid overlapping processes
 
 ## [0.4.0]
 - (Yanked, fixes were incorrect)
