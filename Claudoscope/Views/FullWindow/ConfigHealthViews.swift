@@ -191,7 +191,7 @@ private struct HealthResultRow: View {
                     .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(.quaternary))
                     .clipShape(RoundedRectangle(cornerRadius: 3))
 
-                Text(result.message)
+                Text(displayMessage(for: result))
                     .font(.system(size: 11))
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? .white : .primary)
@@ -220,6 +220,7 @@ struct ConfigHealthMainPanelView: View {
     @Binding var selectedResultId: String?
     @Binding var hiddenSeverities: Set<LintSeverity>
     var onRescan: (() -> Void)?
+    var onNavigateToSession: ((String, String) -> Void)?
 
     private var selectedResult: LintResult? {
         guard let id = selectedResultId else { return nil }
@@ -237,7 +238,7 @@ struct ConfigHealthMainPanelView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let result = selectedResult {
-            HealthResultDetailView(result: result) {
+            HealthResultDetailView(result: result, onNavigateToSession: onNavigateToSession) {
                 selectedResultId = nil
             }
         } else if lintResults.isEmpty {
@@ -560,7 +561,10 @@ private struct HealthRuleGroupRow: View {
 
                     Spacer()
 
-                    Text("\(results.count) \(results.count == 1 ? "file" : "files")")
+                    Text({
+                        let unit = checkId.rawValue.hasPrefix("SES") ? "session" : "file"
+                        return "\(results.count) \(results.count == 1 ? unit : unit + "s")"
+                    }())
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
 
@@ -597,6 +601,8 @@ private struct HealthRuleGroupRow: View {
                                     .lineLimit(1)
 
                                 Spacer()
+
+                                SessionBadgeView(result: result)
 
                                 Image(systemName: "chevron.right")
                                     .font(.system(size: 8))
@@ -644,12 +650,14 @@ private struct HealthOverviewResultRow: View {
                     .background(AnyShapeStyle(.quaternary))
                     .clipShape(RoundedRectangle(cornerRadius: 3))
 
-                Text(result.message)
+                Text(displayMessage(for: result))
                     .font(.system(size: 12))
                     .lineLimit(1)
                     .foregroundStyle(.primary)
 
                 Spacer()
+
+                SessionBadgeView(result: result)
 
                 Text(displayName)
                     .font(.system(size: 10))
@@ -684,7 +692,19 @@ private struct HealthOverviewResultRow: View {
 
 private struct HealthResultDetailView: View {
     let result: LintResult
+    var onNavigateToSession: ((String, String) -> Void)?
     let onBack: () -> Void
+
+    private var isSessionResult: Bool {
+        result.filePath.hasPrefix("sessions/")
+    }
+
+    private var sessionIds: (projectId: String, sessionId: String)? {
+        guard isSessionResult else { return nil }
+        let parts = result.filePath.split(separator: "/")
+        guard parts.count >= 3 else { return nil }
+        return (projectId: String(parts[1]), sessionId: String(parts[2]))
+    }
 
     var body: some View {
         ScrollView {
@@ -718,24 +738,24 @@ private struct HealthResultDetailView: View {
                 }
                 .padding(.horizontal, 24)
 
-                // File path card
+                // File/Session path card
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("FILE")
+                    Text(isSessionResult ? "SESSION" : "FILE")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.tertiary)
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 6) {
-                            Image(systemName: "doc.text")
+                            Image(systemName: isSessionResult ? "bubble.left.and.text.bubble.right" : "doc.text")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
-                            Text(result.filePath)
-                                .font(.system(size: 12, design: .monospaced))
+                            Text(isSessionResult ? (result.displayPath ?? result.filePath) : result.filePath)
+                                .font(.system(size: 12, design: isSessionResult ? .default : .monospaced))
                                 .foregroundStyle(.primary)
                                 .textSelection(.enabled)
                         }
 
-                        if let line = result.line {
+                        if !isSessionResult, let line = result.line {
                             HStack(spacing: 6) {
                                 Image(systemName: "number")
                                     .font(.system(size: 11))
@@ -744,6 +764,22 @@ private struct HealthResultDetailView: View {
                                     .font(.system(size: 12, design: .monospaced))
                                     .foregroundStyle(.secondary)
                             }
+                        }
+
+                        if isSessionResult, let ids = sessionIds, let onNavigateToSession {
+                            Button {
+                                onNavigateToSession(ids.projectId, ids.sessionId)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.right.circle")
+                                        .font(.system(size: 11))
+                                    Text("View Session")
+                                        .font(.system(size: 12, weight: .medium))
+                                }
+                                .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 4)
                         }
                     }
                     .padding(16)
@@ -763,14 +799,36 @@ private struct HealthResultDetailView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.tertiary)
 
-                    Text(result.message)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(displayMessage(for: result))
+                            .font(.system(size: 13))
+                            .foregroundStyle(.primary)
+                            .textSelection(.enabled)
+
+                        let badges = sessionBadges(for: result)
+                        if !badges.isEmpty {
+                            HStack(spacing: 6) {
+                                ForEach(badges, id: \.text) { badge in
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(badge.color)
+                                            .frame(width: 6, height: 6)
+                                        Text(badge.text)
+                                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                            .foregroundStyle(badge.color)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(badge.color.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                }
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.cardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
                                 .strokeBorder(.quaternary, lineWidth: 1)
@@ -867,6 +925,46 @@ private func healthScoreColor(_ score: Double) -> Color {
     return .red
 }
 
+private func displayMessage(for result: LintResult) -> String {
+    guard result.checkId.rawValue.hasPrefix("SES"),
+          let tagRange = result.message.range(of: " \\[\\$[^\\]]+\\]$", options: .regularExpression) else {
+        return result.message
+    }
+    return String(result.message[result.message.startIndex..<tagRange.lowerBound])
+}
+
+private func sessionBadges(for result: LintResult) -> [(text: String, color: Color)] {
+    guard result.checkId.rawValue.hasPrefix("SES") else { return [] }
+    // Parse stats tag: [$X.XX | NK tokens | N msgs]
+    guard let tagRange = result.message.range(of: "\\[\\$[^\\]]+\\]$", options: .regularExpression) else { return [] }
+    let tag = String(result.message[tagRange].dropFirst().dropLast()) // remove [ ]
+    let parts = tag.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+    guard parts.count == 3 else { return [] }
+
+    var badges: [(String, Color)] = []
+    badges.append((parts[1], .cyan))          // NK tokens
+    badges.append((parts[2], .purple))        // N msgs
+    return badges
+}
+
+@ViewBuilder
+private func SessionBadgeView(result: LintResult) -> some View {
+    let badges = sessionBadges(for: result)
+    if !badges.isEmpty {
+        HStack(spacing: 4) {
+            ForEach(badges, id: \.text) { badge in
+                Text(badge.text)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(badge.color)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(badge.color.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+        }
+    }
+}
+
 private func ruleDescription(for checkId: LintCheckId) -> String {
     switch checkId {
     case .CMD001: return "CLAUDE.md exceeds 200 lines"
@@ -893,5 +991,9 @@ private func ruleDescription(for checkId: LintCheckId) -> String {
     case .XCT001: return "Config token estimate"
     case .XCT002: return "Config tokens exceed 5000"
     case .XCT003: return "No .claude/ directory"
+    case .SES001: return "High cost session"
+    case .SES002: return "Very long conversation"
+    case .SES003: return "Runaway token consumption"
+    case .SES004: return "Stale session with history"
     }
 }

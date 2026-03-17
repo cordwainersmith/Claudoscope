@@ -22,6 +22,9 @@ struct FullWindowView: View {
     @State private var selectedLintResultId: String?
     @State private var hiddenLintSeverities: Set<LintSeverity> = []
 
+    // Pending navigation (deferred until after rail change)
+    @State private var pendingNavigation: (projectId: String, sessionId: String)?
+
     // Settings state
     @State private var selectedSettingsSection: String?
 
@@ -63,14 +66,26 @@ struct FullWindowView: View {
                 selectedLintResultId: $selectedLintResultId,
                 hiddenLintSeverities: $hiddenLintSeverities,
                 selectedProjectId: selectedProjectId,
-                selectedSettingsSection: $selectedSettingsSection
+                selectedSettingsSection: $selectedSettingsSection,
+                onNavigateToSession: { projectId, sessionId in
+                    pendingNavigation = (projectId, sessionId)
+                    selectedRail = .sessions
+                    Task {
+                        await store.loadSession(id: sessionId, projectId: projectId)
+                    }
+                }
             )
         }
         .onChange(of: selectedRail) { oldRail, newRail in
             // Save current selection
             savedSelections[oldRail] = (selectedProjectId, selectedSessionId)
-            // Restore previous selection for new rail
-            if let saved = savedSelections[newRail] {
+
+            // Apply pending navigation or restore previous selection
+            if let nav = pendingNavigation {
+                selectedProjectId = nav.projectId
+                selectedSessionId = nav.sessionId
+                pendingNavigation = nil
+            } else if let saved = savedSelections[newRail] {
                 selectedProjectId = saved.projectId
                 selectedSessionId = saved.sessionId
             } else {

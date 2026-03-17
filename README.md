@@ -166,6 +166,15 @@ The config health view runs 19 lint rules against your Claude Code configuration
 
 Rules cover CLAUDE.md size and structure, rules YAML frontmatter and glob validation, skill metadata completeness, naming conventions, and cross-cutting token budget estimates.
 
+In addition to configuration checks, the health screen runs **session health checks** (SES rules) that analyze actual usage data from the last 30 days. These surface sessions that burned too many tokens, cost too much, or ran too long:
+
+- **SES001**: session cost exceeded $25
+- **SES002**: conversation exceeded 200 messages
+- **SES003**: cumulative token consumption exceeded 5M (including cache)
+- **SES004**: session idle for 7+ days with 50+ messages
+
+Each session triggers at most one check (the most severe), and results are capped at 10 to avoid flooding the health score. Session results include token and message count badges, and clicking "View Session" navigates directly to the session in the Sessions rail.
+
 ### Settings
 
 ![Settings](screenshots/settings.png)

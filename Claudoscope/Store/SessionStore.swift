@@ -367,6 +367,15 @@ final class SessionStore {
     func runConfigLint(projectId: String?) async {
         await MainActor.run { lintLoading = true }
 
+        // Capture sessions on MainActor before any await
+        let sessions: [SessionSummary] = await MainActor.run {
+            if let projectId {
+                return sessionsByProject[projectId] ?? []
+            } else {
+                return sessionsByProject.values.flatMap { $0 }
+            }
+        }
+
         // Resolve project root from projectId
         let projectRoot: String?
         if let projectId {
@@ -375,11 +384,15 @@ final class SessionStore {
             projectRoot = nil
         }
 
-        let results = await linterService.lint(projectRoot: projectRoot, globalClaudeDir: claudeDir)
-        let summary = LintSummary.from(results: results)
+        var allResults = await linterService.lint(projectRoot: projectRoot, globalClaudeDir: claudeDir)
+        let sessionResults = await linterService.lintSessions(sessions)
+        allResults.append(contentsOf: sessionResults)
+        allResults.sort { $0.severity < $1.severity }
+        let finalResults = allResults
+        let summary = LintSummary.from(results: finalResults)
 
         await MainActor.run {
-            self.lintResults = results
+            self.lintResults = finalResults
             self.lintSummary = summary
             self.lintLoading = false
         }

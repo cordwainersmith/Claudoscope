@@ -23,6 +23,9 @@ struct MainPanelView: View {
     // Settings
     @Binding var selectedSettingsSection: String?
 
+    // Session navigation from config health
+    var onNavigateToSession: ((String, String) -> Void)?
+
     var body: some View {
         Group {
             switch rail {
@@ -85,7 +88,8 @@ struct MainPanelView: View {
                         Task {
                             await store.runConfigLint(projectId: selectedProjectId)
                         }
-                    }
+                    },
+                    onNavigateToSession: onNavigateToSession
                 )
             case .settings:
                 SettingsMainPanelView(selectedSection: $selectedSettingsSection)

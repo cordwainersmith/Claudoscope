@@ -43,6 +43,12 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case XCT001  // total token estimate
     case XCT002  // tokens >5000
     case XCT003  // no .claude/ directory
+
+    // Session checks
+    case SES001  // high cost session (>$25)
+    case SES002  // very long conversation (>200 messages)
+    case SES003  // runaway token consumption (>2M tokens)
+    case SES004  // stale session with significant history
 }
 
 struct LintResult: Identifiable, Sendable {
