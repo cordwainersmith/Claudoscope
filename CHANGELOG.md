@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.6]
+- Added Config Health screen: 19 lint rules across CLAUDE.md, rules, and skills with group-by-rule view, severity filters, health gauge, and one-click rescan
+- Added session health checks (SES001-SES004) surfacing expensive, long, or idle sessions
+- Added secret detection scanning session files for leaked credentials with entropy filtering, context lines, and reveal toggle
+- Added real-time secret alerts with settings toggle
+- Redesigned Config Health with category navigation and human-readable rule names
+- Added What's New button and full release notes in Settings > Updates
+- Replaced loading skeleton with animated logo in menu bar popover
+- Improved typography: bumped scale +1pt across all views
+- Refactored 9 monolithic source files into ~40 focused modules
+
 ## [0.4.5]
 - Added "Skip This Version" option to update popup
 - "Later" now clears badge and re-prompts on next check cycle
