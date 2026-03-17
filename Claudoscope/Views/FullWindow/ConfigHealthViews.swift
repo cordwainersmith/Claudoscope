@@ -1,5 +1,191 @@
 import SwiftUI
 
+// MARK: - Rule & Category Metadata
+
+private struct RuleMetadata {
+    let displayName: String
+    let hint: String
+}
+
+private let ruleMetadata: [LintCheckId: RuleMetadata] = [
+    .SEC001: RuleMetadata(
+        displayName: "Private key detected",
+        hint: "Private key material found in session output. Never paste private keys into prompts. Use file references or environment variables instead."
+    ),
+    .SEC002: RuleMetadata(
+        displayName: "AWS access key detected",
+        hint: "Found AWS access key pattern (AKIA...) in session output. Use environment variables or a secrets manager instead of hardcoding credentials."
+    ),
+    .SEC003: RuleMetadata(
+        displayName: "Authorization header detected",
+        hint: "Bearer token found in session content. Ensure auth headers are sourced from env vars, not pasted inline."
+    ),
+    .SEC004: RuleMetadata(
+        displayName: "API key or token detected",
+        hint: "Generic API key pattern matched. Rotate the key and move it to a .env file or secrets vault."
+    ),
+    .SEC005: RuleMetadata(
+        displayName: "Password or secret literal detected",
+        hint: "Plaintext password or secret found in session content. Use a secrets manager or environment variables."
+    ),
+    .SEC006: RuleMetadata(
+        displayName: "Connection string with credentials",
+        hint: "Database connection string with embedded credentials detected. Move credentials to environment variables."
+    ),
+    .SEC007: RuleMetadata(
+        displayName: "Platform token detected",
+        hint: "Platform-specific token (GitHub, Slack, npm, etc.) found. Rotate the token and store it securely."
+    ),
+    .SES001: RuleMetadata(
+        displayName: "High cost session",
+        hint: "Session estimated cost exceeds $25. Consider breaking expensive tasks into smaller sessions."
+    ),
+    .SES002: RuleMetadata(
+        displayName: "Very long conversation",
+        hint: "Session has an unusually high message count. Long sessions increase compaction frequency and degrade context quality."
+    ),
+    .SES003: RuleMetadata(
+        displayName: "Runaway token consumption",
+        hint: "Session exceeded expected token budget. Consider breaking the task into smaller sessions or adding a /compact checkpoint mid-flow."
+    ),
+    .SES004: RuleMetadata(
+        displayName: "Stale session with history",
+        hint: "Session has significant history but hasn't been active recently. Consider archiving or reviewing for relevant context."
+    ),
+    .SKL001: RuleMetadata(
+        displayName: "Wrong SKILL.md casing",
+        hint: "Skill manifest file should be named SKILL.md (uppercase). Rename to match expected convention."
+    ),
+    .SKL002: RuleMetadata(
+        displayName: "Missing skill name",
+        hint: "Skill YAML frontmatter is missing the 'name' field. Add a kebab-case name to the frontmatter."
+    ),
+    .SKL003: RuleMetadata(
+        displayName: "Missing skill description",
+        hint: "Skill YAML frontmatter is missing the 'description' field. Add a clear description of what the skill does."
+    ),
+    .SKL004: RuleMetadata(
+        displayName: "Name/directory mismatch",
+        hint: "Skill name in frontmatter doesn't match the containing directory name. Align them for consistency."
+    ),
+    .SKL005: RuleMetadata(
+        displayName: "Name not kebab-case",
+        hint: "Skill name should use kebab-case (lowercase with hyphens). Rename to match the convention."
+    ),
+    .SKL006: RuleMetadata(
+        displayName: "Name exceeds 64 characters",
+        hint: "Skill name is too long. Shorten it to 64 characters or fewer."
+    ),
+    .SKL007: RuleMetadata(
+        displayName: "Description exceeds 1024 characters",
+        hint: "Skill description is too long. Keep it concise, under 1024 characters."
+    ),
+    .SKL008: RuleMetadata(
+        displayName: "XML brackets in frontmatter",
+        hint: "Skill YAML frontmatter contains raw XML brackets which can break the system prompt parser. Escape them or move to the body."
+    ),
+    .SKL009: RuleMetadata(
+        displayName: "Reserved word in skill name",
+        hint: "Skill name uses a reserved word. Choose a different name to avoid conflicts."
+    ),
+    .SKL012: RuleMetadata(
+        displayName: "Skill body exceeds 500 lines",
+        hint: "Skill body is very long. Consider splitting into smaller, focused skills."
+    ),
+    .SKL_AGG: RuleMetadata(
+        displayName: "Aggregate descriptions over budget",
+        hint: "Combined skill descriptions exceed the 16,000 character budget. Trim descriptions to stay within limits."
+    ),
+    .CMD001: RuleMetadata(
+        displayName: "CLAUDE.md exceeds 200 lines",
+        hint: "Your CLAUDE.md is getting long. Consider splitting into a .claude/rules/ directory for better organization."
+    ),
+    .CMD002: RuleMetadata(
+        displayName: "Large CLAUDE.md without rules directory",
+        hint: "CLAUDE.md has over 100 lines but no .claude/rules/ directory. Split sections into separate rule files."
+    ),
+    .CMD003: RuleMetadata(
+        displayName: "File-type patterns inline",
+        hint: "File-type glob patterns found inline in CLAUDE.md. Move them to .claude/rules/ with proper glob frontmatter."
+    ),
+    .CMD006: RuleMetadata(
+        displayName: "Unclosed code block",
+        hint: "CLAUDE.md contains an unclosed code block (mismatched backtick fences). Close it to prevent parsing issues."
+    ),
+    .CMD_IMPORT: RuleMetadata(
+        displayName: "Deep @import chain",
+        hint: "Import chain exceeds 5 hops. Flatten imports to reduce complexity and improve readability."
+    ),
+    .CMD_DEPRECATE: RuleMetadata(
+        displayName: ".claude/commands/ deprecated",
+        hint: "The .claude/commands/ directory is deprecated. Migrate to .claude/rules/ for the new convention."
+    ),
+    .RUL001: RuleMetadata(
+        displayName: "Malformed YAML frontmatter",
+        hint: "Rule file has invalid YAML frontmatter. Check for syntax errors and fix the YAML."
+    ),
+    .RUL002: RuleMetadata(
+        displayName: "Invalid glob syntax",
+        hint: "Glob pattern in rule frontmatter has invalid syntax. Check for unmatched brackets or invalid characters."
+    ),
+    .RUL003: RuleMetadata(
+        displayName: "Glob matches no files",
+        hint: "The glob pattern in this rule doesn't match any files. Verify the pattern targets existing paths."
+    ),
+    .RUL005: RuleMetadata(
+        displayName: "Rule exceeds 100 lines",
+        hint: "Rule file is over 100 lines. Consider splitting into smaller, focused rules."
+    ),
+    .XCT001: RuleMetadata(
+        displayName: "Config token estimate",
+        hint: "Your CLAUDE.md and settings consume an estimated portion of the context window. Consider trimming if you see frequent compactions."
+    ),
+    .XCT002: RuleMetadata(
+        displayName: "Config tokens exceed 5000",
+        hint: "Configuration exceeds 5,000 tokens. This significantly reduces available context. Trim or split your config."
+    ),
+    .XCT003: RuleMetadata(
+        displayName: "No .claude/ directory",
+        hint: "No .claude/ directory found. Create one to configure Claude Code for this project."
+    ),
+]
+
+private struct CategoryDef: Identifiable {
+    let id: String
+    let label: String
+    let icon: String
+    let color: Color
+    let prefixes: [String]
+    let sortOrder: Int
+}
+
+private let healthCategories: [CategoryDef] = [
+    CategoryDef(id: "security", label: "Security", icon: "!", color: Color(red: 0.886, green: 0.294, blue: 0.290), prefixes: ["SEC"], sortOrder: 1),
+    CategoryDef(id: "performance", label: "Session performance", icon: "~", color: Color(red: 0.937, green: 0.624, blue: 0.153), prefixes: ["SES"], sortOrder: 2),
+    CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS"], sortOrder: 3),
+    CategoryDef(id: "config", label: "Configuration", icon: "i", color: Color(red: 0.216, green: 0.541, blue: 0.867), prefixes: ["XCT", "CFG", "CMD", "RUL"], sortOrder: 4),
+]
+
+private let otherCategory = CategoryDef(id: "other", label: "Other", icon: "?", color: .gray, prefixes: [], sortOrder: 99)
+
+private func categoryFor(_ checkId: LintCheckId) -> CategoryDef {
+    let raw = checkId.rawValue
+    for cat in healthCategories {
+        for prefix in cat.prefixes {
+            if raw.hasPrefix(prefix) { return cat }
+        }
+    }
+    return otherCategory
+}
+
+private func displayNameFor(_ checkId: LintCheckId) -> String {
+    ruleMetadata[checkId]?.displayName ?? checkId.rawValue
+}
+
+private func hintFor(_ checkId: LintCheckId) -> String? {
+    ruleMetadata[checkId]?.hint
+}
+
 // MARK: - Sidebar
 
 struct ConfigHealthSidebarContent: View {
@@ -7,8 +193,8 @@ struct ConfigHealthSidebarContent: View {
     let lintResults: [LintResult]
     let lintSummary: LintSummary
     let isLoading: Bool
-    @Binding var selectedResultId: String?
-    let hiddenSeverities: Set<LintSeverity>
+    @Binding var selectedItem: String?
+    @Binding var hiddenSeverities: Set<LintSeverity>
 
     private var filtered: [LintResult] {
         var items = lintResults
@@ -19,18 +205,32 @@ struct ConfigHealthSidebarContent: View {
             items = items.filter { result in
                 let display = result.displayPath ?? result.filePath
                 return display.localizedCaseInsensitiveContains(filterText) ||
-                    result.message.localizedCaseInsensitiveContains(filterText) ||
-                    result.checkId.rawValue.localizedCaseInsensitiveContains(filterText)
+                    displayNameFor(result.checkId).localizedCaseInsensitiveContains(filterText)
             }
         }
         return items
     }
 
-    private var groupedByFile: [(file: String, results: [LintResult])] {
+    // Group items by displayPath, find highest severity per group
+    private var itemGroups: [(name: String, count: Int, highestSeverity: LintSeverity)] {
         let dict = Dictionary(grouping: filtered) { $0.displayPath ?? $0.filePath }
-        return dict.keys.sorted().map { key in
-            (file: key, results: dict[key]!)
+        return dict.map { key, results in
+            let highest = results.map(\.severity).min() ?? .info // .error < .warning < .info
+            return (name: key, count: results.count, highestSeverity: highest)
         }
+    }
+
+    // Items grouped under severity tiers
+    private var errorItems: [(name: String, count: Int, highestSeverity: LintSeverity)] {
+        itemGroups.filter { $0.highestSeverity == .error }.sorted { $0.count > $1.count }
+    }
+
+    private var warningItems: [(name: String, count: Int, highestSeverity: LintSeverity)] {
+        itemGroups.filter { $0.highestSeverity == .warning }.sorted { $0.count > $1.count }
+    }
+
+    private var infoItems: [(name: String, count: Int, highestSeverity: LintSeverity)] {
+        itemGroups.filter { $0.highestSeverity == .info }.sorted { $0.count > $1.count }
     }
 
     var body: some View {
@@ -46,28 +246,86 @@ struct ConfigHealthSidebarContent: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 40)
-        } else if filtered.isEmpty {
+        } else if lintResults.isEmpty {
             SidebarEmptyStateView(
                 icon: "checkmark.shield",
-                text: lintResults.isEmpty ? "No issues found" : "No matching results"
+                text: "No issues found"
             )
         } else {
             LazyVStack(alignment: .leading, spacing: 0) {
-                // Summary bar
-                HealthSummarySidebarBar(summary: lintSummary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                // Severity filter pills
+                SeverityFilterPills(
+                    summary: lintSummary,
+                    hiddenSeverities: $hiddenSeverities
+                )
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
 
                 Divider()
                     .padding(.horizontal, 12)
 
-                // Grouped results
-                ForEach(groupedByFile, id: \.file) { group in
-                    HealthFileGroup(
-                        displayName: group.file,
-                        results: group.results,
-                        selectedResultId: $selectedResultId
+                if filtered.isEmpty {
+                    SidebarEmptyStateView(
+                        icon: "line.3.horizontal.decrease",
+                        text: "No matching results"
                     )
+                } else {
+                    // Clear filter option
+                    if selectedItem != nil {
+                        Button {
+                            selectedItem = nil
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                Text("Clear filter")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Severity-grouped item list
+                    if !errorItems.isEmpty && !hiddenSeverities.contains(.error) {
+                        SeveritySection(
+                            label: "Critical issues",
+                            severity: .error,
+                            items: errorItems,
+                            selectedItem: $selectedItem
+                        )
+                    }
+
+                    if !warningItems.isEmpty && !hiddenSeverities.contains(.warning) {
+                        if !errorItems.isEmpty && !hiddenSeverities.contains(.error) {
+                            Divider()
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 2)
+                        }
+                        SeveritySection(
+                            label: "Warnings",
+                            severity: .warning,
+                            items: warningItems,
+                            selectedItem: $selectedItem
+                        )
+                    }
+
+                    if !infoItems.isEmpty && !hiddenSeverities.contains(.info) {
+                        if (!errorItems.isEmpty && !hiddenSeverities.contains(.error)) ||
+                            (!warningItems.isEmpty && !hiddenSeverities.contains(.warning)) {
+                            Divider()
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 2)
+                        }
+                        SeveritySection(
+                            label: "Info",
+                            severity: .info,
+                            items: infoItems,
+                            selectedItem: $selectedItem
+                        )
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -77,93 +335,115 @@ struct ConfigHealthSidebarContent: View {
 
 // MARK: - Sidebar Components
 
-private struct HealthSummarySidebarBar: View {
+private struct SeverityFilterPills: View {
     let summary: LintSummary
+    @Binding var hiddenSeverities: Set<LintSeverity>
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                SeverityCount(color: .red, count: summary.errorCount, label: "E")
-                SeverityCount(color: .orange, count: summary.warningCount, label: "W")
-                SeverityCount(color: .blue, count: summary.infoCount, label: "I")
-                Spacer()
+        HStack(spacing: 6) {
+            FilterPill(
+                label: "Errors",
+                count: summary.errorCount,
+                color: Color(red: 0.886, green: 0.294, blue: 0.290),
+                isActive: !hiddenSeverities.contains(.error)
+            ) {
+                toggleSeverity(.error)
             }
 
-            HStack(spacing: 4) {
-                Text("Health:")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                Text("\(Int(summary.healthScore * 100))%")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(healthScoreColor(summary.healthScore))
+            FilterPill(
+                label: "Warnings",
+                count: summary.warningCount,
+                color: Color(red: 0.937, green: 0.624, blue: 0.153),
+                isActive: !hiddenSeverities.contains(.warning)
+            ) {
+                toggleSeverity(.warning)
             }
+
+            FilterPill(
+                label: "Info",
+                count: summary.infoCount,
+                color: Color(red: 0.216, green: 0.541, blue: 0.867),
+                isActive: !hiddenSeverities.contains(.info)
+            ) {
+                toggleSeverity(.info)
+            }
+
+            Spacer()
+        }
+    }
+
+    private func toggleSeverity(_ severity: LintSeverity) {
+        if hiddenSeverities.contains(severity) {
+            hiddenSeverities.remove(severity)
+        } else {
+            hiddenSeverities.insert(severity)
         }
     }
 }
 
-private struct SeverityCount: View {
-    let color: Color
-    let count: Int
+private struct FilterPill: View {
     let label: String
+    let count: Int
+    let color: Color
+    let isActive: Bool
+    let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(color)
-                .frame(width: 7, height: 7)
-            Text("\(count)")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(.primary)
+        Button(action: onToggle) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 6, height: 6)
+                Text("\(count)")
+                    .font(.system(size: 10, weight: isActive ? .semibold : .regular, design: .monospaced))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isActive ? color.opacity(0.1) : Color.clear)
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(isActive ? color.opacity(0.4) : Color.secondary.opacity(0.2), lineWidth: 1)
+            )
+            .opacity(isActive ? 1.0 : 0.5)
         }
+        .buttonStyle(.plain)
+        .help(isActive ? "Hide \(label.lowercased())" : "Show \(label.lowercased())")
     }
 }
 
-private struct HealthFileGroup: View {
-    let displayName: String
-    let results: [LintResult]
-    @Binding var selectedResultId: String?
-    @State private var isExpanded = true
+private struct SeveritySection: View {
+    let label: String
+    let severity: LintSeverity
+    let items: [(name: String, count: Int, highestSeverity: LintSeverity)]
+    @Binding var selectedItem: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 12)
-
-                    Text(displayName)
-                        .font(Typography.bodyMedium)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Text("\(results.count)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.15))
-                        .clipShape(Capsule())
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
+            // Section header
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(colorForSeverity(severity))
+                    .frame(width: 6, height: 6)
+                Text(label.uppercased())
+                    .font(Typography.caption)
+                    .foregroundStyle(.tertiary)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
 
-            if isExpanded {
-                ForEach(results) { result in
-                    HealthResultRow(
-                        result: result,
-                        isSelected: selectedResultId == result.id
-                    ) {
-                        selectedResultId = result.id
+            // Item rows
+            ForEach(items, id: \.name) { item in
+                SidebarItemRow(
+                    name: item.name,
+                    count: item.count,
+                    isSelected: selectedItem == item.name
+                ) {
+                    if selectedItem == item.name {
+                        selectedItem = nil
+                    } else {
+                        selectedItem = item.name
                     }
                 }
             }
@@ -171,43 +451,49 @@ private struct HealthFileGroup: View {
     }
 }
 
-private struct HealthResultRow: View {
-    let result: LintResult
+private struct SidebarItemRow: View {
+    let name: String
+    let count: Int
     let isSelected: Bool
     let onSelect: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 8) {
-                Image(systemName: severityIcon(result.severity))
-                    .font(.system(size: 9))
-                    .foregroundStyle(colorForSeverity(result.severity))
-
-                Text(result.checkId.rawValue)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.tertiary))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(.quaternary))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-
-                Text(displayMessage(for: result))
-                    .font(.system(size: 11))
+            HStack(spacing: 6) {
+                Text(name)
+                    .font(Typography.body)
                     .lineLimit(1)
-                    .foregroundStyle(isSelected ? .white : .primary)
+                    .foregroundStyle(isSelected ? Color.accentColor : .primary)
 
                 Spacer()
+
+                Text("\(count)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.15))
+                    .clipShape(Capsule())
             }
             .padding(.horizontal, 12)
-            .padding(.leading, 18)
             .padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? Color.accentColor : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
-            .padding(.horizontal, 4)
+            .background(
+                isSelected
+                    ? Color.accentColor.opacity(0.08)
+                    : (isHovered ? Color.primary.opacity(0.04) : .clear)
+            )
+            .overlay(alignment: .leading) {
+                if isSelected {
+                    Rectangle()
+                        .fill(Color.accentColor)
+                        .frame(width: 2)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -220,6 +506,7 @@ struct ConfigHealthMainPanelView: View {
     var isSecretScanLoading: Bool = false
     @Binding var selectedResultId: String?
     @Binding var hiddenSeverities: Set<LintSeverity>
+    var selectedItem: String? = nil
     var onRescan: (() -> Void)?
     var onNavigateToSession: ((String, String) -> Void)?
 
@@ -255,15 +542,17 @@ struct ConfigHealthMainPanelView: View {
                 isSecretScanLoading: isSecretScanLoading,
                 selectedResultId: $selectedResultId,
                 hiddenSeverities: $hiddenSeverities,
+                selectedItem: selectedItem,
                 onRescan: onRescan
             )
         }
     }
 }
 
-// MARK: - Group Mode
+// MARK: - View Mode
 
-private enum GroupMode: String, CaseIterable {
+private enum ViewMode: String, CaseIterable {
+    case byCategory = "By Category"
     case byRule = "By Rule"
     case byFile = "By File"
 }
@@ -276,40 +565,86 @@ private struct HealthOverviewView: View {
     var isSecretScanLoading: Bool = false
     @Binding var selectedResultId: String?
     @Binding var hiddenSeverities: Set<LintSeverity>
+    var selectedItem: String?
     var onRescan: (() -> Void)?
-    @State private var groupMode: GroupMode = .byRule
+    @State private var viewMode: ViewMode = .byCategory
+    @State private var collapsedCategories: Set<String> = []
 
     private var visibleResults: [LintResult] {
-        if hiddenSeverities.isEmpty { return lintResults }
-        return lintResults.filter { !hiddenSeverities.contains($0.severity) }
+        var items = lintResults
+        if !hiddenSeverities.isEmpty {
+            items = items.filter { !hiddenSeverities.contains($0.severity) }
+        }
+        if let selectedItem {
+            items = items.filter { ($0.displayPath ?? $0.filePath) == selectedItem }
+        }
+        return items
     }
 
-    private var groupedByRule: [(checkId: LintCheckId, severity: LintSeverity, message: String, results: [LintResult])] {
+    // Group by rule for "By Rule" view
+    private var groupedByRule: [(checkId: LintCheckId, severity: LintSeverity, results: [LintResult])] {
         let dict = Dictionary(grouping: visibleResults, by: \.checkId)
         return dict.keys.sorted(by: { $0.rawValue < $1.rawValue }).compactMap { key in
             guard let items = dict[key], let first = items.first else { return nil }
-            return (checkId: key, severity: first.severity, message: first.message, results: items)
+            return (checkId: key, severity: first.severity, results: items)
         }
+    }
+
+    // Group by category for "By Category" view
+    private var groupedByCategory: [(category: CategoryDef, rules: [(checkId: LintCheckId, severity: LintSeverity, results: [LintResult])])] {
+        let dict = Dictionary(grouping: visibleResults) { categoryFor($0.checkId).id }
+        var result: [(category: CategoryDef, rules: [(checkId: LintCheckId, severity: LintSeverity, results: [LintResult])])] = []
+
+        let allCats = healthCategories + (dict.keys.contains("other") ? [otherCategory] : [])
+        for cat in allCats.sorted(by: { $0.sortOrder < $1.sortOrder }) {
+            guard let items = dict[cat.id], !items.isEmpty else { continue }
+            let byRule = Dictionary(grouping: items, by: \.checkId)
+            let rules = byRule.keys.sorted(by: { $0.rawValue < $1.rawValue }).compactMap { key -> (checkId: LintCheckId, severity: LintSeverity, results: [LintResult])? in
+                guard let ruleItems = byRule[key], let first = ruleItems.first else { return nil }
+                return (checkId: key, severity: first.severity, results: ruleItems)
+            }
+            result.append((category: cat, rules: rules))
+        }
+        return result
+    }
+
+    // Visible summary (recalculated when filters are active)
+    private var visibleSummary: LintSummary {
+        if hiddenSeverities.isEmpty && selectedItem == nil { return lintSummary }
+        return LintSummary.from(results: visibleResults)
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Header row
+                // Title bar
                 HStack(spacing: 12) {
                     Text("Config Health")
                         .font(Typography.panelTitle)
 
+                    if selectedItem != nil {
+                        HStack(spacing: 4) {
+                            Image(systemName: "line.3.horizontal.decrease")
+                                .font(.system(size: 9))
+                            Text("Filtered")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.accentColor.opacity(0.12))
+                        .clipShape(Capsule())
+                    }
+
                     Spacer()
 
-                    // Group mode picker
-                    Picker("", selection: $groupMode) {
-                        ForEach(GroupMode.allCases, id: \.self) { mode in
+                    Picker("", selection: $viewMode) {
+                        ForEach(ViewMode.allCases, id: \.self) { mode in
                             Text(mode.rawValue).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 160)
+                    .frame(width: 240)
 
                     if isSecretScanLoading {
                         HStack(spacing: 5) {
@@ -333,40 +668,35 @@ private struct HealthOverviewView: View {
                 }
                 .padding(.horizontal, 24)
 
-                // Summary cards
+                // Health strip: gauge + stat cards
                 HStack(spacing: 12) {
-                    HealthScoreCard(summary: lintSummary)
+                    HealthGaugeCard(summary: visibleSummary)
+                        .frame(width: 160)
 
-                    HealthSeverityStatCard(
-                        title: "Errors",
-                        count: lintSummary.errorCount,
-                        color: .red,
-                        isHidden: hiddenSeverities.contains(.error)
-                    ) {
-                        toggleSeverity(.error)
-                    }
+                    HealthStatCard(
+                        label: "Errors",
+                        count: visibleSummary.errorCount,
+                        color: Color(red: 0.886, green: 0.294, blue: 0.290),
+                        descriptor: errorDescriptor
+                    )
 
-                    HealthSeverityStatCard(
-                        title: "Warnings",
-                        count: lintSummary.warningCount,
-                        color: .orange,
-                        isHidden: hiddenSeverities.contains(.warning)
-                    ) {
-                        toggleSeverity(.warning)
-                    }
+                    HealthStatCard(
+                        label: "Warnings",
+                        count: visibleSummary.warningCount,
+                        color: Color(red: 0.937, green: 0.624, blue: 0.153),
+                        descriptor: warningDescriptor
+                    )
 
-                    HealthSeverityStatCard(
-                        title: "Info",
-                        count: lintSummary.infoCount,
-                        color: .blue,
-                        isHidden: hiddenSeverities.contains(.info)
-                    ) {
-                        toggleSeverity(.info)
-                    }
+                    HealthStatCard(
+                        label: "Info",
+                        count: visibleSummary.infoCount,
+                        color: Color(red: 0.216, green: 0.541, blue: 0.867),
+                        descriptor: infoDescriptor
+                    )
                 }
                 .padding(.horizontal, 24)
 
-                // Results list
+                // Issue content
                 VStack(alignment: .leading, spacing: 8) {
                     if visibleResults.isEmpty {
                         Text("All severities are hidden")
@@ -374,10 +704,15 @@ private struct HealthOverviewView: View {
                             .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 40)
-                    } else if groupMode == .byRule {
-                        byRuleContent
                     } else {
-                        byFileContent
+                        switch viewMode {
+                        case .byCategory:
+                            byCategoryContent
+                        case .byRule:
+                            byRuleContent
+                        case .byFile:
+                            byFileContent
+                        }
                     }
                 }
                 .padding(.horizontal, 24)
@@ -385,6 +720,45 @@ private struct HealthOverviewView: View {
             .padding(.vertical, 24)
         }
     }
+
+    // Descriptors for stat cards
+    private var errorDescriptor: String {
+        let cats = Set(visibleResults.filter { $0.severity == .error }.map { categoryFor($0.checkId).label })
+        return cats.sorted().joined(separator: ", ")
+    }
+
+    private var warningDescriptor: String {
+        let cats = Set(visibleResults.filter { $0.severity == .warning }.map { categoryFor($0.checkId).label })
+        return cats.sorted().joined(separator: ", ")
+    }
+
+    private var infoDescriptor: String {
+        let cats = Set(visibleResults.filter { $0.severity == .info }.map { categoryFor($0.checkId).label })
+        return cats.sorted().joined(separator: ", ")
+    }
+
+    // MARK: - By Category View
+
+    @ViewBuilder
+    private var byCategoryContent: some View {
+        ForEach(groupedByCategory, id: \.category.id) { group in
+            CategorySection(
+                category: group.category,
+                rules: group.rules,
+                isCollapsed: collapsedCategories.contains(group.category.id),
+                onToggle: {
+                    if collapsedCategories.contains(group.category.id) {
+                        collapsedCategories.remove(group.category.id)
+                    } else {
+                        collapsedCategories.insert(group.category.id)
+                    }
+                },
+                onSelectResult: { selectedResultId = $0.id }
+            )
+        }
+    }
+
+    // MARK: - By Rule View (preserved from original)
 
     @ViewBuilder
     private var byRuleContent: some View {
@@ -394,16 +768,17 @@ private struct HealthOverviewView: View {
 
         VStack(spacing: 2) {
             ForEach(groupedByRule, id: \.checkId) { group in
-                HealthRuleGroupRow(
+                RuleGroupRow(
                     checkId: group.checkId,
                     severity: group.severity,
-                    message: group.message,
                     results: group.results,
                     onSelectResult: { selectedResultId = $0.id }
                 )
             }
         }
     }
+
+    // MARK: - By File View (preserved from original)
 
     @ViewBuilder
     private var byFileContent: some View {
@@ -413,134 +788,177 @@ private struct HealthOverviewView: View {
 
         VStack(spacing: 2) {
             ForEach(visibleResults) { result in
-                HealthOverviewResultRow(result: result) {
+                FileResultRow(result: result) {
                     selectedResultId = result.id
                 }
             }
         }
     }
-
-    private func toggleSeverity(_ severity: LintSeverity) {
-        if hiddenSeverities.contains(severity) {
-            hiddenSeverities.remove(severity)
-        } else {
-            hiddenSeverities.insert(severity)
-        }
-    }
 }
 
-// MARK: - Health Score Card
+// MARK: - Health Gauge Card
 
-private struct HealthScoreCard: View {
+private struct HealthGaugeCard: View {
     let summary: LintSummary
 
     private var percentage: Int { Int(summary.healthScore * 100) }
 
     private var label: String {
-        if summary.healthScore >= 0.95 { return "Excellent" }
-        if summary.healthScore >= 0.80 { return "Good" }
-        if summary.healthScore >= 0.50 { return "Fair" }
+        if summary.healthScore >= 0.90 { return "Excellent" }
+        if summary.healthScore >= 0.70 { return "Good" }
+        if summary.healthScore >= 0.40 { return "Fair" }
         return "Poor"
     }
 
+    private var gaugeColor: Color {
+        if summary.healthScore >= 0.70 { return Color(red: 0.388, green: 0.600, blue: 0.133) }
+        if summary.healthScore >= 0.40 { return Color(red: 0.937, green: 0.624, blue: 0.153) }
+        return Color(red: 0.886, green: 0.294, blue: 0.290)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Health Score")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(label)
-                    .font(Typography.panelTitle)
-                    .foregroundStyle(healthScoreColor(summary.healthScore))
-                Text("\(percentage)%")
-                    .font(.system(size: 13, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            ZStack {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.15), lineWidth: 6)
+                Circle()
+                    .trim(from: 0, to: summary.healthScore)
+                    .stroke(gaugeColor, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+
+                VStack(spacing: 1) {
+                    Text("\(percentage)%")
+                        .font(.system(size: 18, weight: .medium, design: .monospaced))
+                        .foregroundStyle(gaugeColor)
+                    Text(label)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
             }
-            let totalIssues = summary.errorCount + summary.warningCount + summary.infoCount
-            if totalIssues > 0 {
-                Text("\(totalIssues) issues found")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            } else {
-                Text("All checks passed")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            }
+            .frame(width: 80, height: 80)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: Radius.lg)
                 .strokeBorder(.quaternary, lineWidth: 1)
         )
     }
 }
 
-// MARK: - Severity Stat Card (clickable filter)
+// MARK: - Health Stat Card
 
-private struct HealthSeverityStatCard: View {
-    let title: String
+private struct HealthStatCard: View {
+    let label: String
     let count: Int
     let color: Color
-    let isHidden: Bool
-    let onToggle: () -> Void
+    var descriptor: String = ""
 
     var body: some View {
-        Button(action: onToggle) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(title)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if isHidden {
-                        Image(systemName: "eye.slash")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Circle()
-                        .fill(color)
-                        .frame(width: 8, height: 8)
-                    Text("\(count)")
-                        .font(Typography.displayLarge)
-                        .foregroundStyle(count > 0 ? color : .primary)
-                }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            Text("\(count)")
+                .font(Typography.displayLarge)
+                .foregroundStyle(count > 0 ? color : .primary)
+
+            if !descriptor.isEmpty {
+                Text(descriptor)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(.quaternary, lineWidth: 1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isHidden ? color.opacity(0.3) : .clear, lineWidth: 1.5)
-            )
-            .opacity(isHidden ? 0.4 : 1.0)
         }
-        .buttonStyle(.plain)
-        .help(isHidden ? "Show \(title.lowercased())" : "Hide \(title.lowercased())")
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.lg)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
     }
 }
 
-// MARK: - By-Rule Group Row
+// MARK: - Category Section
 
-private struct HealthRuleGroupRow: View {
+private struct CategorySection: View {
+    let category: CategoryDef
+    let rules: [(checkId: LintCheckId, severity: LintSeverity, results: [LintResult])]
+    let isCollapsed: Bool
+    let onToggle: () -> Void
+    let onSelectResult: (LintResult) -> Void
+
+    private var totalResults: Int {
+        rules.reduce(0) { $0 + $1.results.count }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Category header
+            Button(action: onToggle) {
+                HStack(spacing: 10) {
+                    // Icon square
+                    Text(category.icon)
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .frame(width: 20, height: 20)
+                        .background(category.color)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+
+                    Text(category.label)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+
+                    Text("\(rules.count) \(rules.count == 1 ? "rule" : "rules"), \(totalResults) \(totalResults == 1 ? "item" : "items")")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+
+                    Spacer()
+
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Issue rows
+            if !isCollapsed {
+                VStack(spacing: 2) {
+                    ForEach(rules, id: \.checkId) { rule in
+                        CategoryIssueRow(
+                            checkId: rule.checkId,
+                            severity: rule.severity,
+                            results: rule.results,
+                            onSelectResult: onSelectResult
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Category Issue Row
+
+private struct CategoryIssueRow: View {
     let checkId: LintCheckId
     let severity: LintSeverity
-    let message: String
     let results: [LintResult]
     let onSelectResult: (LintResult) -> Void
     @State private var isExpanded = false
 
-    private var affectedNames: [String] {
-        results.map { $0.displayPath ?? ($0.filePath as NSString).lastPathComponent }
+    private var scopeLabel: String {
+        let raw = checkId.rawValue
+        let unit = (raw.hasPrefix("SES") || raw.hasPrefix("SEC")) ? "session" : "file"
+        return "\(results.count) \(results.count == 1 ? unit : unit + "s")"
     }
 
     var body: some View {
@@ -549,7 +967,128 @@ private struct HealthRuleGroupRow: View {
                 if results.count == 1 {
                     onSelectResult(results[0])
                 } else {
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(.easeInOut(duration: Motion.quick)) {
+                        isExpanded.toggle()
+                    }
+                }
+            } label: {
+                HStack(alignment: .top, spacing: 0) {
+                    // Left column: name + hint
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(colorForSeverity(severity))
+                                .frame(width: 8, height: 8)
+                                .padding(.top, 2)
+
+                            Text(displayNameFor(checkId))
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.primary)
+                        }
+
+                        if let hint = hintFor(checkId) {
+                            Text(hint)
+                                .font(Typography.body)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .padding(.leading, 16)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    // Right column: scope + action
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(scopeLabel)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+
+                        if results.count > 1 {
+                            HStack(spacing: 3) {
+                                Text(isExpanded ? "Collapse" : "View all")
+                                    .font(.system(size: 11))
+                                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 8))
+                            }
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(AnyShapeStyle(.quaternary))
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        } else {
+                            HStack(spacing: 3) {
+                                Text("View")
+                                    .font(.system(size: 11))
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 8))
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.leading, 12)
+                }
+                .padding(12)
+                .background(Color.cardBackground)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Radius.md)
+                        .strokeBorder(.quaternary, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Expanded sub-list of affected items
+            if isExpanded && results.count > 1 {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(results) { result in
+                        Button { onSelectResult(result) } label: {
+                            HStack(spacing: 8) {
+                                Text(result.displayPath ?? (result.filePath as NSString).lastPathComponent)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                SessionBadgeView(result: result)
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 8))
+                                    .foregroundStyle(.quaternary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.leading, 16)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 4)
+                .background(Color.cardBackground.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
+                .padding(.top, 1)
+            }
+        }
+    }
+}
+
+// MARK: - By-Rule Group Row (preserved)
+
+private struct RuleGroupRow: View {
+    let checkId: LintCheckId
+    let severity: LintSeverity
+    let results: [LintResult]
+    let onSelectResult: (LintResult) -> Void
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                if results.count == 1 {
+                    onSelectResult(results[0])
+                } else {
+                    withAnimation(.easeInOut(duration: Motion.quick)) {
                         isExpanded.toggle()
                     }
                 }
@@ -559,15 +1098,7 @@ private struct HealthRuleGroupRow: View {
                         .font(.system(size: 10))
                         .foregroundStyle(colorForSeverity(severity))
 
-                    Text(checkId.rawValue)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(AnyShapeStyle(.quaternary))
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-
-                    Text(ruleDescription(for: checkId))
+                    Text(displayNameFor(checkId))
                         .font(Typography.body)
                         .lineLimit(1)
                         .foregroundStyle(.primary)
@@ -595,9 +1126,9 @@ private struct HealthRuleGroupRow: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color.cardBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.md))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: Radius.md)
                         .strokeBorder(.quaternary, lineWidth: 1)
                 )
                 .contentShape(Rectangle())
@@ -632,16 +1163,16 @@ private struct HealthRuleGroupRow: View {
                 }
                 .padding(.vertical, 4)
                 .background(Color.cardBackground.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
                 .padding(.top, 1)
             }
         }
     }
 }
 
-// MARK: - By-File Result Row
+// MARK: - By-File Result Row (preserved)
 
-private struct HealthOverviewResultRow: View {
+private struct FileResultRow: View {
     let result: LintResult
     let onSelect: () -> Void
 
@@ -656,15 +1187,7 @@ private struct HealthOverviewResultRow: View {
                     .font(.system(size: 10))
                     .foregroundStyle(colorForSeverity(result.severity))
 
-                Text(result.checkId.rawValue)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(AnyShapeStyle(.quaternary))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-
-                Text(displayMessage(for: result))
+                Text(displayNameFor(result.checkId))
                     .font(Typography.body)
                     .lineLimit(1)
                     .foregroundStyle(.primary)
@@ -691,9 +1214,9 @@ private struct HealthOverviewResultRow: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(Color.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.md))
             .overlay(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: Radius.md)
                     .strokeBorder(.quaternary, lineWidth: 1)
             )
             .contentShape(Rectangle())
@@ -741,17 +1264,13 @@ private struct HealthResultDetailView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 24)
 
-                // Severity + Check ID header
+                // Severity + display name header
                 HStack(spacing: 10) {
                     SeverityBadge(severity: result.severity)
 
-                    Text(result.checkId.rawValue)
-                        .font(.system(size: 13, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(AnyShapeStyle(.quaternary))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    Text(displayNameFor(result.checkId))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
 
                     Spacer()
                 }
@@ -801,21 +1320,50 @@ private struct HealthResultDetailView: View {
                             .padding(.top, 4)
                         }
                     }
-                    .padding(16)
+                    .padding(Spacing.lg)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: Radius.lg)
                             .strokeBorder(.quaternary, lineWidth: 1)
                     )
                 }
                 .padding(.horizontal, 24)
 
+                // Remediation hint card
+                if let hint = hintFor(result.checkId) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("REMEDIATION")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.tertiary)
+
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "lightbulb")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.yellow)
+
+                            Text(hint)
+                                .font(Typography.body)
+                                .foregroundStyle(.primary)
+                                .textSelection(.enabled)
+                        }
+                        .padding(Spacing.lg)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: Radius.lg)
+                                .strokeBorder(.quaternary, lineWidth: 1)
+                        )
+                    }
+                    .padding(.horizontal, 24)
+                }
+
                 // Message card
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("MESSAGE")
+                        Text("DETAILS")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.tertiary)
 
@@ -857,9 +1405,9 @@ private struct HealthResultDetailView: View {
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.red.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.md))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 6)
+                                RoundedRectangle(cornerRadius: Radius.md)
                                     .strokeBorder(Color.red.opacity(0.2), lineWidth: 1)
                             )
                         }
@@ -885,9 +1433,9 @@ private struct HealthResultDetailView: View {
                                 }
                             }
                             .background(AnyShapeStyle(.quaternary).opacity(0.5))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.md))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 6)
+                                RoundedRectangle(cornerRadius: Radius.md)
                                     .strokeBorder(.quaternary, lineWidth: 1)
                             )
                         }
@@ -907,45 +1455,45 @@ private struct HealthResultDetailView: View {
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
                                     .background(badge.color.opacity(0.1))
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .clipShape(RoundedRectangle(cornerRadius: Radius.sm))
                                 }
                             }
                         }
                     }
-                    .padding(16)
+                    .padding(Spacing.lg)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.cardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: Radius.lg)
                             .strokeBorder(.quaternary, lineWidth: 1)
                     )
                 }
                 .padding(.horizontal, 24)
 
-                // Fix suggestion card
-                if let fix = result.fix {
+                // Legacy fix suggestion (if present and different from hint)
+                if let fix = result.fix, fix != hintFor(result.checkId) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("SUGGESTED FIX")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(.tertiary)
 
                         HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "lightbulb")
+                            Image(systemName: "wrench")
                                 .font(.system(size: 13))
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(.secondary)
 
                             Text(fix)
                                 .font(Typography.body)
                                 .foregroundStyle(.primary)
                                 .textSelection(.enabled)
                         }
-                        .padding(16)
+                        .padding(Spacing.lg)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.cardBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: Radius.lg)
                                 .strokeBorder(.quaternary, lineWidth: 1)
                         )
                     }
@@ -980,9 +1528,9 @@ private struct SeverityBadge: View {
 
 private func colorForSeverity(_ severity: LintSeverity) -> Color {
     switch severity {
-    case .error: return .red
-    case .warning: return .orange
-    case .info: return .blue
+    case .error: return Color(red: 0.886, green: 0.294, blue: 0.290)
+    case .warning: return Color(red: 0.937, green: 0.624, blue: 0.153)
+    case .info: return Color(red: 0.216, green: 0.541, blue: 0.867)
     }
 }
 
@@ -992,12 +1540,6 @@ private func severityIcon(_ severity: LintSeverity) -> String {
     case .warning: return "exclamationmark.diamond.fill"
     case .info: return "info.circle.fill"
     }
-}
-
-private func healthScoreColor(_ score: Double) -> Color {
-    if score >= 0.8 { return .green }
-    if score >= 0.5 { return .orange }
-    return .red
 }
 
 private func displayMessage(for result: LintResult) -> String {
@@ -1011,15 +1553,14 @@ private func displayMessage(for result: LintResult) -> String {
 
 private func sessionBadges(for result: LintResult) -> [(text: String, color: Color)] {
     guard result.checkId.rawValue.hasPrefix("SES") else { return [] }
-    // Parse stats tag: [$X.XX | NK tokens | N msgs]
     guard let tagRange = result.message.range(of: "\\[\\$[^\\]]+\\]$", options: .regularExpression) else { return [] }
-    let tag = String(result.message[tagRange].dropFirst().dropLast()) // remove [ ]
+    let tag = String(result.message[tagRange].dropFirst().dropLast())
     let parts = tag.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     guard parts.count == 3 else { return [] }
 
     var badges: [(String, Color)] = []
-    badges.append((parts[1], .cyan))          // NK tokens
-    badges.append((parts[2], .purple))        // N msgs
+    badges.append((parts[1], .cyan))
+    badges.append((parts[2], .purple))
     return badges
 }
 
@@ -1038,45 +1579,5 @@ private func SessionBadgeView(result: LintResult) -> some View {
                     .clipShape(RoundedRectangle(cornerRadius: 3))
             }
         }
-    }
-}
-
-private func ruleDescription(for checkId: LintCheckId) -> String {
-    switch checkId {
-    case .CMD001: return "CLAUDE.md exceeds 200 lines"
-    case .CMD002: return "Large CLAUDE.md without rules directory"
-    case .CMD003: return "File-type patterns inline"
-    case .CMD006: return "Unclosed code block"
-    case .CMD_IMPORT: return "Deep @import chain"
-    case .CMD_DEPRECATE: return ".claude/commands/ deprecated"
-    case .RUL001: return "Malformed YAML frontmatter"
-    case .RUL002: return "Invalid glob syntax"
-    case .RUL003: return "Glob matches no files"
-    case .RUL005: return "Rule exceeds 100 lines"
-    case .SKL001: return "Wrong SKILL.md casing"
-    case .SKL002: return "Missing skill name"
-    case .SKL003: return "Missing skill description"
-    case .SKL004: return "Name/directory mismatch"
-    case .SKL005: return "Name not kebab-case"
-    case .SKL006: return "Name exceeds 64 chars"
-    case .SKL007: return "Description exceeds 1024 chars"
-    case .SKL008: return "XML brackets in frontmatter"
-    case .SKL009: return "Reserved word in name"
-    case .SKL012: return "Skill body exceeds 500 lines"
-    case .SKL_AGG: return "Aggregate descriptions over budget"
-    case .XCT001: return "Config token estimate"
-    case .XCT002: return "Config tokens exceed 5000"
-    case .XCT003: return "No .claude/ directory"
-    case .SES001: return "High cost session"
-    case .SES002: return "Very long conversation"
-    case .SES003: return "Runaway token consumption"
-    case .SES004: return "Stale session with history"
-    case .SEC001: return "Private key detected"
-    case .SEC002: return "AWS access key detected"
-    case .SEC003: return "Authorization header detected"
-    case .SEC004: return "API key/token detected"
-    case .SEC005: return "Password/secret literal detected"
-    case .SEC006: return "Connection string with credentials"
-    case .SEC007: return "Platform token detected"
     }
 }

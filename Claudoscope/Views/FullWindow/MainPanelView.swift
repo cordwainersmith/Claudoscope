@@ -18,6 +18,7 @@ struct MainPanelView: View {
     // Config Health
     @Binding var selectedLintResultId: String?
     @Binding var hiddenLintSeverities: Set<LintSeverity>
+    let selectedHealthItem: String?
     let selectedProjectId: String?
 
     // Settings
@@ -85,6 +86,7 @@ struct MainPanelView: View {
                     isSecretScanLoading: store.secretScanLoading,
                     selectedResultId: $selectedLintResultId,
                     hiddenSeverities: $hiddenLintSeverities,
+                    selectedItem: selectedHealthItem,
                     onRescan: {
                         Task {
                             await store.runConfigLint(projectId: selectedProjectId)

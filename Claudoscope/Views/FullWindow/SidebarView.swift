@@ -14,7 +14,8 @@ struct SidebarView: View {
     @Binding var selectedMemoryProjectId: String?
     @Binding var selectedSettingsSection: String?
     @Binding var selectedLintResultId: String?
-    let hiddenLintSeverities: Set<LintSeverity>
+    @Binding var hiddenLintSeverities: Set<LintSeverity>
+    @Binding var selectedHealthItem: String?
     @Binding var selectedTimelineDay: String?
     @State private var filterText = ""
 
@@ -110,8 +111,8 @@ struct SidebarView: View {
                         lintResults: store.lintResults,
                         lintSummary: store.lintSummary,
                         isLoading: store.lintLoading,
-                        selectedResultId: $selectedLintResultId,
-                        hiddenSeverities: hiddenLintSeverities
+                        selectedItem: $selectedHealthItem,
+                        hiddenSeverities: $hiddenLintSeverities
                     )
                 case .settings:
                     SettingsSidebarContent(

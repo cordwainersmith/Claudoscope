@@ -21,6 +21,7 @@ struct FullWindowView: View {
     // Config Health state
     @State private var selectedLintResultId: String?
     @State private var hiddenLintSeverities: Set<LintSeverity> = []
+    @State private var selectedHealthItem: String?
 
     // Pending navigation (deferred until after rail change)
     @State private var pendingNavigation: (projectId: String, sessionId: String)?
@@ -52,7 +53,8 @@ struct FullWindowView: View {
                 selectedMemoryProjectId: $selectedMemoryProjectId,
                 selectedSettingsSection: $selectedSettingsSection,
                 selectedLintResultId: $selectedLintResultId,
-                hiddenLintSeverities: hiddenLintSeverities,
+                hiddenLintSeverities: $hiddenLintSeverities,
+                selectedHealthItem: $selectedHealthItem,
                 selectedTimelineDay: $selectedTimelineDay
             )
 
@@ -69,6 +71,7 @@ struct FullWindowView: View {
                 selectedMemoryId: $selectedMemoryId,
                 selectedLintResultId: $selectedLintResultId,
                 hiddenLintSeverities: $hiddenLintSeverities,
+                selectedHealthItem: selectedHealthItem,
                 selectedProjectId: selectedProjectId,
                 selectedSettingsSection: $selectedSettingsSection,
                 onNavigateToSession: { projectId, sessionId in
