@@ -1,202 +1,69 @@
 import SwiftUI
 
-// MARK: - Settings Sidebar Content
+// MARK: - Settings Sections
 
-struct SettingsSidebarContent: View {
-    let filterText: String
-    @Binding var selectedSection: String?
+extension SettingsMainPanelView {
 
-    private static let sections: [(id: String, icon: String, label: String)] = [
-        ("appearance", "paintbrush", "Appearance"),
-        ("model", "cpu", "Model"),
-        ("permissions", "shield", "Permissions"),
-        ("security", "lock.shield", "Security"),
-        ("attribution", "signature", "Attribution"),
-        ("plugins", "puzzlepiece", "Plugins"),
-        ("account", "person.crop.circle", "Account"),
-        ("general", "gear", "General"),
-        ("environment", "terminal", "Environment"),
-        ("pricing", "dollarsign.circle", "Pricing"),
-        ("updates", "arrow.triangle.2.circlepath", "Updates"),
-    ]
-
-    private var filteredSections: [(id: String, icon: String, label: String)] {
-        if filterText.isEmpty { return Self.sections }
-        return Self.sections.filter { $0.label.localizedCaseInsensitiveContains(filterText) }
-    }
-
-    var body: some View {
-        LazyVStack(alignment: .leading, spacing: 2) {
-            ForEach(filteredSections, id: \.id) { section in
-                Button {
-                    selectedSection = section.id
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: section.icon)
-                            .font(Typography.body)
-                            .frame(width: 16)
-                            .foregroundStyle(selectedSection == section.id ? .white : .secondary)
-
-                        Text(section.label)
-                            .font(Typography.body)
-                            .foregroundStyle(selectedSection == section.id ? .white : .primary)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(selectedSection == section.id ? Color.accentColor : .clear)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .padding(.horizontal, 4)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - Settings Main Panel View
-
-struct SettingsMainPanelView: View {
-    @Environment(SessionStore.self) private var store
-    @Binding var selectedSection: String?
-    @State private var settings: [String: Any]?
-    @State private var loadError: String?
-    @State private var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "environment", "pricing", "updates"
-    ]
-
-    private var settingsPath: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/.claude/settings.json"
-    }
-
-    private func shouldShow(_ sectionId: String) -> Bool {
-        guard let sel = selectedSection else { return true }
-        return sel == sectionId
-    }
-
-    var body: some View {
-        Group {
-            if let error = loadError {
-                EmptyStateView(
-                    icon: "exclamationmark.triangle",
-                    title: "Could not load settings",
-                    message: error
-                )
-            } else if let settings = settings {
-                settingsContent(settings)
-            } else {
-                // No settings file, but still show always-visible sections
-                alwaysVisibleContent()
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
-            loadSettings()
-        }
-    }
+    // MARK: - Section Builder
 
     @ViewBuilder
-    private func alwaysVisibleContent() -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Text("No settings.json found. Showing app preferences only.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .background(.bar)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if shouldShow("appearance") { appearanceSection() }
-                    if shouldShow("security") { securitySection() }
-                    if shouldShow("account") { accountSection() }
-                    if shouldShow("general") { generalSection([:]) }
-                    if shouldShow("pricing") { pricingSection() }
-                    if shouldShow("updates") { updatesSection() }
+    func settingsSection<Content: View>(
+        id: String,
+        icon: String,
+        title: String,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        let isExpanded = Binding<Bool>(
+            get: { expandedSections.contains(id) },
+            set: { newValue in
+                if newValue {
+                    expandedSections.insert(id)
+                } else {
+                    expandedSections.remove(id)
                 }
-                .frame(maxWidth: 700)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .padding(.horizontal, 24)
+            }
+        )
+
+        DisclosureGroup(isExpanded: isExpanded) {
+            content()
+                .padding(.top, 4)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(Typography.body)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16)
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
             }
         }
+        .padding(12)
+        .background(.bar)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
     }
 
-    private func loadSettings() {
-        let url = URL(fileURLWithPath: settingsPath)
-        guard FileManager.default.fileExists(atPath: settingsPath) else {
-            settings = nil
-            return
-        }
-        do {
-            let data = try Data(contentsOf: url)
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                loadError = "Settings file is not a valid JSON object."
-                return
-            }
-            settings = json
-        } catch {
-            loadError = error.localizedDescription
-        }
-    }
+    // MARK: - Empty Hint
 
     @ViewBuilder
-    private func settingsContent(_ dict: [String: Any]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Banner
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Text("Settings from ~/.claude/settings.json")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 10)
-            .background(.bar)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if shouldShow("appearance") { appearanceSection() }
-                    if shouldShow("model") { modelSection(dict) }
-                    if shouldShow("permissions") { permissionsSection(dict) }
-                    if shouldShow("security") { securitySection() }
-                    if shouldShow("attribution") { attributionSection() }
-                    if shouldShow("plugins") { pluginsSection() }
-                    if shouldShow("account") { accountSection() }
-                    if shouldShow("general") { generalSection(dict) }
-                    if shouldShow("environment") { environmentSection(dict) }
-                    if shouldShow("pricing") { pricingSection() }
-                    if shouldShow("updates") { updatesSection() }
-                }
-                .frame(maxWidth: 700)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .padding(.horizontal, 24)
-            }
+    func settingsEmptyHint(_ message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "minus.circle")
+                .font(.system(size: 12))
+            Text(message)
+                .font(.system(size: 12))
         }
+        .foregroundStyle(.tertiary)
+        .padding(12)
     }
 
     // MARK: - Appearance Section
 
     @ViewBuilder
-    private func appearanceSection() -> some View {
+    func appearanceSection() -> some View {
         settingsSection(id: "appearance", icon: "paintbrush", title: "Appearance") {
             HStack(spacing: 8) {
                 ForEach(AppAppearance.allCases, id: \.rawValue) { option in
@@ -228,22 +95,10 @@ struct SettingsMainPanelView: View {
         }
     }
 
-    private func previewFill(for appearance: AppAppearance) -> some ShapeStyle {
-        switch appearance {
-        case .light: return AnyShapeStyle(Color.white)
-        case .dark: return AnyShapeStyle(Color(white: 0.15))
-        case .system: return AnyShapeStyle(LinearGradient(
-            colors: [Color.white, Color(white: 0.15)],
-            startPoint: .leading,
-            endPoint: .trailing
-        ))
-        }
-    }
-
     // MARK: - Model Section
 
     @ViewBuilder
-    private func modelSection(_ dict: [String: Any]) -> some View {
+    func modelSection(_ dict: [String: Any]) -> some View {
         let model = dict["model"] as? String
         let smallModel = dict["smallFastModel"] as? String
         settingsSection(id: "model", icon: "cpu", title: "Model") {
@@ -266,7 +121,7 @@ struct SettingsMainPanelView: View {
     // MARK: - Permissions Section
 
     @ViewBuilder
-    private func permissionsSection(_ dict: [String: Any]) -> some View {
+    func permissionsSection(_ dict: [String: Any]) -> some View {
         let permissions = dict["permissions"] as? [String: Any]
         let allowList = permissions?["allow"] as? [String] ?? []
         let denyList = permissions?["deny"] as? [String] ?? []
@@ -325,208 +180,10 @@ struct SettingsMainPanelView: View {
         }
     }
 
-    // MARK: - General Section
-
-    private func generalEntries(from dict: [String: Any]) -> [(key: String, value: String)] {
-        let generalKeys: Set<String> = [
-            "cleanupPeriodDays", "autoMemoryEnabled"
-        ]
-        let knownTopLevel: Set<String> = [
-            "model", "smallFastModel", "permissions",
-            "env", "hooks",
-            "sandbox", "skipDangerousModePermissionPrompt",
-            "attribution", "includeCoAuthoredBy",
-            "autoUpdatesChannel",
-            "enabledPlugins", "extraKnownMarketplaces",
-            "skippedPlugins", "skippedMarketplaces", "strictKnownMarketplaces"
-        ]
-        var entries: [(key: String, value: String)] = []
-        for key in dict.keys.sorted() {
-            if generalKeys.contains(key) || !knownTopLevel.contains(key) {
-                let val = dict[key]
-                if val is [String: Any] || val is [Any] { continue }
-                entries.append((key: key, value: stringValue(val)))
-            }
-        }
-        return entries
-    }
-
-    @ViewBuilder
-    private func generalSection(_ dict: [String: Any]) -> some View {
-        let entries = generalEntries(from: dict)
-        let currentCleanup = dict["cleanupPeriodDays"] as? Int
-
-        settingsSection(id: "general", icon: "gear", title: "General") {
-            VStack(alignment: .leading, spacing: 0) {
-                // Cleanup period highlight
-                CleanupPeriodRow(
-                    currentDays: currentCleanup,
-                    settingsPath: settingsPath,
-                    onUpdated: { loadSettings() }
-                )
-
-                if !entries.isEmpty {
-                    // Filter out cleanupPeriodDays since we show it above
-                    let otherEntries = entries.filter { $0.key != "cleanupPeriodDays" }
-                    if !otherEntries.isEmpty {
-                        Divider().padding(.horizontal, 12)
-                        ForEach(Array(otherEntries.enumerated()), id: \.offset) { index, entry in
-                            SettingsKeyValueRow(key: entry.key, value: entry.value)
-                            if index < otherEntries.count - 1 {
-                                Divider().padding(.horizontal, 12)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Environment Section
-
-    @ViewBuilder
-    private func environmentSection(_ dict: [String: Any]) -> some View {
-        let env = dict["env"] as? [String: Any] ?? [:]
-        settingsSection(id: "environment", icon: "terminal", title: "Environment") {
-            if !env.isEmpty {
-                VStack(spacing: 0) {
-                    let sortedKeys = env.keys.sorted()
-                    ForEach(Array(sortedKeys.enumerated()), id: \.offset) { index, key in
-                        SettingsKeyValueRow(
-                            key: key,
-                            value: stringValue(env[key]),
-                            mono: true
-                        )
-                        if index < sortedKeys.count - 1 {
-                            Divider().padding(.horizontal, 12)
-                        }
-                    }
-                }
-            } else {
-                settingsEmptyHint("No environment variables configured. Add an \"env\" key to settings.json to inject variables into Claude Code's shell.")
-            }
-        }
-    }
-
-    // MARK: - Pricing Section
-
-    @ViewBuilder
-    private func pricingSection() -> some View {
-        settingsSection(id: "pricing", icon: "dollarsign.circle", title: "Pricing") {
-            VStack(alignment: .leading, spacing: 12) {
-                // Provider toggle
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Provider")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-
-                    HStack(spacing: 0) {
-                        ForEach(PricingProvider.allCases, id: \.self) { provider in
-                            Button {
-                                store.pricingProvider = provider
-                                store.rescanAllSessions()
-                            } label: {
-                                Text(provider == .anthropic ? "Anthropic" : "Vertex AI")
-                                    .font(Typography.bodyMedium)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 6)
-                                    .background(store.pricingProvider == provider ? Color.accentColor : Color.clear)
-                                    .foregroundStyle(store.pricingProvider == provider ? .white : .secondary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary, lineWidth: 1))
-                    .frame(width: 200)
-                    .padding(.horizontal, 12)
-                }
-
-                // Rates table
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Rates (per 1M tokens)")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-
-                    VStack(spacing: 0) {
-                        // Header
-                        HStack {
-                            Text("Model")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Text("Input")
-                                .frame(width: 70, alignment: .trailing)
-                            Text("Output")
-                                .frame(width: 70, alignment: .trailing)
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(AnyShapeStyle(.quaternary))
-
-                        ForEach(pricingRows(), id: \.model) { row in
-                            Divider().padding(.horizontal, 12)
-                            HStack {
-                                Text(row.model)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                Text(row.input)
-                                    .frame(width: 70, alignment: .trailing)
-                                Text(row.output)
-                                    .frame(width: 70, alignment: .trailing)
-                            }
-                            .font(Typography.code)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
-                        }
-                    }
-                    .background(.bar)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary, lineWidth: 1))
-                    .padding(.horizontal, 12)
-                }
-            }
-            .padding(.vertical, 8)
-        }
-    }
-
-    private struct PricingRow {
-        let model: String
-        let input: String
-        let output: String
-    }
-
-    private func pricingRows() -> [PricingRow] {
-        let table = store.pricingTable
-        let models = ["opus4", "opus", "sonnet", "haiku", "haiku3"]
-        let labels = ["Opus 4", "Opus", "Sonnet", "Haiku", "Haiku 3"]
-        var rows: [PricingRow] = []
-        for (model, label) in zip(models, labels) {
-            if let p = table[model] {
-                rows.append(PricingRow(
-                    model: label,
-                    input: String(format: "$%.2f", p.input),
-                    output: String(format: "$%.2f", p.output)
-                ))
-            }
-        }
-        return rows
-    }
-
-    // MARK: - Updates Section
-
-    @ViewBuilder
-    private func updatesSection() -> some View {
-        settingsSection(id: "updates", icon: "arrow.triangle.2.circlepath", title: "Updates") {
-            UpdatesSectionContent()
-        }
-    }
-
     // MARK: - Security Section
 
     @ViewBuilder
-    private func securitySection() -> some View {
+    func securitySection() -> some View {
         let ext = store.extendedConfig
         let yolo = ext?.skipDangerousModePermissionPrompt ?? false
         let sandbox = ext?.sandbox
@@ -618,10 +275,199 @@ struct SettingsMainPanelView: View {
         }
     }
 
+    // MARK: - General Section
+
+    func generalEntries(from dict: [String: Any]) -> [(key: String, value: String)] {
+        let generalKeys: Set<String> = [
+            "cleanupPeriodDays", "autoMemoryEnabled"
+        ]
+        let knownTopLevel: Set<String> = [
+            "model", "smallFastModel", "permissions",
+            "env", "hooks",
+            "sandbox", "skipDangerousModePermissionPrompt",
+            "attribution", "includeCoAuthoredBy",
+            "autoUpdatesChannel",
+            "enabledPlugins", "extraKnownMarketplaces",
+            "skippedPlugins", "skippedMarketplaces", "strictKnownMarketplaces"
+        ]
+        var entries: [(key: String, value: String)] = []
+        for key in dict.keys.sorted() {
+            if generalKeys.contains(key) || !knownTopLevel.contains(key) {
+                let val = dict[key]
+                if val is [String: Any] || val is [Any] { continue }
+                entries.append((key: key, value: stringValue(val)))
+            }
+        }
+        return entries
+    }
+
+    @ViewBuilder
+    func generalSection(_ dict: [String: Any]) -> some View {
+        let entries = generalEntries(from: dict)
+        let currentCleanup = dict["cleanupPeriodDays"] as? Int
+
+        settingsSection(id: "general", icon: "gear", title: "General") {
+            VStack(alignment: .leading, spacing: 0) {
+                // Cleanup period highlight
+                CleanupPeriodRow(
+                    currentDays: currentCleanup,
+                    settingsPath: settingsPath,
+                    onUpdated: { loadSettings() }
+                )
+
+                if !entries.isEmpty {
+                    // Filter out cleanupPeriodDays since we show it above
+                    let otherEntries = entries.filter { $0.key != "cleanupPeriodDays" }
+                    if !otherEntries.isEmpty {
+                        Divider().padding(.horizontal, 12)
+                        ForEach(Array(otherEntries.enumerated()), id: \.offset) { index, entry in
+                            SettingsKeyValueRow(key: entry.key, value: entry.value)
+                            if index < otherEntries.count - 1 {
+                                Divider().padding(.horizontal, 12)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Environment Section
+
+    @ViewBuilder
+    func environmentSection(_ dict: [String: Any]) -> some View {
+        let env = dict["env"] as? [String: Any] ?? [:]
+        settingsSection(id: "environment", icon: "terminal", title: "Environment") {
+            if !env.isEmpty {
+                VStack(spacing: 0) {
+                    let sortedKeys = env.keys.sorted()
+                    ForEach(Array(sortedKeys.enumerated()), id: \.offset) { index, key in
+                        SettingsKeyValueRow(
+                            key: key,
+                            value: stringValue(env[key]),
+                            mono: true
+                        )
+                        if index < sortedKeys.count - 1 {
+                            Divider().padding(.horizontal, 12)
+                        }
+                    }
+                }
+            } else {
+                settingsEmptyHint("No environment variables configured. Add an \"env\" key to settings.json to inject variables into Claude Code's shell.")
+            }
+        }
+    }
+
+    // MARK: - Pricing Section
+
+    @ViewBuilder
+    func pricingSection() -> some View {
+        settingsSection(id: "pricing", icon: "dollarsign.circle", title: "Pricing") {
+            VStack(alignment: .leading, spacing: 12) {
+                // Provider toggle
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Provider")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+
+                    HStack(spacing: 0) {
+                        ForEach(PricingProvider.allCases, id: \.self) { provider in
+                            Button {
+                                store.pricingProvider = provider
+                                store.rescanAllSessions()
+                            } label: {
+                                Text(provider == .anthropic ? "Anthropic" : "Vertex AI")
+                                    .font(Typography.bodyMedium)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 6)
+                                    .background(store.pricingProvider == provider ? Color.accentColor : Color.clear)
+                                    .foregroundStyle(store.pricingProvider == provider ? .white : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary, lineWidth: 1))
+                    .frame(width: 200)
+                    .padding(.horizontal, 12)
+                }
+
+                // Rates table
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Rates (per 1M tokens)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+
+                    VStack(spacing: 0) {
+                        // Header
+                        HStack {
+                            Text("Model")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text("Input")
+                                .frame(width: 70, alignment: .trailing)
+                            Text("Output")
+                                .frame(width: 70, alignment: .trailing)
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(AnyShapeStyle(.quaternary))
+
+                        ForEach(pricingRows(), id: \.model) { row in
+                            Divider().padding(.horizontal, 12)
+                            HStack {
+                                Text(row.model)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                Text(row.input)
+                                    .frame(width: 70, alignment: .trailing)
+                                Text(row.output)
+                                    .frame(width: 70, alignment: .trailing)
+                            }
+                            .font(Typography.code)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                        }
+                    }
+                    .background(.bar)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary, lineWidth: 1))
+                    .padding(.horizontal, 12)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    struct PricingRow {
+        let model: String
+        let input: String
+        let output: String
+    }
+
+    func pricingRows() -> [PricingRow] {
+        let table = store.pricingTable
+        let models = ["opus4", "opus", "sonnet", "haiku", "haiku3"]
+        let labels = ["Opus 4", "Opus", "Sonnet", "Haiku", "Haiku 3"]
+        var rows: [PricingRow] = []
+        for (model, label) in zip(models, labels) {
+            if let p = table[model] {
+                rows.append(PricingRow(
+                    model: label,
+                    input: String(format: "$%.2f", p.input),
+                    output: String(format: "$%.2f", p.output)
+                ))
+            }
+        }
+        return rows
+    }
+
     // MARK: - Attribution Section
 
     @ViewBuilder
-    private func attributionSection() -> some View {
+    func attributionSection() -> some View {
         settingsSection(id: "attribution", icon: "signature", title: "Attribution") {
             if let attr = store.extendedConfig?.attribution {
                 VStack(alignment: .leading, spacing: 8) {
@@ -682,7 +528,7 @@ struct SettingsMainPanelView: View {
     // MARK: - Plugins Section
 
     @ViewBuilder
-    private func pluginsSection() -> some View {
+    func pluginsSection() -> some View {
         let ext = store.extendedConfig
         let plugins = ext?.plugins ?? []
         let marketplaces = ext?.marketplaces ?? []
@@ -764,7 +610,7 @@ struct SettingsMainPanelView: View {
         }
     }
 
-    private func marketplaceIcon(_ sourceType: String) -> String {
+    func marketplaceIcon(_ sourceType: String) -> String {
         switch sourceType {
         case "github": return "chevron.left.forwardslash.chevron.right"
         case "npm": return "shippingbox"
@@ -776,7 +622,7 @@ struct SettingsMainPanelView: View {
     // MARK: - Account Section
 
     @ViewBuilder
-    private func accountSection() -> some View {
+    func accountSection() -> some View {
         settingsSection(id: "account", icon: "person.crop.circle", title: "Account") {
             if let profile = store.extendedConfig?.profile {
                 VStack(spacing: 0) {
@@ -812,14 +658,14 @@ struct SettingsMainPanelView: View {
         }
     }
 
-    private struct AccountRow {
+    struct AccountRow {
         let key: String
         let value: String
         var mono: Bool = false
         var isBadge: Bool = false
     }
 
-    private func accountRows(_ profile: ClaudeProfile) -> [AccountRow] {
+    func accountRows(_ profile: ClaudeProfile) -> [AccountRow] {
         var rows: [AccountRow] = []
         if let email = profile.maskedEmail {
             rows.append(AccountRow(key: "Account", value: email))
@@ -848,81 +694,19 @@ struct SettingsMainPanelView: View {
         return rows
     }
 
-    // MARK: - Section Builder
+    // MARK: - Updates Section
 
     @ViewBuilder
-    private func settingsSection<Content: View>(
-        id: String,
-        icon: String,
-        title: String,
-        @ViewBuilder content: @escaping () -> Content
-    ) -> some View {
-        let isExpanded = Binding<Bool>(
-            get: { expandedSections.contains(id) },
-            set: { newValue in
-                if newValue {
-                    expandedSections.insert(id)
-                } else {
-                    expandedSections.remove(id)
-                }
-            }
-        )
-
-        DisclosureGroup(isExpanded: isExpanded) {
-            content()
-                .padding(.top, 4)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(Typography.body)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 16)
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-            }
+    func updatesSection() -> some View {
+        settingsSection(id: "updates", icon: "arrow.triangle.2.circlepath", title: "Updates") {
+            UpdatesSectionContent()
         }
-        .padding(12)
-        .background(.bar)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(.quaternary, lineWidth: 1)
-        )
-    }
-
-    // MARK: - Empty Hint
-
-    @ViewBuilder
-    private func settingsEmptyHint(_ message: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "minus.circle")
-                .font(.system(size: 12))
-            Text(message)
-                .font(.system(size: 12))
-        }
-        .foregroundStyle(.tertiary)
-        .padding(12)
-    }
-
-    // MARK: - Helpers
-
-    private func stringValue(_ value: Any?) -> String {
-        guard let value = value else { return "null" }
-        if let str = value as? String { return str }
-        if let num = value as? NSNumber {
-            // Check if boolean
-            if CFBooleanGetTypeID() == CFGetTypeID(num) {
-                return num.boolValue ? "true" : "false"
-            }
-            return num.stringValue
-        }
-        return String(describing: value)
     }
 }
 
 // MARK: - Cleanup Period Row
 
-private struct CleanupPeriodRow: View {
+struct CleanupPeriodRow: View {
     let currentDays: Int?
     let settingsPath: String
     let onUpdated: () -> Void
@@ -1001,105 +785,6 @@ private struct CleanupPeriodRow: View {
             try? data.write(to: url, options: .atomic)
             onUpdated()
         }
-    }
-}
-
-// MARK: - Key-Value Row
-
-private func settingsKeyDisplayName(_ key: String) -> String {
-    switch key {
-    case "model": return "Model"
-    case "smallFastModel": return "Small/Fast Model"
-    case "skipDangerousModePermissionPrompt": return "Skip Dangerous Mode Prompt"
-    case "autoMemoryEnabled": return "Auto Memory"
-    case "cleanupPeriodDays": return "Cleanup Period (Days)"
-    case "includeCoAuthoredBy": return "Include Co-Authored-By"
-    case "attributionStyle": return "Attribution Style"
-    case "sandbox": return "Sandbox"
-    default: return key
-    }
-}
-
-private struct SettingsKeyValueRow: View {
-    let key: String
-    let value: String
-    var mono: Bool = false
-
-    var body: some View {
-        HStack {
-            Text(settingsKeyDisplayName(key))
-                .font(Typography.body)
-                .foregroundStyle(.tertiary)
-
-            Spacer()
-
-            if mono {
-                Text(value)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-            } else {
-                Text(value)
-                    .font(Typography.body)
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-    }
-}
-
-// MARK: - Flow Layout
-
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = computeLayout(proposal: proposal, subviews: subviews)
-        return result.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = computeLayout(proposal: proposal, subviews: subviews)
-        for (index, position) in result.positions.enumerated() {
-            subviews[index].place(
-                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
-                proposal: .unspecified
-            )
-        }
-    }
-
-    private struct LayoutResult {
-        var positions: [CGPoint]
-        var size: CGSize
-    }
-
-    private func computeLayout(proposal: ProposedViewSize, subviews: Subviews) -> LayoutResult {
-        let maxWidth = proposal.width ?? .infinity
-        var positions: [CGPoint] = []
-        var currentX: CGFloat = 0
-        var currentY: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var totalWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if currentX + size.width > maxWidth, currentX > 0 {
-                currentX = 0
-                currentY += lineHeight + spacing
-                lineHeight = 0
-            }
-            positions.append(CGPoint(x: currentX, y: currentY))
-            lineHeight = max(lineHeight, size.height)
-            currentX += size.width + spacing
-            totalWidth = max(totalWidth, currentX - spacing)
-        }
-
-        return LayoutResult(
-            positions: positions,
-            size: CGSize(width: totalWidth, height: currentY + lineHeight)
-        )
     }
 }
 
