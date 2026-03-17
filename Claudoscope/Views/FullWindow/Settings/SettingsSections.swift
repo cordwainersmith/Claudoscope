@@ -820,64 +820,82 @@ struct UpdatesSectionContent: View {
             Divider()
 
             // Check now / update available
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
                 if let update = updateService.updateAvailable {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(.orange)
-                                .frame(width: 8, height: 8)
-                            Text("Version \(update.version) available")
-                                .font(Typography.bodyMedium)
-                        }
-                        if let notes = update.releaseNotes, !notes.isEmpty {
-                            Text(notes.prefix(200) + (notes.count > 200 ? "..." : ""))
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-                        }
-                    }
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 8, height: 8)
+                        Text("Version \(update.version) available")
+                            .font(Typography.bodyMedium)
 
-                    Spacer()
+                        Spacer()
 
-                    if updateService.isDownloading {
-                        VStack(spacing: 4) {
+                        if updateService.isDownloading {
                             ProgressView(value: updateService.downloadProgress)
-                                .frame(width: 100)
+                                .frame(width: 80)
                             Text("\(Int(updateService.downloadProgress * 100))%")
                                 .font(Typography.codeSmall)
                                 .foregroundStyle(.secondary)
+                            Button("Cancel") {
+                                updateService.cancelDownload()
+                            }
+                            .font(.system(size: 12))
+                        } else {
+                            Button("Download and Install") {
+                                updateService.downloadAndInstall()
+                            }
+                            .font(Typography.body)
                         }
-                        Button("Cancel") {
-                            updateService.cancelDownload()
+                    }
+
+                    if let notes = update.releaseNotes, !notes.isEmpty {
+                        ScrollView {
+                            Text(notes)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                                .padding(10)
                         }
-                        .font(.system(size: 12))
-                    } else {
-                        Button("Download and Install") {
-                            updateService.downloadAndInstall()
-                        }
-                        .font(Typography.body)
+                        .frame(maxHeight: 160)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(AnyShapeStyle(.quaternary))
+                        )
                     }
                 } else {
-                    Text(updateService.updateAvailable == nil && !updateService.isChecking ? "You're up to date" : "")
-                        .font(Typography.body)
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text(updateService.isChecking ? "" : "You're up to date")
+                            .font(Typography.body)
+                            .foregroundStyle(.secondary)
 
-                    Spacer()
+                        Spacer()
 
-                    Button {
-                        Task { await updateService.checkForUpdates() }
-                    } label: {
-                        HStack(spacing: 4) {
-                            if updateService.isChecking {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text("Check Now")
+                        Button("What's New") {
+                            let version = updateService.currentVersion
+                            let notes = ChangelogParser.bundledNotes(for: version)
+                            UpdateWindowController.shared.showWhatsNew(
+                                version: version,
+                                releaseNotes: notes
+                            )
                         }
+                        .font(Typography.body)
+
+                        Button {
+                            Task { await updateService.checkForUpdates() }
+                        } label: {
+                            HStack(spacing: 4) {
+                                if updateService.isChecking {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Text("Check Now")
+                            }
+                        }
+                        .font(Typography.body)
+                        .disabled(updateService.isChecking)
                     }
-                    .font(Typography.body)
-                    .disabled(updateService.isChecking)
                 }
             }
             .padding(.horizontal, 12)
