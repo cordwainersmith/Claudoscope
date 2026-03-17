@@ -6,13 +6,13 @@ enum Typography {
     static let panelTitle    = Font.system(size: 18, weight: .medium)
     static let sectionTitle  = Font.system(size: 14, weight: .semibold)
     static let detailTitle   = Font.system(size: 13, weight: .semibold)
-    static let body          = Font.system(size: 12)
-    static let bodyMedium    = Font.system(size: 12, weight: .medium)
-    static let caption       = Font.system(size: 10, weight: .medium)
-    static let micro         = Font.system(size: 9, weight: .medium)
-    static let sectionLabel  = Font.system(size: 10, weight: .medium)
-    static let code          = Font.system(size: 11, design: .monospaced)
-    static let codeSmall     = Font.system(size: 10, design: .monospaced)
+    static let body          = Font.system(size: 13)
+    static let bodyMedium    = Font.system(size: 13, weight: .medium)
+    static let caption       = Font.system(size: 11, weight: .medium)
+    static let micro         = Font.system(size: 10, weight: .medium)
+    static let sectionLabel  = Font.system(size: 11, weight: .medium)
+    static let code          = Font.system(size: 12, design: .monospaced)
+    static let codeSmall     = Font.system(size: 11, design: .monospaced)
 }
 
 enum Spacing {

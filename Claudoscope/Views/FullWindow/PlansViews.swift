@@ -73,13 +73,13 @@ private struct PlanRow: View {
 
                     if let date = plan.createdAt {
                         Text(formatRelativeDate(date))
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                     }
 
                     Spacer()
 
                     Text(formatFileSize(plan.sizeBytes))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                 }
                 .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
             }
@@ -130,7 +130,7 @@ struct PlansMainPanelView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                         Text("Plans")
                             .font(Typography.body)
                     }
@@ -145,7 +145,7 @@ struct PlansMainPanelView: View {
                 Spacer()
 
                 Text(detail.filename)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 24)

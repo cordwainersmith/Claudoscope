@@ -16,7 +16,7 @@ private struct ConfigSectionHeader: View {
 
     var body: some View {
         Text(title.uppercased())
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.tertiary)
     }
 }
@@ -66,7 +66,7 @@ private struct HookEventRow: View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
                 Image(systemName: iconForEvent(group.event))
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(isSelected ? .white : .secondary)
                     .frame(width: 16)
 
@@ -77,14 +77,14 @@ private struct HookEventRow: View {
                         .foregroundStyle(isSelected ? .white : .primary)
 
                     Text("\(group.rules.count) rule\(group.rules.count == 1 ? "" : "s")")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
                 }
 
                 Spacer()
 
                 Text("\(group.rules.count)")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.tertiary))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
@@ -149,7 +149,7 @@ struct HooksMainPanelView: View {
                 Spacer()
 
                 Text("\(group.rules.count) rule\(group.rules.count == 1 ? "" : "s")")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 24)
@@ -168,7 +168,7 @@ struct HooksMainPanelView: View {
                                     ConfigSectionHeader(title: "MATCHER")
                                     Spacer()
                                     Text(rule.matcher)
-                                        .font(.system(size: 12, design: .monospaced))
+                                        .font(.system(size: 13, design: .monospaced))
                                         .foregroundStyle(.primary)
                                 }
 
@@ -180,19 +180,19 @@ struct HooksMainPanelView: View {
                                 ForEach(Array(rule.hooks.enumerated()), id: \.offset) { _, hook in
                                     HStack(alignment: .top, spacing: 8) {
                                         Image(systemName: "terminal")
-                                            .font(.system(size: 10))
+                                            .font(.system(size: 11))
                                             .foregroundStyle(.tertiary)
                                             .frame(width: 14, alignment: .center)
                                             .padding(.top, 2)
 
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(hook.command)
-                                                .font(.system(size: 12, design: .monospaced))
+                                                .font(.system(size: 13, design: .monospaced))
                                                 .textSelection(.enabled)
 
                                             if let timeout = hook.timeout {
                                                 Text("timeout: \(timeout)ms")
-                                                    .font(.system(size: 10))
+                                                    .font(.system(size: 11))
                                                     .foregroundStyle(.tertiary)
                                             }
                                         }
@@ -261,14 +261,14 @@ private struct CommandRow: View {
                 HStack(spacing: 4) {
                     if let desc = command.description {
                         Text(desc)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .lineLimit(1)
                     }
 
                     Spacer()
 
                     Text(formatFileSize(command.sizeBytes))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                 }
                 .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
             }
@@ -320,7 +320,7 @@ struct CommandsMainPanelView: View {
                     selectedCommandName = nil
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -331,7 +331,7 @@ struct CommandsMainPanelView: View {
                 Spacer()
 
                 Text(formatFileSize(command.sizeBytes))
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 24)
@@ -343,7 +343,7 @@ struct CommandsMainPanelView: View {
             if let desc = command.description {
                 HStack(spacing: 6) {
                     Image(systemName: "text.alignleft")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                     Text(desc)
                         .font(Typography.body)
@@ -419,18 +419,18 @@ private struct SkillRow: View {
                 HStack(spacing: 4) {
                     if let desc = skill.description {
                         Text(desc)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .lineLimit(1)
                     } else {
                         Text("name: \(skill.name)")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .lineLimit(1)
                     }
 
                     Spacer()
 
                     Text(formatFileSize(skill.sizeBytes))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                 }
                 .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
             }
@@ -482,7 +482,7 @@ struct SkillsMainPanelView: View {
                     selectedSkillName = nil
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -493,7 +493,7 @@ struct SkillsMainPanelView: View {
                 Spacer()
 
                 Text(formatFileSize(skill.sizeBytes))
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 24)
@@ -506,7 +506,7 @@ struct SkillsMainPanelView: View {
             if let desc = skill.description {
                 HStack(spacing: 6) {
                     Image(systemName: "text.alignleft")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                     Text(desc)
                         .font(Typography.body)
@@ -586,10 +586,10 @@ private struct SkillMetadataCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "doc.text.magnifyingglass")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Text("Metadata")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 14)
@@ -602,13 +602,13 @@ private struct SkillMetadataCard: View {
                 ForEach(Array(sortedEntries.enumerated()), id: \.offset) { idx, entry in
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: entry.icon)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .frame(width: 14, alignment: .center)
                             .padding(.top, 2)
 
                         Text(entry.label)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.secondary)
                             .frame(width: 100, alignment: .leading)
 
@@ -699,7 +699,7 @@ private struct McpServerRow: View {
                         .foregroundStyle(isSelected ? .white : .primary)
 
                     Text(serverType)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
                 }
 
@@ -816,7 +816,7 @@ private struct McpServerCard: View {
 
                             if let level = server.level {
                                 Text(level)
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 11))
                                     .foregroundStyle(.tertiary)
                             }
                         }
@@ -969,12 +969,12 @@ private struct MemoryProjectRow: View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(isSelected ? .white : .secondary)
                     .frame(width: 16)
 
                 Text(name)
-                    .font(.system(size: 12, weight: isSelected ? .medium : .regular))
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? .white : .primary)
 
@@ -982,7 +982,7 @@ private struct MemoryProjectRow: View {
 
                 if let count = fileCount {
                     Text("\(count)")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(isSelected ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.tertiary))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
@@ -1043,7 +1043,7 @@ struct MemoryMainPanelView: View {
                                 .foregroundStyle(.primary)
 
                             Text(file.sublabel)
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
 
@@ -1051,16 +1051,16 @@ struct MemoryMainPanelView: View {
 
                         if let sizeBytes = file.sizeBytes {
                             Text(formatFileSize(sizeBytes))
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.tertiary)
                         } else {
                             Text("missing")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.quaternary)
                         }
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     }
                     .padding(.horizontal, 24)
@@ -1087,7 +1087,7 @@ struct MemoryMainPanelView: View {
                         selectedMemoryId = tab.id
                     } label: {
                         Text(tab.sublabel.capitalized)
-                            .font(.system(size: 12, weight: tab.id == file.id ? .medium : .regular))
+                            .font(.system(size: 13, weight: tab.id == file.id ? .medium : .regular))
                             .foregroundStyle(tab.id == file.id ? .primary : .secondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
@@ -1101,7 +1101,7 @@ struct MemoryMainPanelView: View {
                 Spacer()
 
                 Text(file.path)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)

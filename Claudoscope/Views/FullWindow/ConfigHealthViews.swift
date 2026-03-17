@@ -277,9 +277,9 @@ struct ConfigHealthSidebarContent: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 10))
+                                    .font(.system(size: 11))
                                 Text("Clear filter")
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.system(size: 12, weight: .medium))
                             }
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 12)
@@ -395,7 +395,7 @@ private struct FilterPill: View {
                     .fill(color)
                     .frame(width: 6, height: 6)
                 Text("\(count)")
-                    .font(.system(size: 10, weight: isActive ? .semibold : .regular, design: .monospaced))
+                    .font(.system(size: 11, weight: isActive ? .semibold : .regular, design: .monospaced))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -469,7 +469,7 @@ private struct SidebarItemRow: View {
                 Spacer()
 
                 Text("\(count)")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
@@ -625,9 +625,9 @@ private struct HealthOverviewView: View {
                     if selectedItem != nil {
                         HStack(spacing: 4) {
                             Image(systemName: "line.3.horizontal.decrease")
-                                .font(.system(size: 9))
+                                .font(.system(size: 11))
                             Text("Filtered")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                         }
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
@@ -651,7 +651,7 @@ private struct HealthOverviewView: View {
                             ProgressView()
                                 .controlSize(.small)
                             Text("Scanning secrets...")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -763,7 +763,7 @@ private struct HealthOverviewView: View {
     @ViewBuilder
     private var byRuleContent: some View {
         Text("ISSUES BY RULE")
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.tertiary)
 
         VStack(spacing: 2) {
@@ -783,7 +783,7 @@ private struct HealthOverviewView: View {
     @ViewBuilder
     private var byFileContent: some View {
         Text("ISSUES BY FILE")
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.tertiary)
 
         VStack(spacing: 2) {
@@ -831,7 +831,7 @@ private struct HealthGaugeCard: View {
                         .font(.system(size: 18, weight: .medium, design: .monospaced))
                         .foregroundStyle(gaugeColor)
                     Text(label)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -859,7 +859,7 @@ private struct HealthStatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundStyle(.secondary)
 
             Text("\(count)")
@@ -868,7 +868,7 @@ private struct HealthStatCard: View {
 
             if !descriptor.isEmpty {
                 Text(descriptor)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
@@ -904,7 +904,7 @@ private struct CategorySection: View {
                 HStack(spacing: 10) {
                     // Icon square
                     Text(category.icon)
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
                         .foregroundStyle(.white)
                         .frame(width: 20, height: 20)
                         .background(category.color)
@@ -915,13 +915,13 @@ private struct CategorySection: View {
                         .foregroundStyle(.primary)
 
                     Text("\(rules.count) \(rules.count == 1 ? "rule" : "rules"), \(totalResults) \(totalResults == 1 ? "item" : "items")")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
 
                     Spacer()
 
                     Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.vertical, 10)
@@ -999,15 +999,15 @@ private struct CategoryIssueRow: View {
                     // Right column: scope + action
                     VStack(alignment: .trailing, spacing: 4) {
                         Text(scopeLabel)
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.tertiary)
 
                         if results.count > 1 {
                             HStack(spacing: 3) {
                                 Text(isExpanded ? "Collapse" : "View all")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 8))
+                                    .font(.system(size: 11))
                             }
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
@@ -1017,9 +1017,9 @@ private struct CategoryIssueRow: View {
                         } else {
                             HStack(spacing: 3) {
                                 Text("View")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 8))
+                                    .font(.system(size: 11))
                             }
                             .foregroundStyle(.secondary)
                         }
@@ -1044,7 +1044,7 @@ private struct CategoryIssueRow: View {
                         Button { onSelectResult(result) } label: {
                             HStack(spacing: 8) {
                                 Text(result.displayPath ?? (result.filePath as NSString).lastPathComponent)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
 
@@ -1053,7 +1053,7 @@ private struct CategoryIssueRow: View {
                                 SessionBadgeView(result: result)
 
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 8))
+                                    .font(.system(size: 11))
                                     .foregroundStyle(.quaternary)
                             }
                             .padding(.horizontal, 16)
@@ -1095,7 +1095,7 @@ private struct RuleGroupRow: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: severityIcon(severity))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(colorForSeverity(severity))
 
                     Text(displayNameFor(checkId))
@@ -1110,16 +1110,16 @@ private struct RuleGroupRow: View {
                         let unit = (raw.hasPrefix("SES") || raw.hasPrefix("SEC")) ? "session" : "file"
                         return "\(results.count) \(results.count == 1 ? unit : unit + "s")"
                     }())
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
 
                     if results.count > 1 {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 9))
+                            .font(.system(size: 11))
                             .foregroundStyle(.quaternary)
                     } else {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 9))
+                            .font(.system(size: 11))
                             .foregroundStyle(.quaternary)
                     }
                 }
@@ -1141,7 +1141,7 @@ private struct RuleGroupRow: View {
                         Button { onSelectResult(result) } label: {
                             HStack(spacing: 8) {
                                 Text(result.displayPath ?? (result.filePath as NSString).lastPathComponent)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
 
@@ -1150,7 +1150,7 @@ private struct RuleGroupRow: View {
                                 SessionBadgeView(result: result)
 
                                 Image(systemName: "chevron.right")
-                                    .font(.system(size: 8))
+                                    .font(.system(size: 11))
                                     .foregroundStyle(.quaternary)
                             }
                             .padding(.horizontal, 16)
@@ -1184,7 +1184,7 @@ private struct FileResultRow: View {
         Button(action: onSelect) {
             HStack(spacing: 10) {
                 Image(systemName: severityIcon(result.severity))
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(colorForSeverity(result.severity))
 
                 Text(displayNameFor(result.checkId))
@@ -1197,7 +1197,7 @@ private struct FileResultRow: View {
                 SessionBadgeView(result: result)
 
                 Text(displayName)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
 
@@ -1208,7 +1208,7 @@ private struct FileResultRow: View {
                 }
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9))
+                    .font(.system(size: 11))
                     .foregroundStyle(.quaternary)
             }
             .padding(.horizontal, 12)
@@ -1255,7 +1255,7 @@ private struct HealthResultDetailView: View {
                 Button(action: onBack) {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                         Text("Back to overview")
                             .font(Typography.body)
                     }
@@ -1279,16 +1279,16 @@ private struct HealthResultDetailView: View {
                 // File/Session path card
                 VStack(alignment: .leading, spacing: 8) {
                     Text(isSessionResult ? "SESSION" : "FILE")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.tertiary)
 
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 6) {
                             Image(systemName: isSessionResult ? "bubble.left.and.text.bubble.right" : "doc.text")
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                             Text(isSessionResult ? (result.displayPath ?? result.filePath) : result.filePath)
-                                .font(.system(size: 12, design: isSessionResult ? .default : .monospaced))
+                                .font(.system(size: 13, design: isSessionResult ? .default : .monospaced))
                                 .foregroundStyle(.primary)
                                 .textSelection(.enabled)
                         }
@@ -1296,10 +1296,10 @@ private struct HealthResultDetailView: View {
                         if !isSessionResult, let line = result.line {
                             HStack(spacing: 6) {
                                 Image(systemName: "number")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundStyle(.secondary)
                                 Text("Line \(line)")
-                                    .font(.system(size: 12, design: .monospaced))
+                                    .font(.system(size: 13, design: .monospaced))
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -1310,7 +1310,7 @@ private struct HealthResultDetailView: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: "arrow.right.circle")
-                                        .font(.system(size: 11))
+                                        .font(.system(size: 12))
                                     Text("View Session")
                                         .font(Typography.bodyMedium)
                                 }
@@ -1335,7 +1335,7 @@ private struct HealthResultDetailView: View {
                 if let hint = hintFor(result.checkId) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("REMEDIATION")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.tertiary)
 
                         HStack(alignment: .top, spacing: 10) {
@@ -1364,7 +1364,7 @@ private struct HealthResultDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("DETAILS")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.tertiary)
 
                         Spacer()
@@ -1375,9 +1375,9 @@ private struct HealthResultDetailView: View {
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: showUnmasked ? "eye.slash" : "eye")
-                                        .font(.system(size: 11))
+                                        .font(.system(size: 12))
                                     Text(showUnmasked ? "Hide" : "Reveal")
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(.system(size: 12, weight: .medium))
                                 }
                                 .foregroundStyle(.secondary)
                             }
@@ -1395,10 +1395,10 @@ private struct HealthResultDetailView: View {
                         if isSecretResult, showUnmasked, let secret = result.unmaskedSecret {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.shield")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundStyle(.red)
                                 Text(secret)
-                                    .font(.system(size: 12, design: .monospaced))
+                                    .font(.system(size: 13, design: .monospaced))
                                     .foregroundStyle(.red)
                                     .textSelection(.enabled)
                             }
@@ -1417,7 +1417,7 @@ private struct HealthResultDetailView: View {
                             VStack(alignment: .leading, spacing: 0) {
                                 ForEach(Array(context.enumerated()), id: \.offset) { idx, line in
                                     Text(line)
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(.system(size: 12, design: .monospaced))
                                         .foregroundStyle(.secondary)
                                         .lineLimit(3)
                                         .textSelection(.enabled)
@@ -1449,7 +1449,7 @@ private struct HealthResultDetailView: View {
                                             .fill(badge.color)
                                             .frame(width: 6, height: 6)
                                         Text(badge.text)
-                                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                            .font(.system(size: 12, weight: .medium, design: .monospaced))
                                             .foregroundStyle(badge.color)
                                     }
                                     .padding(.horizontal, 8)
@@ -1475,7 +1475,7 @@ private struct HealthResultDetailView: View {
                 if let fix = result.fix, fix != hintFor(result.checkId) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("SUGGESTED FIX")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.tertiary)
 
                         HStack(alignment: .top, spacing: 10) {
@@ -1511,7 +1511,7 @@ private struct SeverityBadge: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: severityIcon(severity))
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(colorForSeverity(severity))
             Text(severity.rawValue.capitalized)
                 .font(Typography.bodyMedium)
@@ -1571,7 +1571,7 @@ private func SessionBadgeView(result: LintResult) -> some View {
         HStack(spacing: 4) {
             ForEach(badges, id: \.text) { badge in
                 Text(badge.text)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
                     .foregroundStyle(badge.color)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)

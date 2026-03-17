@@ -177,7 +177,7 @@ private struct AnalyticsHeaderView: View {
                         .font(Typography.bodyMedium)
                     Button(action: onClearProject) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                     }
                     .buttonStyle(.plain)
                 }
@@ -215,7 +215,7 @@ private struct TimeRangePicker: View {
                     .labelsHidden()
                     .datePickerStyle(.field)
                 Text("to")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 DatePicker("", selection: $store.analyticsCustomTo, displayedComponents: .date)
                     .labelsHidden()
@@ -239,7 +239,7 @@ struct StatCard: View {
         CardView {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(value)
@@ -247,7 +247,7 @@ struct StatCard: View {
                         .foregroundStyle(isHighlighted ? Color.orange : .primary)
                     if let subtitle {
                         Text(subtitle)
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -419,10 +419,10 @@ private struct ChartTooltip: View {
                         .fill(item.color.opacity(0.7))
                         .frame(width: 6, height: 6)
                     Text(item.label)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                     Text(item.value)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
                 }
             }
         }
@@ -441,7 +441,7 @@ private extension View {
                     AxisValueLabel {
                         if let str = value.as(String.self) {
                             Text(formatChartDate(str))
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                         }
                     }
                     AxisGridLine()
@@ -452,7 +452,7 @@ private extension View {
                     AxisValueLabel {
                         if let intVal = value.as(Int.self) {
                             Text(formatTokens(intVal))
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                         }
                     }
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4]))
@@ -503,7 +503,7 @@ private struct CostByProjectView: View {
                                     .foregroundStyle(.secondary)
                                 if totalCost > 0 {
                                     Text("\(Int((project.totalCost / totalCost) * 100))%")
-                                        .font(.system(size: 10))
+                                        .font(.system(size: 11))
                                         .foregroundStyle(.tertiary)
                                         .frame(width: 30, alignment: .trailing)
                                 }

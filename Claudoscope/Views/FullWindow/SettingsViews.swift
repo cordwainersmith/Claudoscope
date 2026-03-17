@@ -104,10 +104,10 @@ struct SettingsMainPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Text("No settings.json found. Showing app preferences only.")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
@@ -158,10 +158,10 @@ struct SettingsMainPanelView: View {
             // Banner
             HStack(spacing: 8) {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Text("Settings from ~/.claude/settings.json")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Spacer()
             }
@@ -217,7 +217,7 @@ struct SettingsMainPanelView: View {
                                 )
 
                             Text(option.label)
-                                .font(.system(size: 11, weight: store.appearance == option ? .medium : .regular))
+                                .font(.system(size: 12, weight: store.appearance == option ? .medium : .regular))
                                 .foregroundStyle(store.appearance == option ? .primary : .secondary)
                         }
                     }
@@ -277,7 +277,7 @@ struct SettingsMainPanelView: View {
                     if !allowList.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Allow")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
 
@@ -299,7 +299,7 @@ struct SettingsMainPanelView: View {
                     if !denyList.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Deny")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
 
@@ -417,7 +417,7 @@ struct SettingsMainPanelView: View {
                 // Provider toggle
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Provider")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
 
@@ -446,7 +446,7 @@ struct SettingsMainPanelView: View {
                 // Rates table
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Rates (per 1M tokens)")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
 
@@ -460,7 +460,7 @@ struct SettingsMainPanelView: View {
                             Text("Output")
                                 .frame(width: 70, alignment: .trailing)
                         }
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -539,9 +539,9 @@ struct SettingsMainPanelView: View {
                 if yolo {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                         Text("Auto-approve mode active: permission prompts for destructive operations are skipped")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
@@ -555,7 +555,7 @@ struct SettingsMainPanelView: View {
                 if hasUnsandboxed {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Unsandboxed Commands")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 12)
 
@@ -577,9 +577,9 @@ struct SettingsMainPanelView: View {
                 if weakerSandbox {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 10))
-                        Text("Weaker nested sandbox enabled")
                             .font(.system(size: 11))
+                        Text("Weaker nested sandbox enabled")
+                            .font(.system(size: 12))
                     }
                     .foregroundStyle(.yellow)
                     .padding(.horizontal, 12)
@@ -588,10 +588,10 @@ struct SettingsMainPanelView: View {
                 if isDefault {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.shield")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.green)
                         Text("Default security posture")
-                            .font(.system(size: 11))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal, 12)
@@ -609,7 +609,7 @@ struct SettingsMainPanelView: View {
                     .font(Typography.body)
 
                     Text("Scan active sessions for leaked secrets and show alerts.")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 12)
@@ -628,7 +628,7 @@ struct SettingsMainPanelView: View {
                     if let commit = attr.commitTemplate {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Commit Template")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
 
@@ -646,7 +646,7 @@ struct SettingsMainPanelView: View {
                     if let pr = attr.prTemplate {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("PR Template")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
 
@@ -664,9 +664,9 @@ struct SettingsMainPanelView: View {
                     if attr.hasDeprecatedCoAuthoredBy {
                         HStack(spacing: 6) {
                             Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 10))
-                            Text("Deprecated: includeCoAuthoredBy is set. Use attribution.commitMessage instead.")
                                 .font(.system(size: 11))
+                            Text("Deprecated: includeCoAuthoredBy is set. Use attribution.commitMessage instead.")
+                                .font(.system(size: 12))
                         }
                         .foregroundStyle(.yellow)
                         .padding(.horizontal, 12)
@@ -693,7 +693,7 @@ struct SettingsMainPanelView: View {
                     if !plugins.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Installed")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
 
@@ -707,7 +707,7 @@ struct SettingsMainPanelView: View {
                                             .font(Typography.code)
                                         if let mp = plugin.marketplace {
                                             Text("@\(mp)")
-                                                .font(.system(size: 10))
+                                                .font(.system(size: 11))
                                                 .foregroundStyle(.tertiary)
                                         }
                                     }
@@ -725,7 +725,7 @@ struct SettingsMainPanelView: View {
                     if !marketplaces.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Extra Marketplaces")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                                 .padding(.horizontal, 12)
 
@@ -733,7 +733,7 @@ struct SettingsMainPanelView: View {
                                 ForEach(Array(marketplaces.enumerated()), id: \.element.id) { index, mp in
                                     HStack {
                                         Image(systemName: marketplaceIcon(mp.sourceType))
-                                            .font(.system(size: 11))
+                                            .font(.system(size: 12))
                                             .foregroundStyle(.secondary)
                                             .frame(width: 16)
                                         Text(mp.name)
@@ -789,7 +789,7 @@ struct SettingsMainPanelView: View {
                                     .foregroundStyle(.tertiary)
                                 Spacer()
                                 Text(row.value)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.system(size: 12, weight: .medium))
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 2)
                                     .background(Color.accentColor.opacity(0.15))
@@ -896,9 +896,9 @@ struct SettingsMainPanelView: View {
     private func settingsEmptyHint(_ message: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "minus.circle")
-                .font(.system(size: 11))
+                .font(.system(size: 12))
             Text(message)
-                .font(.system(size: 11))
+                .font(.system(size: 12))
         }
         .foregroundStyle(.tertiary)
         .padding(12)
@@ -943,7 +943,7 @@ private struct CleanupPeriodRow: View {
                     Text("Transcript Retention")
                         .font(Typography.bodyMedium)
                     Text(isDefault ? "Default: 30 days" : "\(displayDays) days")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
 
@@ -955,7 +955,7 @@ private struct CleanupPeriodRow: View {
                             updateCleanupPeriod(days: preset.days)
                         } label: {
                             Text(preset.label)
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
                                 .background(displayDays == preset.days ? Color.accentColor.opacity(0.15) : .clear)
@@ -976,9 +976,9 @@ private struct CleanupPeriodRow: View {
             if isDefault {
                 HStack(spacing: 4) {
                     Image(systemName: "info.circle")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                     Text("Set to 1 year to keep session history longer. Claude Code defaults to 30 days.")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                 }
                 .foregroundStyle(.orange)
             }
@@ -1035,7 +1035,7 @@ private struct SettingsKeyValueRow: View {
 
             if mono {
                 Text(value)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: 13, design: .monospaced))
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
             } else {
@@ -1117,7 +1117,7 @@ struct UpdatesSectionContent: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(updateService.currentVersion)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
             }
             .padding(.horizontal, 12)
 
@@ -1147,7 +1147,7 @@ struct UpdatesSectionContent: View {
                         }
                         if let notes = update.releaseNotes, !notes.isEmpty {
                             Text(notes.prefix(200) + (notes.count > 200 ? "..." : ""))
-                                .font(.system(size: 11))
+                                .font(.system(size: 12))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(3)
                         }
@@ -1166,7 +1166,7 @@ struct UpdatesSectionContent: View {
                         Button("Cancel") {
                             updateService.cancelDownload()
                         }
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                     } else {
                         Button("Download and Install") {
                             updateService.downloadAndInstall()
@@ -1201,14 +1201,14 @@ struct UpdatesSectionContent: View {
             if let error = updateService.error {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                     Text(error)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                     Spacer()
                     Button("Retry") {
                         Task { await updateService.checkForUpdates() }
                     }
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                 }
                 .foregroundStyle(.red)
                 .padding(.horizontal, 12)

@@ -387,7 +387,7 @@ struct RichMarkdownContentView: View {
             if let lang = language, !lang.isEmpty {
                 HStack {
                     Text(lang)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)

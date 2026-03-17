@@ -92,19 +92,19 @@ private struct SecretAlertView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text("Value:")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                     Text(alert.maskedValue)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
                         .foregroundStyle(.primary)
                 }
 
                 HStack(spacing: 6) {
                     Text("Session:")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                     Text(alert.sessionTitle)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                 }

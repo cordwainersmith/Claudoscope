@@ -24,7 +24,7 @@ struct SidebarView: View {
             // Filter field
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                 TextField("Filter \(rail.label.lowercased())...", text: $filterText)
                     .textFieldStyle(.plain)
@@ -185,7 +185,7 @@ private struct ProjectGroup: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(.tertiary)
                         .frame(width: 12)
 
@@ -196,7 +196,7 @@ private struct ProjectGroup: View {
                     Spacer()
 
                     Text("\(sessions.count)")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1)
@@ -240,13 +240,13 @@ private struct SessionRow: View {
 
                 HStack(spacing: 4) {
                     Text(formatRelativeTime(session.lastTimestamp))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
 
                     Text("\u{00B7}")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
 
                     Text("\(session.messageCount) msgs")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
 
                     if let model = session.primaryModel {
                         let family = getModelFamily(model)
@@ -349,7 +349,7 @@ private struct AnalyticsProjectRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(name)
-                        .font(.system(size: 12, weight: isSelected ? .medium : .regular))
+                        .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                         .foregroundStyle(isSelected ? Color.accentColor : .primary)
                         .lineLimit(1)
                     Spacer()

@@ -73,7 +73,7 @@ struct TimelineSidebarContent: View {
         } label: {
             HStack(spacing: 6) {
                 Text(dayLabel)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(selectedDay == dayLabel ? .white : .secondary)
 
                 Text("\(entries.count)")
@@ -270,7 +270,7 @@ struct TimelineMainPanelView: View {
                         .foregroundStyle(.tertiary)
 
                     Text(formatRelativeDate(entry.timestamp))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.tertiary)
                 }
 

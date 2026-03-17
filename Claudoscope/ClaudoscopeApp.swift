@@ -246,7 +246,7 @@ struct MenuBarPopoverContent: View {
                                 .foregroundStyle(.green)
                         } else if updateService.updateAvailable != nil {
                             Text("New")
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
@@ -698,7 +698,7 @@ struct UpdateAvailableView: View {
                             onSkip?()
                         }
                         .buttonStyle(.plain)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                         Spacer()
                     }
@@ -737,7 +737,7 @@ struct WhatsNewView: View {
             if let notes = releaseNotes, !notes.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("What's New")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
 
                     ScrollView {
@@ -807,12 +807,12 @@ struct AboutOverlay: View {
                     .foregroundStyle(.secondary)
 
                 Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0")")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
 
                 Link(destination: URL(string: "https://github.com/cordwainersmith/Claudoscope")!) {
                     Text("github.com/cordwainersmith/Claudoscope")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                     .foregroundStyle(.blue)
                 }
                 .onHover { hovering in

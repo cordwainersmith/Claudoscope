@@ -236,7 +236,7 @@ struct ChatSearchBar: View {
 
                 Button { onNavigate(.previous) } label: {
                     Image(systemName: "chevron.up")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -245,7 +245,7 @@ struct ChatSearchBar: View {
 
                 Button { onNavigate(.next) } label: {
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .frame(width: 22, height: 22)
                         .contentShape(Rectangle())
                 }
@@ -332,9 +332,9 @@ private struct CollapsibleTextView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                         Text(isCollapsed ? "Show more" : "Show less")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                     }
                     .foregroundStyle(Color.accentColor)
                     .padding(.vertical, 4)
@@ -501,9 +501,9 @@ struct ThinkingBlockView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "brain")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                 Text("Thinking")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(.secondary)
         }
@@ -584,12 +584,12 @@ struct ToolCallBlockView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(.tertiary)
                         .frame(width: 10)
 
                     Image(systemName: toolIcon)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(categoryColor)
 
                     Text(toolName)
@@ -607,7 +607,7 @@ struct ToolCallBlockView: View {
 
                     if isError {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.red)
                     }
                 }
@@ -657,7 +657,7 @@ struct CompactionDivider: View {
                 .fill(.orange.opacity(0.3))
                 .frame(height: 1)
             Text("Context Compacted")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(.orange)
             Rectangle()
                 .fill(.orange.opacity(0.3))
@@ -703,9 +703,9 @@ struct ContinuationBanner: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "arrow.turn.down.right")
-                .font(.system(size: 10))
-            Text("Continued from a previous session")
                 .font(.system(size: 11))
+            Text("Continued from a previous session")
+                .font(.system(size: 12))
         }
         .foregroundStyle(.secondary)
         .padding(8)
