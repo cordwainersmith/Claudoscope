@@ -596,6 +596,23 @@ struct SettingsMainPanelView: View {
                     }
                     .padding(.horizontal, 12)
                 }
+
+                Divider()
+                    .padding(.horizontal, 12)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Real-time secret scanning", isOn: Binding(
+                        get: { store.realtimeSecretScanEnabled },
+                        set: { store.realtimeSecretScanEnabled = $0 }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 12))
+
+                    Text("Scan active sessions for leaked secrets and show alerts.")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 12)
             }
             .padding(.vertical, 8)
         }

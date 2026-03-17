@@ -82,6 +82,7 @@ struct MainPanelView: View {
                     lintResults: store.lintResults,
                     lintSummary: store.lintSummary,
                     isLoading: store.lintLoading,
+                    isSecretScanLoading: store.secretScanLoading,
                     selectedResultId: $selectedLintResultId,
                     hiddenSeverities: $hiddenLintSeverities,
                     onRescan: {

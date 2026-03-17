@@ -130,7 +130,7 @@ struct FullWindowView: View {
                 await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
                 await store.loadConfig(projectId: selectedProjectId)
             case .configHealth:
-                await store.runConfigLint(projectId: selectedProjectId)
+                await store.runConfigLintIfNeeded(projectId: selectedProjectId)
             case .hooks, .commands, .mcps, .skills, .settings:
                 await store.loadConfig(projectId: selectedProjectId)
             default:

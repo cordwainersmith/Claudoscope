@@ -49,6 +49,15 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SES002  // very long conversation (>200 messages)
     case SES003  // runaway token consumption (>2M tokens)
     case SES004  // stale session with significant history
+
+    // Secret detection checks
+    case SEC001  // private key
+    case SEC002  // AWS access key
+    case SEC003  // authorization header
+    case SEC004  // API key/token
+    case SEC005  // password/secret literal
+    case SEC006  // connection string with credentials
+    case SEC007  // platform token (GitHub, Slack, npm, Stripe, Google)
 }
 
 struct LintResult: Identifiable, Sendable {
@@ -92,4 +101,13 @@ struct LintSummary: Sendable {
         let score = maxDemerits > 0 ? max(0, 1.0 - demerits / maxDemerits) : 1.0
         return LintSummary(errorCount: errors, warningCount: warnings, infoCount: infos, healthScore: score)
     }
+}
+
+struct SecretAlert: Sendable {
+    let checkId: LintCheckId
+    let patternName: String
+    let maskedValue: String
+    let sessionTitle: String
+    let projectId: String
+    let sessionId: String
 }

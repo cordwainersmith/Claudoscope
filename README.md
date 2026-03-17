@@ -121,7 +121,7 @@ The chat view renders the complete conversation thread with:
 - Inline cost estimates per message
 - Tool result content (file reads, bash output, search results)
 - Error indicators on sessions or tool calls that encountered failures
-- In-conversation search for finding specific messages within long sessions
+- In-conversation search that finds text inside messages, thinking blocks, tool inputs, and tool results, with auto-expansion of matching collapsed blocks
 
 ### Plans
 
@@ -166,7 +166,11 @@ The config health view runs 19 lint rules against your Claude Code configuration
 
 Rules cover CLAUDE.md size and structure, rules YAML frontmatter and glob validation, skill metadata completeness, naming conventions, and cross-cutting token budget estimates.
 
-In addition to configuration checks, the health screen runs **session health checks** (SES rules) that analyze actual usage data from the last 30 days. These surface sessions that burned too many tokens, cost too much, or ran too long:
+The health screen also runs **secret detection** (SEC rules) that scans session JSONL files for accidentally leaked credentials. Seven patterns are checked: private keys, AWS access keys, authorization headers, API keys/tokens, password literals, connection strings with credentials, and platform tokens (GitHub, Slack, npm, Stripe, Google). A multi-stage filter pipeline reduces false positives using Shannon entropy analysis, capture-group value extraction, randomness heuristics, and expanded allowlists for placeholders and conversational context. Results load progressively: config and session checks appear instantly while secret scanning runs in the background with an inline progress indicator.
+
+**Real-time secret alerts**: when a session file is updated, Claudoscope scans the tail of the file for secrets and shows a floating alert panel if a match is found. This can be toggled on or off in Settings > Security.
+
+In addition to configuration and secret checks, the health screen runs **session health checks** (SES rules) that analyze actual usage data from the last 30 days. These surface sessions that burned too many tokens, cost too much, or ran too long:
 
 - **SES001**: session cost exceeded $25
 - **SES002**: conversation exceeded 200 messages
@@ -184,7 +188,7 @@ The settings view reads your `~/.claude/settings.json` and presents each configu
 - **Appearance**: switch between System, Light, and Dark themes. The selected theme applies to the dashboard window immediately.
 - **Model**: shows the currently configured default model.
 - **Permissions**: displays permission rules, including denied file patterns for read and edit operations.
-- **Security**: surfaces security-related flags such as YOLO mode status and dangerous permission prompt handling.
+- **Security**: surfaces security-related flags such as YOLO mode status and dangerous permission prompt handling. Includes a toggle to enable or disable real-time secret scanning alerts.
 - **Attribution**: attribution and credit configuration.
 - **Plugins**: lists all installed plugins with their source marketplaces, and shows any extra marketplace sources.
 - **Account**: displays account metadata including startup count, last release notes version, onboarding status, and key bindings.

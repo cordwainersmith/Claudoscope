@@ -29,6 +29,20 @@ struct ClaudoscopeApp: App {
 
                     updateService.startPeriodicChecks()
                 }
+                .onChange(of: store.activeSecretAlert != nil) { _, hasAlert in
+                    if hasAlert, let alert = store.activeSecretAlert {
+                        SecretAlertController.shared.show(
+                            alert: alert,
+                            onView: {
+                                MainWindowController.shared.open(store: store, updateService: updateService)
+                                store.activeSecretAlert = nil
+                            },
+                            onDismiss: {
+                                store.activeSecretAlert = nil
+                            }
+                        )
+                    }
+                }
         } label: {
             MenuBarIcon(hasUpdate: updateService.updateAvailable != nil)
         }

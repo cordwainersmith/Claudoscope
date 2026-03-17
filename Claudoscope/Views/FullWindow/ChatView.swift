@@ -11,17 +11,40 @@ struct ChatView: View {
         guard !searchText.isEmpty else { return [] }
         let query = searchText.lowercased()
         return session.records.enumerated().compactMap { index, record in
-            let text: String
-            switch record.type {
-            case .user:
-                text = record.message?.content?.textContent ?? ""
-            case .assistant:
-                text = record.message?.content?.textContent ?? ""
-            default:
-                return nil
-            }
-            return text.lowercased().contains(query) ? index : nil
+            guard record.type == .user || record.type == .assistant else { return nil }
+            if recordContainsQuery(record, query: query) { return index }
+            return nil
         }
+    }
+
+    private func recordContainsQuery(_ record: ParsedRecordRaw, query: String) -> Bool {
+        // Check top-level text
+        if let textContent = record.message?.content?.textContent,
+           textContent.lowercased().contains(query) {
+            return true
+        }
+
+        // Check inside content blocks (thinking, tool inputs, tool results)
+        if let content = record.message?.content, case .blocks(let blocks) = content {
+            for block in blocks {
+                if let thinking = block.thinking, thinking.lowercased().contains(query) {
+                    return true
+                }
+                if let input = block.input {
+                    for (_, value) in input {
+                        if let str = value.stringValue, str.lowercased().contains(query) {
+                            return true
+                        }
+                    }
+                }
+                if let toolId = block.id, let result = session.toolResultMap[toolId] {
+                    if result.content.lowercased().contains(query) {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
     }
 
     var body: some View {
@@ -154,7 +177,7 @@ struct ChatView: View {
             UserMessageBubble(record: record)
 
         case .assistant:
-            AssistantMessageView(record: record, toolResultMap: session.toolResultMap)
+            AssistantMessageView(record: record, toolResultMap: session.toolResultMap, searchText: searchText)
 
         case .system:
             if record.subtype == "compact_boundary" {
@@ -344,6 +367,7 @@ struct UserMessageBubble: View {
 struct AssistantMessageView: View {
     let record: ParsedRecordRaw
     let toolResultMap: [String: ToolResultEntry]
+    var searchText: String = ""
 
     private var contentBlocks: [ContentBlockRaw] {
         guard let content = record.message?.content,
@@ -410,7 +434,7 @@ struct AssistantMessageView: View {
 
         case "thinking":
             if let thinking = block.thinking, !thinking.isEmpty {
-                ThinkingBlockView(text: thinking)
+                ThinkingBlockView(text: thinking, searchText: searchText)
             }
 
         case "tool_use":
@@ -420,7 +444,8 @@ struct AssistantMessageView: View {
                     toolName: name,
                     input: block.input ?? [:],
                     resultContent: result?.content,
-                    isError: result?.isError ?? false
+                    isError: result?.isError ?? false,
+                    searchText: searchText
                 )
             }
 
@@ -434,7 +459,13 @@ struct AssistantMessageView: View {
 
 struct ThinkingBlockView: View {
     let text: String
+    var searchText: String = ""
     @State private var isExpanded = false
+
+    private var hasSearchMatch: Bool {
+        guard !searchText.isEmpty else { return false }
+        return text.localizedCaseInsensitiveContains(searchText)
+    }
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
@@ -453,8 +484,16 @@ struct ThinkingBlockView: View {
             .foregroundStyle(.secondary)
         }
         .padding(8)
-        .background(.secondary.opacity(0.05))
+        .background(hasSearchMatch ? Color.yellow.opacity(0.08) : .secondary.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            hasSearchMatch
+                ? RoundedRectangle(cornerRadius: 6).strokeBorder(Color.yellow.opacity(0.4), lineWidth: 1)
+                : nil
+        )
+        .onChange(of: searchText) { _, _ in
+            if hasSearchMatch { isExpanded = true }
+        }
     }
 }
 
@@ -465,7 +504,18 @@ struct ToolCallBlockView: View {
     let input: [String: AnyCodableValue]
     let resultContent: String?
     let isError: Bool
+    var searchText: String = ""
     @State private var isExpanded = false
+
+    private var hasSearchMatch: Bool {
+        guard !searchText.isEmpty else { return false }
+        let query = searchText.lowercased()
+        for (_, value) in input {
+            if let str = value.stringValue, str.lowercased().contains(query) { return true }
+        }
+        if let result = resultContent, result.lowercased().contains(query) { return true }
+        return false
+    }
 
     private var categoryColor: Color {
         let readTools = ["Read", "Glob", "Grep", "LSP", "WebFetch", "WebSearch"]
@@ -556,17 +606,20 @@ struct ToolCallBlockView: View {
                 .frame(maxHeight: 300)
             }
         }
-        .background(.bar.opacity(0.5))
+        .background(hasSearchMatch ? AnyShapeStyle(Color.yellow.opacity(0.08)) : AnyShapeStyle(.bar.opacity(0.5)))
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(.quaternary, lineWidth: 1)
+                .strokeBorder(hasSearchMatch ? AnyShapeStyle(Color.yellow.opacity(0.4)) : AnyShapeStyle(.quaternary), lineWidth: hasSearchMatch ? 1.5 : 1)
         )
         .overlay(alignment: .leading) {
             Rectangle()
                 .fill(categoryColor)
                 .frame(width: 3)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .onChange(of: searchText) { _, _ in
+            if hasSearchMatch { isExpanded = true }
         }
     }
 }

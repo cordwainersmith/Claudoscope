@@ -61,6 +61,20 @@ final class SessionStore {
     var lintResults: [LintResult] = []
     var lintSummary: LintSummary = .empty
     var lintLoading: Bool = false
+    var secretScanLoading: Bool = false
+
+    // Real-time secret alert
+    var activeSecretAlert: SecretAlert?
+    private var alertedSecrets: Set<String> = []
+
+    // Lint caching
+    private var lintResultsValid: Bool = false
+
+    // Real-time secret scanning toggle
+    var realtimeSecretScanEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "realtimeSecretScanEnabled") }
+        set { UserDefaults.standard.set(newValue, forKey: "realtimeSecretScanEnabled") }
+    }
 
     // Appearance
     var appearance: AppAppearance = .system
@@ -136,6 +150,10 @@ final class SessionStore {
         self.plansService = PlansService(claudeDir: claudeDir)
         self.timelineService = TimelineService(claudeDir: claudeDir)
         self.configService = ConfigService(claudeDir: claudeDir)
+
+        if UserDefaults.standard.object(forKey: "realtimeSecretScanEnabled") == nil {
+            UserDefaults.standard.set(true, forKey: "realtimeSecretScanEnabled")
+        }
 
         setupWatcher()
         performInitialScan()
@@ -231,9 +249,56 @@ final class SessionStore {
                 // Ignore parse errors for individual file updates
             }
 
+            // Invalidate lint cache so next Config Health visit rescans
+            await MainActor.run { self.lintResultsValid = false }
+
+            // Real-time secret scan: check last 50 lines for secrets
+            await scanForRealtimeSecrets(url: url, sessionId: sessionId, projectId: projectId)
+
         case .configChanged:
             // Config changes handled in later phases
             break
+        }
+    }
+
+    private static func readTail(of url: URL, bytes: Int = 131072) -> [String]? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let fileSize = handle.seekToEndOfFile()
+        let offset = fileSize > UInt64(bytes) ? fileSize - UInt64(bytes) : 0
+        handle.seek(toFileOffset: offset)
+        guard let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        let lines = text.components(separatedBy: "\n")
+        return offset > 0 ? Array(lines.dropFirst().suffix(50)) : Array(lines.suffix(50))
+    }
+
+    private func scanForRealtimeSecrets(url: URL, sessionId: String, projectId: String) async {
+        guard realtimeSecretScanEnabled else { return }
+        guard let lines = Self.readTail(of: url) else { return }
+
+        let findings = await linterService.scanLinesForSecrets(lines)
+        guard let finding = findings.first else { return }
+
+        let masked = ConfigLinterService.maskSecret(finding.matchedText)
+        let dedupKey = "\(sessionId):\(masked)"
+
+        await MainActor.run {
+            guard !alertedSecrets.contains(dedupKey) else { return }
+            alertedSecrets.insert(dedupKey)
+
+            // Derive a session title
+            let title = sessionsByProject[projectId]?
+                .first(where: { $0.id == sessionId })?.title ?? sessionId
+
+            activeSecretAlert = SecretAlert(
+                checkId: finding.checkId,
+                patternName: finding.patternName,
+                maskedValue: masked,
+                sessionTitle: title,
+                projectId: projectId,
+                sessionId: sessionId
+            )
         }
     }
 
@@ -364,8 +429,16 @@ final class SessionStore {
 
     // MARK: - Config Lint
 
+    func runConfigLintIfNeeded(projectId: String?) async {
+        guard !lintResultsValid else { return }
+        await runConfigLint(projectId: projectId)
+    }
+
     func runConfigLint(projectId: String?) async {
-        await MainActor.run { lintLoading = true }
+        await MainActor.run {
+            lintLoading = true
+            secretScanLoading = false
+        }
 
         // Capture sessions on MainActor before any await
         let sessions: [SessionSummary] = await MainActor.run {
@@ -384,17 +457,33 @@ final class SessionStore {
             projectRoot = nil
         }
 
-        var allResults = await linterService.lint(projectRoot: projectRoot, globalClaudeDir: claudeDir)
+        // Phase 1 (fast): rules, skills, session health checks
+        var fastResults = await linterService.lint(projectRoot: projectRoot, globalClaudeDir: claudeDir)
         let sessionResults = await linterService.lintSessions(sessions)
-        allResults.append(contentsOf: sessionResults)
-        allResults.sort { $0.severity < $1.severity }
-        let finalResults = allResults
-        let summary = LintSummary.from(results: finalResults)
+        fastResults.append(contentsOf: sessionResults)
+        fastResults.sort { $0.severity < $1.severity }
+
+        let phase1Results = fastResults
+        let phase1Summary = LintSummary.from(results: phase1Results)
 
         await MainActor.run {
-            self.lintResults = finalResults
-            self.lintSummary = summary
+            self.lintResults = phase1Results
+            self.lintSummary = phase1Summary
             self.lintLoading = false
+            self.secretScanLoading = true
+        }
+
+        // Phase 2 (slow): secret scanning in background
+        let secretResults = await linterService.lintSessionSecrets(sessions, claudeDir: claudeDir)
+
+        await MainActor.run {
+            var allResults = phase1Results
+            allResults.append(contentsOf: secretResults)
+            allResults.sort { $0.severity < $1.severity }
+            self.lintResults = allResults
+            self.lintSummary = LintSummary.from(results: allResults)
+            self.secretScanLoading = false
+            self.lintResultsValid = true
         }
     }
 

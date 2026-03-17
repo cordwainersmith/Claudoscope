@@ -217,6 +217,7 @@ struct ConfigHealthMainPanelView: View {
     let lintResults: [LintResult]
     let lintSummary: LintSummary
     let isLoading: Bool
+    var isSecretScanLoading: Bool = false
     @Binding var selectedResultId: String?
     @Binding var hiddenSeverities: Set<LintSeverity>
     var onRescan: (() -> Void)?
@@ -251,6 +252,7 @@ struct ConfigHealthMainPanelView: View {
             HealthOverviewView(
                 lintResults: lintResults,
                 lintSummary: lintSummary,
+                isSecretScanLoading: isSecretScanLoading,
                 selectedResultId: $selectedResultId,
                 hiddenSeverities: $hiddenSeverities,
                 onRescan: onRescan
@@ -271,6 +273,7 @@ private enum GroupMode: String, CaseIterable {
 private struct HealthOverviewView: View {
     let lintResults: [LintResult]
     let lintSummary: LintSummary
+    var isSecretScanLoading: Bool = false
     @Binding var selectedResultId: String?
     @Binding var hiddenSeverities: Set<LintSeverity>
     var onRescan: (() -> Void)?
@@ -307,6 +310,16 @@ private struct HealthOverviewView: View {
                     }
                     .pickerStyle(.segmented)
                     .frame(width: 160)
+
+                    if isSecretScanLoading {
+                        HStack(spacing: 5) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Scanning secrets...")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
                     if let onRescan {
                         Button(action: onRescan) {
@@ -562,7 +575,8 @@ private struct HealthRuleGroupRow: View {
                     Spacer()
 
                     Text({
-                        let unit = checkId.rawValue.hasPrefix("SES") ? "session" : "file"
+                        let raw = checkId.rawValue
+                        let unit = (raw.hasPrefix("SES") || raw.hasPrefix("SEC")) ? "session" : "file"
                         return "\(results.count) \(results.count == 1 ? unit : unit + "s")"
                     }())
                         .font(.system(size: 10))
@@ -926,7 +940,8 @@ private func healthScoreColor(_ score: Double) -> Color {
 }
 
 private func displayMessage(for result: LintResult) -> String {
-    guard result.checkId.rawValue.hasPrefix("SES"),
+    let raw = result.checkId.rawValue
+    guard raw.hasPrefix("SES"),
           let tagRange = result.message.range(of: " \\[\\$[^\\]]+\\]$", options: .regularExpression) else {
         return result.message
     }
@@ -995,5 +1010,12 @@ private func ruleDescription(for checkId: LintCheckId) -> String {
     case .SES002: return "Very long conversation"
     case .SES003: return "Runaway token consumption"
     case .SES004: return "Stale session with history"
+    case .SEC001: return "Private key detected"
+    case .SEC002: return "AWS access key detected"
+    case .SEC003: return "Authorization header detected"
+    case .SEC004: return "API key/token detected"
+    case .SEC005: return "Password/secret literal detected"
+    case .SEC006: return "Connection string with credentials"
+    case .SEC007: return "Platform token detected"
     }
 }
