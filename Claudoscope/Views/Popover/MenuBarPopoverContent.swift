@@ -32,36 +32,8 @@ struct MenuBarPopoverContent: View {
             Divider()
 
             if store.isLoading {
-                // Loading skeleton
-                VStack(spacing: 12) {
-                    HStack(spacing: 12) {
-                        ForEach(0..<4) { _ in
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(.quaternary)
-                                .frame(height: 40)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(.quaternary)
-                        .frame(height: 50)
-                        .padding(.horizontal, 16)
-
-                    ForEach(0..<3) { _ in
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(.quaternary)
-                                .frame(width: 24, height: 24)
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(.quaternary)
-                                .frame(height: 14)
-                        }
-                        .padding(.horizontal, 16)
-                    }
-                }
-                .padding(.vertical, 12)
-                .redacted(reason: .placeholder)
+                // Loading state with animated logo
+                LoadingLogoView()
 
                 Divider()
             } else {
@@ -211,6 +183,43 @@ struct MenuBarPopoverContent: View {
 }
 
 // MARK: - Popover Menu Button
+
+// MARK: - Loading Logo
+
+struct LoadingLogoView: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
+               let image = NSImage(contentsOf: url) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 48, height: 48)
+                    .scaleEffect(isAnimating ? 1.06 : 0.94)
+                    .opacity(isAnimating ? 1.0 : 0.6)
+                    .animation(
+                        .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                        value: isAnimating
+                    )
+            }
+
+            Text("Loading sessions...")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .opacity(isAnimating ? 1.0 : 0.5)
+                .animation(
+                    .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                    value: isAnimating
+                )
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+        .onAppear { isAnimating = true }
+    }
+}
 
 struct PopoverMenuButton: View {
     let label: String
