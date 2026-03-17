@@ -36,6 +36,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
   - [Skills](#skills)
   - [MCPs](#mcps)
   - [Memory](#memory)
+  - [Config Health](#config-health)
   - [Settings](#settings)
 - [Cost Estimation](#cost-estimation)
 - [License](#license)
@@ -151,6 +152,19 @@ The MCPs (Model Context Protocol servers) view shows all configured MCP servers 
 ### Memory
 
 The memory view lists all CLAUDE.md and memory files that Claude Code uses for persistent context. This includes the global `~/.claude/CLAUDE.md`, project-level `CLAUDE.md` files, and auto-memory files. Selecting a file renders its markdown content in the main panel.
+
+### Config Health
+
+The config health view runs 19 lint rules against your Claude Code configuration (CLAUDE.md files, rules, and skills) and reports issues that may affect how Claude interprets your instructions.
+
+- **Health score**: a weighted summary (Excellent / Good / Fair / Poor) based on error and warning counts
+- **Severity filters**: click any stat card (Errors, Warnings, Info) to toggle that severity on or off in the results
+- **Group by Rule**: the default view groups all results by rule ID, so a rule like "Missing description" shows once with a count and expandable list of affected skills, instead of 28 identical rows
+- **Group by File**: switch to a flat list of all issues ordered by file
+- **Rescan**: re-run all checks without switching tabs
+- **Skill display names**: skills are identified by their directory name (e.g., "animate", "context7") rather than the repeated filename "SKILL.md"
+
+Rules cover CLAUDE.md size and structure, rules YAML frontmatter and glob validation, skill metadata completeness, naming conventions, and cross-cutting token budget estimates.
 
 ### Settings
 

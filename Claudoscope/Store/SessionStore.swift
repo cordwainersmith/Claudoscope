@@ -57,6 +57,11 @@ final class SessionStore {
     var extendedConfig: ExtendedConfig?
     var configLoading: Bool = false
 
+    // Lint data
+    var lintResults: [LintResult] = []
+    var lintSummary: LintSummary = .empty
+    var lintLoading: Bool = false
+
     // Appearance
     var appearance: AppAppearance = .system
 
@@ -75,6 +80,7 @@ final class SessionStore {
     private let plansService: PlansService
     private let timelineService: TimelineService
     private let configService: ConfigService
+    private let linterService = ConfigLinterService()
     private var cancellables = Set<AnyCancellable>()
 
     /// All sessions flattened with their project
@@ -353,6 +359,29 @@ final class SessionStore {
         let memory = await configService.loadMemoryFiles(projectId: projectId)
         await MainActor.run {
             self.memoryFiles = memory
+        }
+    }
+
+    // MARK: - Config Lint
+
+    func runConfigLint(projectId: String?) async {
+        await MainActor.run { lintLoading = true }
+
+        // Resolve project root from projectId
+        let projectRoot: String?
+        if let projectId {
+            projectRoot = await configService.decodeProjectPath(projectId)
+        } else {
+            projectRoot = nil
+        }
+
+        let results = await linterService.lint(projectRoot: projectRoot, globalClaudeDir: claudeDir)
+        let summary = LintSummary.from(results: results)
+
+        await MainActor.run {
+            self.lintResults = results
+            self.lintSummary = summary
+            self.lintLoading = false
         }
     }
 

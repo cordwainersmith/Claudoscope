@@ -13,6 +13,8 @@ struct SidebarView: View {
     @Binding var selectedMemoryId: String?
     @Binding var selectedMemoryProjectId: String?
     @Binding var selectedSettingsSection: String?
+    @Binding var selectedLintResultId: String?
+    let hiddenLintSeverities: Set<LintSeverity>
     @State private var filterText = ""
 
     var body: some View {
@@ -98,6 +100,15 @@ struct SidebarView: View {
                         memoryFiles: store.memoryFiles,
                         selectedMemoryId: $selectedMemoryId,
                         selectedProjectId: $selectedMemoryProjectId
+                    )
+                case .configHealth:
+                    ConfigHealthSidebarContent(
+                        filterText: filterText,
+                        lintResults: store.lintResults,
+                        lintSummary: store.lintSummary,
+                        isLoading: store.lintLoading,
+                        selectedResultId: $selectedLintResultId,
+                        hiddenSeverities: hiddenLintSeverities
                     )
                 case .settings:
                     SettingsSidebarContent(

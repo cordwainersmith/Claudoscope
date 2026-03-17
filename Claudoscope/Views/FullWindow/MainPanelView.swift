@@ -15,6 +15,11 @@ struct MainPanelView: View {
     let selectedMcpName: String?
     @Binding var selectedMemoryId: String?
 
+    // Config Health
+    @Binding var selectedLintResultId: String?
+    @Binding var hiddenLintSeverities: Set<LintSeverity>
+    let selectedProjectId: String?
+
     // Settings
     @Binding var selectedSettingsSection: String?
 
@@ -68,6 +73,19 @@ struct MainPanelView: View {
                 MemoryMainPanelView(
                     memoryFiles: store.memoryFiles,
                     selectedMemoryId: $selectedMemoryId
+                )
+            case .configHealth:
+                ConfigHealthMainPanelView(
+                    lintResults: store.lintResults,
+                    lintSummary: store.lintSummary,
+                    isLoading: store.lintLoading,
+                    selectedResultId: $selectedLintResultId,
+                    hiddenSeverities: $hiddenLintSeverities,
+                    onRescan: {
+                        Task {
+                            await store.runConfigLint(projectId: selectedProjectId)
+                        }
+                    }
                 )
             case .settings:
                 SettingsMainPanelView(selectedSection: $selectedSettingsSection)

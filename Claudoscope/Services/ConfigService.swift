@@ -595,7 +595,7 @@ actor ConfigService {
         )
     }
 
-    private func decodeProjectPath(_ projectId: String) -> String? {
+    func decodeProjectPath(_ projectId: String) -> String? {
         guard projectId.hasPrefix("-") else { return nil }
         let segments = projectId.dropFirst().split(separator: "-", omittingEmptySubsequences: false).map(String.init)
         guard !segments.isEmpty else { return nil }

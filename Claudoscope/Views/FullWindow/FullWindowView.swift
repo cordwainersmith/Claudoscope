@@ -18,6 +18,10 @@ struct FullWindowView: View {
     @State private var selectedMemoryId: String?
     @State private var selectedMemoryProjectId: String? // nil = global
 
+    // Config Health state
+    @State private var selectedLintResultId: String?
+    @State private var hiddenLintSeverities: Set<LintSeverity> = []
+
     // Settings state
     @State private var selectedSettingsSection: String?
 
@@ -40,7 +44,9 @@ struct FullWindowView: View {
                 selectedMcpName: $selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
                 selectedMemoryProjectId: $selectedMemoryProjectId,
-                selectedSettingsSection: $selectedSettingsSection
+                selectedSettingsSection: $selectedSettingsSection,
+                selectedLintResultId: $selectedLintResultId,
+                hiddenLintSeverities: hiddenLintSeverities
             )
 
             Divider()
@@ -54,6 +60,9 @@ struct FullWindowView: View {
                 selectedSkillName: $selectedSkillName,
                 selectedMcpName: selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
+                selectedLintResultId: $selectedLintResultId,
+                hiddenLintSeverities: $hiddenLintSeverities,
+                selectedProjectId: selectedProjectId,
                 selectedSettingsSection: $selectedSettingsSection
             )
         }
@@ -105,6 +114,8 @@ struct FullWindowView: View {
             case .memory:
                 await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
                 await store.loadConfig(projectId: selectedProjectId)
+            case .configHealth:
+                await store.runConfigLint(projectId: selectedProjectId)
             case .hooks, .commands, .mcps, .skills, .settings:
                 await store.loadConfig(projectId: selectedProjectId)
             default:

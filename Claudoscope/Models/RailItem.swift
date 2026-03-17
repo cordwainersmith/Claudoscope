@@ -13,6 +13,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     case mcps
     case skills
     case memory
+    case configHealth
 
     // Pinned bottom
     case settings
@@ -27,8 +28,9 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .commands:  return "terminal"
         case .mcps:      return "point.3.connected.trianglepath.dotted"
         case .skills:    return "star"
-        case .memory:    return "brain"
-        case .settings:  return "gear"
+        case .memory:       return "brain"
+        case .configHealth: return "checkmark.shield"
+        case .settings:     return "gear"
         }
     }
 
@@ -42,11 +44,12 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .commands:  return "Commands"
         case .mcps:      return "MCPs"
         case .skills:    return "Skills"
-        case .memory:    return "Memory"
-        case .settings:  return "Settings"
+        case .memory:       return "Memory"
+        case .configHealth: return "Health"
+        case .settings:     return "Settings"
         }
     }
 
     static var primaryItems: [RailItem] { [.analytics, .sessions, .plans, .timeline] }
-    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .memory] }
+    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .memory, .configHealth] }
 }
