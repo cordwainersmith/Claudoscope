@@ -53,7 +53,7 @@ private struct RailButton: View {
                     .font(.system(size: 13))
                     .frame(width: 28, height: 22)
                 Text(item.label)
-                    .font(.system(size: 9))
+                    .font(Typography.caption)
                     .lineLimit(1)
             }
             .frame(width: 48, height: 40)
@@ -63,5 +63,6 @@ private struct RailButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(item.label == "MCPs" ? "MCP Servers (Model Context Protocol)" : item.label)
     }
 }

@@ -101,6 +101,14 @@ struct ChatView: View {
                 }
 
                 Color.clear.frame(height: 0).id("chat-bottom")
+
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: ScrollBottomPreferenceKey.self,
+                        value: geo.frame(in: .named("chatScroll")).maxY
+                    )
+                }
+                .frame(height: 0)
             }
             .padding(24)
             .background(
@@ -115,7 +123,9 @@ struct ChatView: View {
         .coordinateSpace(name: "chatScroll")
         .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
             isNearTop = offset > -50
-            isNearBottom = false
+        }
+        .onPreferenceChange(ScrollBottomPreferenceKey.self) { bottomY in
+            isNearBottom = bottomY < 50
         }
     }
 
@@ -146,26 +156,30 @@ struct ChatView: View {
                     withAnimation { proxy.scrollTo("chat-top", anchor: .top) }
                 } label: {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.bodyMedium)
                         .frame(width: 32, height: 32)
                         .background(.ultraThinMaterial)
                         .clipShape(Circle())
                         .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Scroll to top")
             }
 
-            Button {
-                withAnimation { proxy.scrollTo("chat-bottom", anchor: .bottom) }
-            } label: {
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 32, height: 32)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            if !isNearBottom {
+                Button {
+                    withAnimation { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                } label: {
+                    Image(systemName: "arrow.down")
+                        .font(Typography.bodyMedium)
+                        .frame(width: 32, height: 32)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Scroll to bottom")
             }
-            .buttonStyle(.plain)
         }
         .padding(16)
     }
@@ -205,7 +219,7 @@ struct ChatSearchBar: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .font(Typography.body)
                 .foregroundStyle(.secondary)
 
             TextField("Search in conversation...", text: $searchText)
@@ -217,7 +231,7 @@ struct ChatSearchBar: View {
 
             if !searchText.isEmpty {
                 Text(matchCount == 0 ? "No matches" : "\(currentMatchIndex + 1) of \(matchCount)")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Typography.code)
                     .foregroundStyle(.secondary)
 
                 Button { onNavigate(.previous) } label: {
@@ -243,7 +257,7 @@ struct ChatSearchBar: View {
                     currentMatchIndex = 0
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -261,6 +275,13 @@ struct ChatSearchBar: View {
 // MARK: - Scroll Offset Preference Key
 
 private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ScrollBottomPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
@@ -392,7 +413,7 @@ struct AssistantMessageView: View {
                 if let model = modelName {
                     let family = getModelFamily(model)
                     Text(family)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(Typography.caption)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(.purple.opacity(0.1))
@@ -405,8 +426,8 @@ struct AssistantMessageView: View {
                     let inTok = usage.inputTokens ?? 0
                     let outTok = usage.outputTokens ?? 0
                     if inTok + outTok > 0 {
-                        Text("\(formatTokens(inTok))in / \(formatTokens(outTok))out")
-                            .font(.system(size: 10, design: .monospaced))
+                        Text("\(formatTokens(inTok)) in / \(formatTokens(outTok)) out")
+                            .font(Typography.codeSmall)
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -469,11 +490,14 @@ struct ThinkingBlockView: View {
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .frame(maxHeight: 200)
+            ScrollView {
+                Text(text)
+                    .font(Typography.body)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 400)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "brain")
@@ -569,11 +593,11 @@ struct ToolCallBlockView: View {
                         .foregroundStyle(categoryColor)
 
                     Text(toolName)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.bodyMedium)
 
                     if let arg = primaryArg {
                         Text(arg)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(Typography.code)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
@@ -597,7 +621,7 @@ struct ToolCallBlockView: View {
                 Divider()
                 ScrollView {
                     Text(result)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Typography.code)
                         .foregroundStyle(isError ? .red : .secondary)
                         .textSelection(.enabled)
                         .padding(8)
@@ -632,13 +656,14 @@ struct CompactionDivider: View {
             Rectangle()
                 .fill(.orange.opacity(0.3))
                 .frame(height: 1)
-            Text("context compacted")
+            Text("Context Compacted")
                 .font(.system(size: 10))
                 .foregroundStyle(.orange)
             Rectangle()
                 .fill(.orange.opacity(0.3))
                 .frame(height: 1)
         }
+        .help("Earlier messages were summarized to free up context window")
         .padding(.vertical, 8)
     }
 }

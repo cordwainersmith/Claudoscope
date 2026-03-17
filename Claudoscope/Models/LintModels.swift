@@ -69,9 +69,11 @@ struct LintResult: Identifiable, Sendable {
     let message: String
     let fix: String?
     let displayPath: String?
+    let contextLines: [String]?
+    let unmaskedSecret: String?
 
-    init(severity: LintSeverity, checkId: LintCheckId, filePath: String, line: Int? = nil, message: String, fix: String? = nil, displayPath: String? = nil) {
-        self.id = "\(checkId.rawValue)-\(filePath)-\(line ?? 0)"
+    init(severity: LintSeverity, checkId: LintCheckId, filePath: String, line: Int? = nil, message: String, fix: String? = nil, displayPath: String? = nil, contextLines: [String]? = nil, unmaskedSecret: String? = nil) {
+        self.id = "\(checkId.rawValue)-\(filePath)-\(line ?? 0)-\(message.hash)"
         self.severity = severity
         self.checkId = checkId
         self.filePath = filePath
@@ -79,6 +81,8 @@ struct LintResult: Identifiable, Sendable {
         self.message = message
         self.fix = fix
         self.displayPath = displayPath
+        self.contextLines = contextLines
+        self.unmaskedSecret = unmaskedSecret
     }
 }
 

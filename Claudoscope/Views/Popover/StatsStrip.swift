@@ -9,7 +9,7 @@ struct StatsStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Today")
-                .font(.system(size: 11, weight: .medium))
+                .font(Typography.sectionLabel)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
                 .tracking(0.5)
@@ -33,7 +33,7 @@ private struct StatItem: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.system(size: 16, weight: .medium, design: .monospaced))
+                .font(Typography.displaySmall)
             Text(label)
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)

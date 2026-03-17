@@ -24,7 +24,7 @@ struct PlansSidebarContent: View {
                     .font(.system(size: 24))
                     .foregroundStyle(.quaternary)
                 Text("No plans found")
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.tertiary)
                 Spacer()
             }
@@ -57,14 +57,14 @@ private struct PlanRow: View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(plan.title)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .lineLimit(2)
                     .foregroundStyle(isSelected ? .white : .primary)
 
                 HStack(spacing: 4) {
                     if let projectHint = plan.projectHint {
                         Text(projectHint)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(Typography.caption)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(.quaternary))
@@ -72,7 +72,7 @@ private struct PlanRow: View {
                     }
 
                     if let date = plan.createdAt {
-                        Text(formatRelativePlanTime(date))
+                        Text(formatRelativeDate(date))
                             .font(.system(size: 10))
                     }
 
@@ -128,9 +128,13 @@ struct PlansMainPanelView: View {
                 Button {
                     selectedPlanFilename = nil
                 } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("Plans")
+                            .font(Typography.body)
+                    }
+                    .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
 
@@ -161,39 +165,3 @@ struct PlansMainPanelView: View {
     }
 }
 
-// MARK: - Helpers
-
-private func formatRelativePlanTime(_ date: Date) -> String {
-    let now = Date()
-    let interval = now.timeIntervalSince(date)
-
-    if interval < 60 {
-        return "just now"
-    } else if interval < 3600 {
-        let minutes = Int(interval / 60)
-        return "\(minutes)m ago"
-    } else if interval < 86400 {
-        let hours = Int(interval / 3600)
-        return "\(hours)h ago"
-    } else if interval < 604800 {
-        let days = Int(interval / 86400)
-        return "\(days)d ago"
-    } else {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .short
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
-    }
-}
-
-private func formatFileSize(_ bytes: Int) -> String {
-    if bytes < 1024 {
-        return "\(bytes) B"
-    } else if bytes < 1024 * 1024 {
-        let kb = Double(bytes) / 1024.0
-        return String(format: "%.1f KB", kb)
-    } else {
-        let mb = Double(bytes) / (1024.0 * 1024.0)
-        return String(format: "%.1f MB", mb)
-    }
-}

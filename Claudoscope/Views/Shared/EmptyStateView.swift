@@ -16,7 +16,7 @@ struct EmptyStateView: View {
                 .foregroundStyle(.secondary)
 
             Text(message)
-                .font(.system(size: 12))
+                .font(Typography.body)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 240)

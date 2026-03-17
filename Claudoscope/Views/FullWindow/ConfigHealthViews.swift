@@ -40,14 +40,14 @@ struct ConfigHealthSidebarContent: View {
                 ProgressView()
                     .controlSize(.small)
                 Text("Scanning...")
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.tertiary)
                 Spacer()
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 40)
         } else if filtered.isEmpty {
-            HealthEmptyList(
+            SidebarEmptyStateView(
                 icon: "checkmark.shield",
                 text: lintResults.isEmpty ? "No issues found" : "No matching results"
             )
@@ -138,7 +138,7 @@ private struct HealthFileGroup: View {
                         .frame(width: 12)
 
                     Text(displayName)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.bodyMedium)
                         .lineLimit(1)
 
                     Spacer()
@@ -179,9 +179,9 @@ private struct HealthResultRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
-                Circle()
-                    .fill(colorForSeverity(result.severity))
-                    .frame(width: 7, height: 7)
+                Image(systemName: severityIcon(result.severity))
+                    .font(.system(size: 9))
+                    .foregroundStyle(colorForSeverity(result.severity))
 
                 Text(result.checkId.rawValue)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
@@ -298,7 +298,7 @@ private struct HealthOverviewView: View {
                 // Header row
                 HStack(spacing: 12) {
                     Text("Config Health")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(Typography.panelTitle)
 
                     Spacer()
 
@@ -370,7 +370,7 @@ private struct HealthOverviewView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     if visibleResults.isEmpty {
                         Text("All severities are hidden")
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 40)
@@ -407,7 +407,7 @@ private struct HealthOverviewView: View {
 
     @ViewBuilder
     private var byFileContent: some View {
-        Text("ALL ISSUES")
+        Text("ISSUES BY FILE")
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.tertiary)
 
@@ -443,11 +443,6 @@ private struct HealthScoreCard: View {
         return "Poor"
     }
 
-    private var totalFiles: Int {
-        // Approximate unique file count from the summary counts
-        summary.errorCount + summary.warningCount + summary.infoCount
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Health Score")
@@ -455,14 +450,19 @@ private struct HealthScoreCard: View {
                 .foregroundStyle(.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(label)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(Typography.panelTitle)
                     .foregroundStyle(healthScoreColor(summary.healthScore))
                 Text("\(percentage)%")
                     .font(.system(size: 13, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
-            if totalFiles > 0 {
-                Text("\(summary.errorCount) errors, \(summary.warningCount) warnings")
+            let totalIssues = summary.errorCount + summary.warningCount + summary.infoCount
+            if totalIssues > 0 {
+                Text("\(totalIssues) issues found")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text("All checks passed")
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
             }
@@ -506,7 +506,7 @@ private struct HealthSeverityStatCard: View {
                         .fill(color)
                         .frame(width: 8, height: 8)
                     Text("\(count)")
-                        .font(.system(size: 22, weight: .medium, design: .monospaced))
+                        .font(Typography.displayLarge)
                         .foregroundStyle(count > 0 ? color : .primary)
                 }
             }
@@ -555,9 +555,9 @@ private struct HealthRuleGroupRow: View {
                 }
             } label: {
                 HStack(spacing: 10) {
-                    Circle()
-                        .fill(colorForSeverity(severity))
-                        .frame(width: 8, height: 8)
+                    Image(systemName: severityIcon(severity))
+                        .font(.system(size: 10))
+                        .foregroundStyle(colorForSeverity(severity))
 
                     Text(checkId.rawValue)
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -568,7 +568,7 @@ private struct HealthRuleGroupRow: View {
                         .clipShape(RoundedRectangle(cornerRadius: 3))
 
                     Text(ruleDescription(for: checkId))
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .lineLimit(1)
                         .foregroundStyle(.primary)
 
@@ -652,9 +652,9 @@ private struct HealthOverviewResultRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 10) {
-                Circle()
-                    .fill(colorForSeverity(result.severity))
-                    .frame(width: 8, height: 8)
+                Image(systemName: severityIcon(result.severity))
+                    .font(.system(size: 10))
+                    .foregroundStyle(colorForSeverity(result.severity))
 
                 Text(result.checkId.rawValue)
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -665,7 +665,7 @@ private struct HealthOverviewResultRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 3))
 
                 Text(displayMessage(for: result))
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .lineLimit(1)
                     .foregroundStyle(.primary)
 
@@ -680,7 +680,7 @@ private struct HealthOverviewResultRow: View {
 
                 if let line = result.line {
                     Text("L\(line)")
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(Typography.codeSmall)
                         .foregroundStyle(.tertiary)
                 }
 
@@ -708,6 +708,11 @@ private struct HealthResultDetailView: View {
     let result: LintResult
     var onNavigateToSession: ((String, String) -> Void)?
     let onBack: () -> Void
+    @State private var showUnmasked = false
+
+    private var isSecretResult: Bool {
+        result.checkId.rawValue.hasPrefix("SEC")
+    }
 
     private var isSessionResult: Bool {
         result.filePath.hasPrefix("sessions/")
@@ -729,7 +734,7 @@ private struct HealthResultDetailView: View {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 11, weight: .medium))
                         Text("Back to overview")
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                     }
                     .foregroundStyle(.secondary)
                 }
@@ -788,7 +793,7 @@ private struct HealthResultDetailView: View {
                                     Image(systemName: "arrow.right.circle")
                                         .font(.system(size: 11))
                                     Text("View Session")
-                                        .font(.system(size: 12, weight: .medium))
+                                        .font(Typography.bodyMedium)
                                 }
                                 .foregroundStyle(Color.accentColor)
                             }
@@ -809,15 +814,83 @@ private struct HealthResultDetailView: View {
 
                 // Message card
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("MESSAGE")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.tertiary)
+                    HStack {
+                        Text("MESSAGE")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.tertiary)
+
+                        Spacer()
+
+                        if isSecretResult, result.unmaskedSecret != nil {
+                            Button {
+                                showUnmasked.toggle()
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: showUnmasked ? "eye.slash" : "eye")
+                                        .font(.system(size: 11))
+                                    Text(showUnmasked ? "Hide" : "Reveal")
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 10) {
                         Text(displayMessage(for: result))
                             .font(.system(size: 13))
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
+
+                        // Show unmasked secret value
+                        if isSecretResult, showUnmasked, let secret = result.unmaskedSecret {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.shield")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.red)
+                                Text(secret)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(.red)
+                                    .textSelection(.enabled)
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.red.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(Color.red.opacity(0.2), lineWidth: 1)
+                            )
+                        }
+
+                        // Context lines from the JSONL
+                        if let context = result.contextLines, !context.isEmpty {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(Array(context.enumerated()), id: \.offset) { idx, line in
+                                    Text(line)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(3)
+                                        .textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(idx == context.count - 1 ? Color.orange.opacity(0.06) : .clear)
+
+                                    if idx < context.count - 1 {
+                                        Divider()
+                                            .padding(.horizontal, 10)
+                                    }
+                                }
+                            }
+                            .background(AnyShapeStyle(.quaternary).opacity(0.5))
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .strokeBorder(.quaternary, lineWidth: 1)
+                            )
+                        }
 
                         let badges = sessionBadges(for: result)
                         if !badges.isEmpty {
@@ -843,10 +916,10 @@ private struct HealthResultDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.cardBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(.quaternary, lineWidth: 1)
-                        )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(.quaternary, lineWidth: 1)
+                    )
                 }
                 .padding(.horizontal, 24)
 
@@ -863,7 +936,7 @@ private struct HealthResultDetailView: View {
                                 .foregroundStyle(.yellow)
 
                             Text(fix)
-                                .font(.system(size: 12))
+                                .font(Typography.body)
                                 .foregroundStyle(.primary)
                                 .textSelection(.enabled)
                         }
@@ -889,11 +962,11 @@ private struct SeverityBadge: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Circle()
-                .fill(colorForSeverity(severity))
-                .frame(width: 8, height: 8)
+            Image(systemName: severityIcon(severity))
+                .font(.system(size: 10))
+                .foregroundStyle(colorForSeverity(severity))
             Text(severity.rawValue.capitalized)
-                .font(.system(size: 12, weight: .medium))
+                .font(Typography.bodyMedium)
                 .foregroundStyle(colorForSeverity(severity))
         }
         .padding(.horizontal, 10)
@@ -905,31 +978,19 @@ private struct SeverityBadge: View {
 
 // MARK: - Helpers
 
-private struct HealthEmptyList: View {
-    let icon: String
-    let text: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundStyle(.quaternary)
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 40)
-    }
-}
-
 private func colorForSeverity(_ severity: LintSeverity) -> Color {
     switch severity {
     case .error: return .red
     case .warning: return .orange
     case .info: return .blue
+    }
+}
+
+private func severityIcon(_ severity: LintSeverity) -> String {
+    switch severity {
+    case .error: return "exclamationmark.triangle.fill"
+    case .warning: return "exclamationmark.diamond.fill"
+    case .info: return "info.circle.fill"
     }
 }
 

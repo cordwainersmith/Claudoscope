@@ -7,7 +7,7 @@ struct RecentSessionsList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("RECENT")
-                .font(.system(size: 10, weight: .medium))
+                .font(Typography.sectionLabel)
                 .foregroundStyle(.secondary)
                 .tracking(0.5)
                 .padding(.horizontal, 16)
@@ -20,7 +20,7 @@ struct RecentSessionsList: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(session.title)
-                                .font(.system(size: 12))
+                                .font(Typography.body)
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
 
@@ -38,7 +38,7 @@ struct RecentSessionsList: View {
                                 .foregroundStyle(.tertiary)
 
                             Text(formatCost(session.estimatedCost))
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(Typography.codeSmall)
                                 .foregroundStyle(.secondary)
                         }
                     }

@@ -1108,15 +1108,23 @@ actor ConfigLinterService {
         return "\(prefix)****\(suffix)"
     }
 
+    /// Truncate and clean a JSONL line for display as context
+    static func sanitizeContextLine(_ line: String) -> String {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= 200 { return trimmed }
+        return String(trimmed.prefix(200)) + "..."
+    }
+
     struct SecretFinding: Sendable {
         let checkId: LintCheckId
         let patternName: String
         let matchedText: String
+        let lineIndex: Int?
     }
 
     func scanLinesForSecrets(_ lines: [String]) -> [SecretFinding] {
         var findings: [SecretFinding] = []
-        for line in lines {
+        for (lineIndex, line) in lines.enumerated() {
             guard line.count <= 200_000 else { continue }
             let nsLine = line as NSString
             let range = NSRange(location: 0, length: nsLine.length)
@@ -1177,7 +1185,8 @@ actor ConfigLinterService {
                 findings.append(SecretFinding(
                     checkId: pattern.checkId,
                     patternName: pattern.name,
-                    matchedText: matchedText
+                    matchedText: matchedText,
+                    lineIndex: lineIndex
                 ))
             }
         }
@@ -1249,13 +1258,24 @@ actor ConfigLinterService {
                     patternCounts[finding.checkId] = count + 1
                     let masked = Self.maskSecret(finding.matchedText)
 
+                    // Capture context: the line before and the line containing the secret
+                    var context: [String] = []
+                    if let idx = finding.lineIndex {
+                        if idx > 0 {
+                            context.append(Self.sanitizeContextLine(lines[idx - 1]))
+                        }
+                        context.append(Self.sanitizeContextLine(lines[idx]))
+                    }
+
                     results.append(LintResult(
                         severity: Self.secretPatterns.first(where: { $0.checkId == finding.checkId })?.severity ?? .warning,
                         checkId: finding.checkId,
                         filePath: syntheticPath,
                         message: "\(finding.patternName) detected: \(masked)",
                         fix: "Rotate this credential immediately. Avoid pasting secrets into Claude Code sessions. Use environment variables or secret managers instead.",
-                        displayPath: displayTitle
+                        displayPath: displayTitle,
+                        contextLines: context.isEmpty ? nil : context,
+                        unmaskedSecret: finding.matchedText
                     ))
                 }
             }

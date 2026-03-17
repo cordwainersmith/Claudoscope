@@ -15,6 +15,7 @@ struct SidebarView: View {
     @Binding var selectedSettingsSection: String?
     @Binding var selectedLintResultId: String?
     let hiddenLintSeverities: Set<LintSeverity>
+    @Binding var selectedTimelineDay: String?
     @State private var filterText = ""
 
     var body: some View {
@@ -24,9 +25,9 @@ struct SidebarView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
-                TextField("Filter...", text: $filterText)
+                TextField("Filter \(rail.label.lowercased())...", text: $filterText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -50,6 +51,7 @@ struct SidebarView: View {
                         projectCosts: store.sidebarAnalyticsData.projectCosts,
                         totalCost: store.sidebarAnalyticsData.totalCost,
                         filterText: filterText,
+                        timeRangeLabel: store.analyticsTimeRange.rawValue,
                         selectedProjectId: Binding(
                             get: { store.selectedAnalyticsProjectId },
                             set: { newValue in
@@ -67,7 +69,8 @@ struct SidebarView: View {
                 case .timeline:
                     TimelineSidebarContent(
                         filterText: filterText,
-                        entries: store.timelineEntries
+                        entries: store.timelineEntries,
+                        selectedDay: $selectedTimelineDay
                     )
                 case .hooks:
                     HooksSidebarContent(
@@ -118,6 +121,7 @@ struct SidebarView: View {
                 }
             }
         }
+        .onChange(of: rail) { _, _ in filterText = "" }
         .frame(width: 240)
         .background(.bar.opacity(0.5))
     }
@@ -185,7 +189,7 @@ private struct ProjectGroup: View {
                         .frame(width: 12)
 
                     Text(project.name)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.bodyMedium)
                         .lineLimit(1)
 
                     Spacer()
@@ -223,12 +227,13 @@ private struct SessionRow: View {
     let session: SessionSummary
     let isSelected: Bool
     let onSelect: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? .white : .primary)
 
@@ -236,7 +241,7 @@ private struct SessionRow: View {
                     Text(formatRelativeTime(session.lastTimestamp))
                         .font(.system(size: 10))
 
-                    Text(".")
+                    Text("\u{00B7}")
                         .font(.system(size: 10))
 
                     Text("\(session.messageCount) msgs")
@@ -246,7 +251,7 @@ private struct SessionRow: View {
                         let family = getModelFamily(model)
                         Spacer()
                         Text(family)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(Typography.micro)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(.quaternary))
@@ -259,12 +264,13 @@ private struct SessionRow: View {
             .padding(.leading, 18)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isSelected ? Color.accentColor : .clear)
+            .background(isSelected ? Color.accentColor : (isHovered ? Color.primary.opacity(0.04) : .clear))
             .clipShape(RoundedRectangle(cornerRadius: 4))
             .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -274,6 +280,7 @@ private struct AnalyticsSidebarContent: View {
     let projectCosts: [ProjectCost]
     let totalCost: Double
     let filterText: String
+    let timeRangeLabel: String
     @Binding var selectedProjectId: String?
 
     var filtered: [ProjectCost] {
@@ -292,8 +299,8 @@ private struct AnalyticsSidebarContent: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
             // Section header
-            Text("COST BY PROJECT (30D)")
-                .font(.system(size: 10, weight: .medium))
+            Text("COST BY PROJECT (\(timeRangeLabel.uppercased()))")
+                .font(Typography.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
@@ -334,6 +341,7 @@ private struct AnalyticsProjectRow: View {
     let barColor: Color
     let isSelected: Bool
     let onSelect: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: onSelect) {
@@ -345,7 +353,7 @@ private struct AnalyticsProjectRow: View {
                         .lineLimit(1)
                     Spacer()
                     Text(formatCost(cost))
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Typography.code)
                         .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                 }
 
@@ -358,9 +366,10 @@ private struct AnalyticsProjectRow: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(isSelected ? Color.accentColor.opacity(0.08) : .clear)
+            .background(isSelected ? Color.accentColor.opacity(0.08) : (isHovered ? Color.primary.opacity(0.04) : .clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }

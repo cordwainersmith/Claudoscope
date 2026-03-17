@@ -30,7 +30,7 @@ final class SecretAlertController {
             backing: .buffered,
             defer: false
         )
-        panel.title = "Secret Detected"
+        panel.title = "Security Alert"
         panel.contentView = hostingView
         panel.isReleasedWhenClosed = false
         panel.level = .floating
@@ -80,9 +80,9 @@ private struct SecretAlertView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Secret Detected")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Typography.sectionTitle)
                     Text(alert.patternName)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.secondary)
                 }
 

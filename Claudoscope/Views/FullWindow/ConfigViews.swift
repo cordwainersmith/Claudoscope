@@ -10,36 +10,6 @@ private func maskEnvValue(_ value: String) -> String {
     return "\(prefix)***\(suffix)"
 }
 
-/// Format byte count for display.
-private func formatConfigFileSize(_ bytes: Int) -> String {
-    if bytes < 1024 {
-        return "\(bytes) B"
-    } else if bytes < 1024 * 1024 {
-        let kb = Double(bytes) / 1024.0
-        return String(format: "%.1f KB", kb)
-    } else {
-        let mb = Double(bytes) / (1024.0 * 1024.0)
-        return String(format: "%.1f MB", mb)
-    }
-}
-
-/// Card container with cardBackground and quaternary border.
-private struct ConfigCard<Content: View>: View {
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        content()
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.cardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(.quaternary, lineWidth: 1)
-            )
-    }
-}
-
 /// Section header styled consistently.
 private struct ConfigSectionHeader: View {
     let title: String
@@ -70,7 +40,7 @@ struct HooksSidebarContent: View {
 
     var body: some View {
         if filtered.isEmpty {
-            ConfigEmptyList(icon: "arrow.triangle.turn.up.right.diamond", text: "No hooks configured")
+            SidebarEmptyStateView(icon: "arrow.triangle.turn.up.right.diamond", text: "No hooks configured")
         } else {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(filtered) { group in
@@ -102,7 +72,7 @@ private struct HookEventRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(group.event)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .lineLimit(1)
                         .foregroundStyle(isSelected ? .white : .primary)
 
@@ -191,7 +161,7 @@ struct HooksMainPanelView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(group.rules) { rule in
-                        ConfigCard {
+                        CardView {
                             VStack(alignment: .leading, spacing: 10) {
                                 // Matcher
                                 HStack(spacing: 6) {
@@ -258,7 +228,7 @@ struct CommandsSidebarContent: View {
 
     var body: some View {
         if filtered.isEmpty {
-            ConfigEmptyList(icon: "terminal", text: "No commands found")
+            SidebarEmptyStateView(icon: "terminal", text: "No commands found")
         } else {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(filtered) { cmd in
@@ -284,7 +254,7 @@ private struct CommandRow: View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("/\(command.name)")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Typography.bodyMedium)
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? .white : .primary)
 
@@ -297,7 +267,7 @@ private struct CommandRow: View {
 
                     Spacer()
 
-                    Text(formatConfigFileSize(command.sizeBytes))
+                    Text(formatFileSize(command.sizeBytes))
                         .font(.system(size: 10))
                 }
                 .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
@@ -360,7 +330,7 @@ struct CommandsMainPanelView: View {
 
                 Spacer()
 
-                Text(formatConfigFileSize(command.sizeBytes))
+                Text(formatFileSize(command.sizeBytes))
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
             }
@@ -376,7 +346,7 @@ struct CommandsMainPanelView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                     Text(desc)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 24)
@@ -416,7 +386,7 @@ struct SkillsSidebarContent: View {
 
     var body: some View {
         if filtered.isEmpty {
-            ConfigEmptyList(icon: "star", text: "No skills found")
+            SidebarEmptyStateView(icon: "star", text: "No skills found")
         } else {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(filtered) { skill in
@@ -442,7 +412,7 @@ private struct SkillRow: View {
         Button(action: onSelect) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("/\(skill.name)")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Typography.bodyMedium)
                     .lineLimit(1)
                     .foregroundStyle(isSelected ? .white : .primary)
 
@@ -459,7 +429,7 @@ private struct SkillRow: View {
 
                     Spacer()
 
-                    Text(formatConfigFileSize(skill.sizeBytes))
+                    Text(formatFileSize(skill.sizeBytes))
                         .font(.system(size: 10))
                 }
                 .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
@@ -522,7 +492,7 @@ struct SkillsMainPanelView: View {
 
                 Spacer()
 
-                Text(formatConfigFileSize(skill.sizeBytes))
+                Text(formatFileSize(skill.sizeBytes))
                     .font(.system(size: 10))
                     .foregroundStyle(.tertiary)
             }
@@ -539,7 +509,7 @@ struct SkillsMainPanelView: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                     Text(desc)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 24)
@@ -643,7 +613,7 @@ private struct SkillMetadataCard: View {
                             .frame(width: 100, alignment: .leading)
 
                         Text(entry.value)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(Typography.code)
                             .foregroundStyle(.primary)
                             .textSelection(.enabled)
                     }
@@ -686,7 +656,7 @@ struct McpsSidebarContent: View {
 
     var body: some View {
         if filtered.isEmpty {
-            ConfigEmptyList(icon: "point.3.connected.trianglepath.dotted", text: "No MCP servers found")
+            SidebarEmptyStateView(icon: "point.3.connected.trianglepath.dotted", text: "No MCP servers found")
         } else {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(filtered) { server in
@@ -718,12 +688,13 @@ private struct McpServerRow: View {
             HStack(spacing: 8) {
                 // Status dot
                 Circle()
-                    .fill(isSelected ? .white : .green)
+                    .fill(isSelected ? .white : .secondary)
                     .frame(width: 6, height: 6)
+                    .help("Configured in settings.json")
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(server.name)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .lineLimit(1)
                         .foregroundStyle(isSelected ? .white : .primary)
 
@@ -736,7 +707,7 @@ private struct McpServerRow: View {
 
                 if let level = server.level {
                     Text(level)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(Typography.micro)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(.quaternary))
@@ -836,7 +807,7 @@ private struct McpServerCard: View {
 
                         HStack(spacing: 6) {
                             Text(serverType)
-                                .font(.system(size: 10, weight: .medium))
+                                .font(Typography.caption)
                                 .foregroundStyle(server.url != nil ? .blue : .green)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1)
@@ -854,7 +825,7 @@ private struct McpServerCard: View {
                     Spacer()
 
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(Typography.caption)
                         .foregroundStyle(.tertiary)
                         .rotationEffect(isExpanded ? .degrees(180) : .zero)
                 }
@@ -865,7 +836,7 @@ private struct McpServerCard: View {
                     Divider().padding(.horizontal, 14)
 
                     Text(connectionString)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Typography.code)
                         .foregroundStyle(.secondary)
                         .lineLimit(isExpanded ? nil : 1)
                         .truncationMode(.middle)
@@ -882,17 +853,17 @@ private struct McpServerCard: View {
                         if !server.args.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("ARGUMENTS")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(Typography.caption)
                                     .foregroundStyle(.tertiary)
 
                                 ForEach(Array(server.args.enumerated()), id: \.offset) { index, arg in
                                     HStack(spacing: 6) {
                                         Text("\(index)")
-                                            .font(.system(size: 10, design: .monospaced))
+                                            .font(Typography.codeSmall)
                                             .foregroundStyle(.tertiary)
                                             .frame(width: 16, alignment: .trailing)
                                         Text(arg)
-                                            .font(.system(size: 11, design: .monospaced))
+                                            .font(Typography.code)
                                             .textSelection(.enabled)
                                             .lineLimit(2)
                                     }
@@ -903,17 +874,17 @@ private struct McpServerCard: View {
                         if !server.env.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("ENVIRONMENT")
-                                    .font(.system(size: 10, weight: .medium))
+                                    .font(Typography.caption)
                                     .foregroundStyle(.tertiary)
 
                                 ForEach(server.env.keys.sorted(), id: \.self) { key in
                                     HStack(spacing: 6) {
                                         Text(key)
-                                            .font(.system(size: 11, design: .monospaced))
+                                            .font(Typography.code)
                                             .lineLimit(1)
                                         Spacer()
                                         Text(maskEnvValue(server.env[key] ?? ""))
-                                            .font(.system(size: 11, design: .monospaced))
+                                            .font(Typography.code)
                                             .foregroundStyle(.tertiary)
                                     }
                                 }
@@ -1079,7 +1050,7 @@ struct MemoryMainPanelView: View {
                         Spacer()
 
                         if let sizeBytes = file.sizeBytes {
-                            Text(formatConfigFileSize(sizeBytes))
+                            Text(formatFileSize(sizeBytes))
                                 .font(.system(size: 11))
                                 .foregroundStyle(.tertiary)
                         } else {
@@ -1153,7 +1124,7 @@ struct MemoryMainPanelView: View {
                 EmptyStateView(
                     icon: "brain",
                     title: "No memory available",
-                    message: file.path
+                    message: "This memory file doesn't exist yet. It will be created when Claude Code writes memory for this scope."
                 )
             }
         }
@@ -1161,26 +1132,3 @@ struct MemoryMainPanelView: View {
     }
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MARK: - Shared Empty List
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-private struct ConfigEmptyList: View {
-    let icon: String
-    let text: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundStyle(.quaternary)
-            Text(text)
-                .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 40)
-    }
-}

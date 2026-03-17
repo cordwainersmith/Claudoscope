@@ -25,6 +25,9 @@ struct FullWindowView: View {
     // Pending navigation (deferred until after rail change)
     @State private var pendingNavigation: (projectId: String, sessionId: String)?
 
+    // Timeline state
+    @State private var selectedTimelineDay: String?
+
     // Settings state
     @State private var selectedSettingsSection: String?
 
@@ -49,7 +52,8 @@ struct FullWindowView: View {
                 selectedMemoryProjectId: $selectedMemoryProjectId,
                 selectedSettingsSection: $selectedSettingsSection,
                 selectedLintResultId: $selectedLintResultId,
-                hiddenLintSeverities: hiddenLintSeverities
+                hiddenLintSeverities: hiddenLintSeverities,
+                selectedTimelineDay: $selectedTimelineDay
             )
 
             Divider()

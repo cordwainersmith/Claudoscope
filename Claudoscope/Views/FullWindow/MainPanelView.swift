@@ -135,6 +135,7 @@ struct AnalyticsDetailView: View {
                         subtitle: data.totalCacheTokens > 0 ? "+ \(formatTokens(data.totalCacheTokens)) cache" : nil
                     )
                     StatCard(title: "Est. Cost", value: formatCost(data.totalCost), isHighlighted: true)
+                        .help("Estimated from token usage")
                 }
                 .padding(.horizontal, 24)
 
@@ -166,12 +167,12 @@ private struct AnalyticsHeaderView: View {
     var body: some View {
         HStack(spacing: 12) {
             Text("Analytics")
-                .font(.system(size: 18, weight: .medium))
+                .font(Typography.panelTitle)
 
             if let name = selectedProjectName {
                 HStack(spacing: 4) {
                     Text(name)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.bodyMedium)
                     Button(action: onClearProject) {
                         Image(systemName: "xmark")
                             .font(.system(size: 9, weight: .semibold))
@@ -197,29 +198,14 @@ private struct TimeRangePicker: View {
 
     var body: some View {
         @Bindable var store = store
-        HStack(spacing: 0) {
+        Picker("", selection: $store.analyticsTimeRange) {
             ForEach(AnalyticsTimeRange.allCases, id: \.self) { range in
-                Button {
-                    store.analyticsTimeRange = range
-                    store.recomputeAnalytics()
-                } label: {
-                    Text(range.rawValue)
-                        .font(.system(size: 11, weight: .medium))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(store.analyticsTimeRange == range ? Color.accentColor.opacity(0.15) : .clear)
-                        .foregroundStyle(store.analyticsTimeRange == range ? Color.accentColor : .secondary)
-                }
-                .buttonStyle(.plain)
-
-                if range != AnalyticsTimeRange.allCases.last {
-                    Divider().frame(height: 16)
-                }
+                Text(range.rawValue).tag(range)
             }
         }
-        .background(.bar)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary, lineWidth: 1))
+        .pickerStyle(.segmented)
+        .frame(width: 280)
+        .onChange(of: store.analyticsTimeRange) { _, _ in store.recomputeAnalytics() }
 
         if store.analyticsTimeRange == .custom {
             HStack(spacing: 4) {
@@ -248,29 +234,23 @@ struct StatCard: View {
     var isHighlighted: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(value)
-                    .font(.system(size: 22, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isHighlighted ? Color.orange : .primary)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+        CardView {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(value)
+                        .font(Typography.displayLarge)
+                        .foregroundStyle(isHighlighted ? Color.orange : .primary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(.quaternary, lineWidth: 1)
-        )
     }
 }
 
@@ -333,10 +313,12 @@ private struct IOTokensChartView: View {
                     .padding(8)
                 }
             }
+            .frame(maxWidth: 800)
             .padding(16)
             .background(Color.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1))
+            .frame(maxWidth: .infinity)
         }
     }
 }
@@ -387,10 +369,12 @@ private struct CacheTokensChartView: View {
                     .padding(8)
                 }
             }
+            .frame(maxWidth: 800)
             .padding(16)
             .background(Color.cardBackground)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1))
+            .frame(maxWidth: .infinity)
         }
     }
 }
@@ -424,7 +408,7 @@ private struct ChartTooltip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(date)
-                .font(.system(size: 10, weight: .medium))
+                .font(Typography.caption)
                 .foregroundStyle(.secondary)
 
             ForEach(items, id: \.label) { item in
@@ -499,44 +483,41 @@ private struct CostByProjectView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Cost by Project")
-                .font(.system(size: 13, weight: .medium))
+        CardView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Cost by Project")
+                    .font(.system(size: 13, weight: .medium))
 
-            VStack(spacing: 8) {
-                ForEach(Array(topProjects.enumerated()), id: \.element.id) { index, project in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(project.projectName)
-                                .font(.system(size: 12, weight: .medium))
-                                .lineLimit(1)
-                            Spacer()
-                            Text(formatCost(project.totalCost))
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                            if totalCost > 0 {
-                                Text("\(Int((project.totalCost / totalCost) * 100))%")
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.tertiary)
-                                    .frame(width: 30, alignment: .trailing)
+                VStack(spacing: 8) {
+                    ForEach(Array(topProjects.enumerated()), id: \.element.id) { index, project in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(project.projectName)
+                                    .font(Typography.bodyMedium)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(formatCost(project.totalCost))
+                                    .font(Typography.code)
+                                    .foregroundStyle(.secondary)
+                                if totalCost > 0 {
+                                    Text("\(Int((project.totalCost / totalCost) * 100))%")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.tertiary)
+                                        .frame(width: 30, alignment: .trailing)
+                                }
                             }
-                        }
 
-                        GeometryReader { geo in
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(barColors[index % barColors.count].opacity(0.6))
-                                .frame(width: max(4, geo.size.width * (totalCost > 0 ? project.totalCost / totalCost : 0)))
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(barColors[index % barColors.count].opacity(0.6))
+                                    .frame(width: max(4, geo.size.width * (totalCost > 0 ? project.totalCost / totalCost : 0)))
+                            }
+                            .frame(height: 4)
                         }
-                        .frame(height: 4)
                     }
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1))
     }
 }
 
@@ -554,46 +535,48 @@ private struct ModelDistributionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Model Distribution")
-                .font(.system(size: 13, weight: .medium))
+        CardView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Model Distribution")
+                    .font(.system(size: 13, weight: .medium))
 
-            if modelUsage.isEmpty {
-                Text("No data")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, minHeight: 100)
-            } else {
-                HStack(spacing: 24) {
-                    // Donut chart
-                    ZStack {
-                        ForEach(Array(donutSlices().enumerated()), id: \.offset) { index, slice in
-                            DonutSlice(
-                                startAngle: slice.start,
-                                endAngle: slice.end,
-                                color: pieColors[index % pieColors.count]
-                            )
+                if modelUsage.isEmpty {
+                    Text("No data")
+                        .font(Typography.body)
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, minHeight: 100)
+                } else {
+                    HStack(spacing: 24) {
+                        // Donut chart
+                        ZStack {
+                            ForEach(Array(donutSlices().enumerated()), id: \.offset) { index, slice in
+                                DonutSlice(
+                                    startAngle: slice.start,
+                                    endAngle: slice.end,
+                                    color: pieColors[index % pieColors.count]
+                                )
+                            }
+                            Circle()
+                                .fill(.background)
+                                .frame(width: 60, height: 60)
                         }
-                        Circle()
-                            .fill(.background)
-                            .frame(width: 60, height: 60)
-                    }
-                    .frame(width: 100, height: 100)
+                        .frame(width: 100, height: 100)
 
-                    // Legend
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(modelUsage.enumerated()), id: \.element.id) { index, usage in
-                            HStack(spacing: 6) {
-                                Circle()
-                                    .fill(pieColors[index % pieColors.count])
-                                    .frame(width: 8, height: 8)
-                                Text(usage.model)
-                                    .font(.system(size: 12))
-                                Spacer()
-                                if totalTurns > 0 {
-                                    Text(String(format: "%.1f%%", Double(usage.turnCount) / Double(totalTurns) * 100))
-                                        .font(.system(size: 11, design: .monospaced))
-                                        .foregroundStyle(.secondary)
+                        // Legend
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(Array(modelUsage.enumerated()), id: \.element.id) { index, usage in
+                                HStack(spacing: 6) {
+                                    Circle()
+                                        .fill(pieColors[index % pieColors.count])
+                                        .frame(width: 8, height: 8)
+                                    Text(usage.model)
+                                        .font(Typography.body)
+                                    Spacer()
+                                    if totalTurns > 0 {
+                                        Text(String(format: "%.1f%%", Double(usage.turnCount) / Double(totalTurns) * 100))
+                                            .font(Typography.code)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
@@ -601,11 +584,6 @@ private struct ModelDistributionView: View {
                 }
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary, lineWidth: 1))
     }
 
     private func donutSlices() -> [(start: Angle, end: Angle)] {

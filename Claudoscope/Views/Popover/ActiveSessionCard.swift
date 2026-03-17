@@ -8,7 +8,7 @@ struct ActiveSessionsCard: View {
             // Header
             HStack {
                 Text(sessions.count == 1 ? "ACTIVE SESSION" : "ACTIVE SESSIONS \u{00B7} \(sessions.count)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(Typography.sectionLabel)
                     .foregroundStyle(.secondary)
                     .tracking(0.5)
                 Spacer()
@@ -68,7 +68,7 @@ private struct ActiveSessionRow: View {
 
                 if let model = session.primaryModel {
                     Text(getModelFamily(model).capitalized)
-                        .font(.system(size: 9, weight: .medium))
+                        .font(Typography.micro)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
@@ -93,18 +93,19 @@ private struct ActiveSessionRow: View {
 }
 
 private struct PulsingDot: View {
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @State private var isPulsing = false
 
     var body: some View {
         Circle()
             .fill(.green)
             .frame(width: 6, height: 6)
-            .opacity(isPulsing ? 0.4 : 1.0)
+            .opacity(reduceMotion ? 0.7 : (isPulsing ? 0.4 : 1.0))
             .animation(
-                .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
+                reduceMotion ? nil : .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
                 value: isPulsing
             )
-            .onAppear { isPulsing = true }
+            .onAppear { if !reduceMotion { isPulsing = true } }
     }
 }
 

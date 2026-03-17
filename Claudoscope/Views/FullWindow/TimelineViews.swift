@@ -5,6 +5,7 @@ import SwiftUI
 struct TimelineSidebarContent: View {
     let filterText: String
     let entries: [HistoryEntry]
+    @Binding var selectedDay: String?
     var onSelect: ((HistoryEntry) -> Void)?
 
     private var filteredEntries: [HistoryEntry] {
@@ -49,7 +50,7 @@ struct TimelineSidebarContent: View {
                     .font(.system(size: 24))
                     .foregroundStyle(.quaternary)
                 Text("No history found")
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.tertiary)
                 Spacer()
             }
@@ -67,24 +68,33 @@ struct TimelineSidebarContent: View {
 
     @ViewBuilder
     private func daySection(_ dayLabel: String, entries: [HistoryEntry]) -> some View {
-        HStack(spacing: 6) {
-            Text(dayLabel)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+        Button {
+            selectedDay = (selectedDay == dayLabel) ? nil : dayLabel
+        } label: {
+            HStack(spacing: 6) {
+                Text(dayLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(selectedDay == dayLabel ? .white : .secondary)
 
-            Text("\(entries.count)")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(AnyShapeStyle(.quaternary))
-                .clipShape(Capsule())
+                Text("\(entries.count)")
+                    .font(Typography.caption)
+                    .foregroundStyle(selectedDay == dayLabel ? AnyShapeStyle(.white.opacity(0.7)) : AnyShapeStyle(.tertiary))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(selectedDay == dayLabel ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(.quaternary))
+                    .clipShape(Capsule())
 
-            Spacer()
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+            .background(selectedDay == dayLabel ? Color.accentColor : .clear)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .padding(.horizontal, 4)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 4)
+        .buttonStyle(.plain)
 
         ForEach(entries) { entry in
             TimelineSidebarRow(entry: entry) {
@@ -110,19 +120,19 @@ private struct TimelineSidebarRow: View {
         Button(action: onSelect) {
             HStack(alignment: .top, spacing: 6) {
                 Text(timeString)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Typography.code)
                     .foregroundStyle(.tertiary)
                     .frame(width: 36, alignment: .leading)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(entry.display)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .lineLimit(2)
                         .foregroundStyle(.primary)
 
                     if let label = projectLabel(entry.project) {
                         Text(label)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(Typography.caption)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -221,7 +231,7 @@ struct TimelineMainPanelView: View {
                 .foregroundStyle(.primary)
 
             Text("\(count)")
-                .font(.system(size: 10, weight: .medium))
+                .font(Typography.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -256,22 +266,22 @@ struct TimelineMainPanelView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(formatTime(entry.timestamp))
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Typography.code)
                         .foregroundStyle(.tertiary)
 
-                    Text(formatRelativeTime(entry.timestamp))
+                    Text(formatRelativeDate(entry.timestamp))
                         .font(.system(size: 10))
                         .foregroundStyle(.tertiary)
                 }
 
                 Text(entry.display)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
 
                 if let label = projectLabel(entry.project) {
                     Text(label)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(Typography.caption)
                         .foregroundStyle(dotColor)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -297,28 +307,6 @@ struct TimelineMainPanelView: View {
         return formatter.string(from: date)
     }
 
-    private func formatRelativeTime(_ date: Date) -> String {
-        let now = Date()
-        let interval = now.timeIntervalSince(date)
-
-        if interval < 60 {
-            return "just now"
-        } else if interval < 3600 {
-            let minutes = Int(interval / 60)
-            return "\(minutes)m ago"
-        } else if interval < 86400 {
-            let hours = Int(interval / 3600)
-            return "\(hours)h ago"
-        } else if interval < 604800 {
-            let days = Int(interval / 86400)
-            return "\(days)d ago"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .short
-            formatter.timeStyle = .none
-            return formatter.string(from: date)
-        }
-    }
 }
 
 // MARK: - Helpers

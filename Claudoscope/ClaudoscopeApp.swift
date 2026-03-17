@@ -195,7 +195,7 @@ struct MenuBarPopoverContent: View {
                         hasSeenTip = true
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(Typography.micro)
                             .foregroundStyle(.tertiary)
                     }
                     .buttonStyle(.plain)
@@ -207,7 +207,7 @@ struct MenuBarPopoverContent: View {
 
             // Actions
             VStack(spacing: 0) {
-                PopoverMenuButton(label: "Dashboard", systemImage: "macwindow", shortcut: "Cmd+O") {
+                PopoverMenuButton(label: "Dashboard", systemImage: "macwindow", shortcut: "\u{2318}O") {
                     MainWindowController.shared.open(store: store, updateService: updateService)
                 }
 
@@ -231,10 +231,10 @@ struct MenuBarPopoverContent: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .frame(width: 16)
                         Text(showUpToDate ? "You're up to date!" : "Check for Updates...")
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .foregroundStyle(showUpToDate ? .green : .primary)
                         Spacer()
                         if updateService.isChecking {
@@ -242,7 +242,7 @@ struct MenuBarPopoverContent: View {
                                 .controlSize(.small)
                         } else if showUpToDate {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 12))
+                                .font(Typography.body)
                                 .foregroundStyle(.green)
                         } else if updateService.updateAvailable != nil {
                             Text("New")
@@ -265,7 +265,7 @@ struct MenuBarPopoverContent: View {
                     showAbout = true
                 }
 
-                PopoverMenuButton(label: "Quit Claudoscope", systemImage: "power", shortcut: "Cmd+Q") {
+                PopoverMenuButton(label: "Quit Claudoscope", systemImage: "power", shortcut: "\u{2318}Q") {
                     NSApplication.shared.terminate(nil)
                 }
             }
@@ -383,11 +383,11 @@ struct PopoverMenuButton: View {
             HStack(spacing: 8) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .frame(width: 16)
                 }
                 Text(label)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                 Spacer()
                 if let shortcut {
                     Text(shortcut)
@@ -451,13 +451,6 @@ struct OnboardingView: View {
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
     @State private var dontShowAgain = false
 
-    private var logoImage: NSImage? {
-        guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
-              let img = NSImage(contentsOf: url) else { return nil }
-        img.isTemplate = false
-        return img
-    }
-
     private var menuBarImage: NSImage? {
         guard let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
               let img = NSImage(contentsOf: url) else { return nil }
@@ -468,7 +461,7 @@ struct OnboardingView: View {
     var body: some View {
         VStack(spacing: 20) {
             // App icon
-            if let nsImage = logoImage {
+            if let nsImage = loadAppIcon() {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
@@ -507,11 +500,11 @@ struct OnboardingView: View {
             VStack(spacing: 8) {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.orange)
 
                     Text("If you can't see it, the icon might be hidden behind the notch. Hold **\u{2318} Cmd** and drag other menu bar icons to the left to make room.")
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -527,17 +520,18 @@ struct OnboardingView: View {
 
             // Don't show again + Got it
             HStack {
-                Toggle("Don't show this again", isOn: $dontShowAgain)
+                Toggle("Show this at startup", isOn: Binding(
+                    get: { !dontShowAgain },
+                    set: { dontShowAgain = !$0 }
+                ))
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.secondary)
 
                 Spacer()
 
                 Button("Got it") {
-                    if dontShowAgain {
-                        hasSeenOnboarding = true
-                    }
+                    hasSeenOnboarding = dontShowAgain
                     onDismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -639,16 +633,9 @@ struct UpdateAvailableView: View {
     let onDismiss: () -> Void
     var onSkip: (() -> Void)?
 
-    private var logoImage: NSImage? {
-        guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
-              let img = NSImage(contentsOf: url) else { return nil }
-        img.isTemplate = false
-        return img
-    }
-
     var body: some View {
         VStack(spacing: 16) {
-            if let nsImage = logoImage {
+            if let nsImage = loadAppIcon() {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
@@ -661,14 +648,14 @@ struct UpdateAvailableView: View {
                     .font(.system(size: 15, weight: .semibold))
 
                 Text("You're currently on version \(updateService.currentVersion)")
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.secondary)
             }
 
             if let notes = update.releaseNotes, !notes.isEmpty {
                 ScrollView {
                     Text(notes)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
@@ -694,7 +681,7 @@ struct UpdateAvailableView: View {
                         ProgressView(value: updateService.downloadProgress)
                             .frame(width: 80)
                         Text("\(Int(updateService.downloadProgress * 100))%")
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(Typography.code)
                             .foregroundStyle(.secondary)
                     } else {
                         Button("Download and Install") {
@@ -728,16 +715,9 @@ struct WhatsNewView: View {
     let releaseNotes: String?
     let onDismiss: () -> Void
 
-    private var logoImage: NSImage? {
-        guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
-              let img = NSImage(contentsOf: url) else { return nil }
-        img.isTemplate = false
-        return img
-    }
-
     var body: some View {
         VStack(spacing: 16) {
-            if let nsImage = logoImage {
+            if let nsImage = loadAppIcon() {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
@@ -750,19 +730,19 @@ struct WhatsNewView: View {
                     .font(.system(size: 15, weight: .semibold))
 
                 Text("The update was installed successfully.")
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.secondary)
             }
 
             if let notes = releaseNotes, !notes.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("What's new")
+                    Text("What's New")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
 
                     ScrollView {
                         Text(notes)
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
@@ -789,6 +769,15 @@ struct WhatsNewView: View {
     }
 }
 
+// MARK: - Shared Logo Helper
+
+private func loadAppIcon() -> NSImage? {
+    guard let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
+          let img = NSImage(contentsOf: url) else { return nil }
+    img.isTemplate = false
+    return img
+}
+
 // MARK: - About View
 
 struct AboutOverlay: View {
@@ -797,12 +786,12 @@ struct AboutOverlay: View {
     var body: some View {
         ZStack {
             // Tap anywhere to dismiss
-            Color.black.opacity(0.4)
+            Rectangle()
+                .fill(.ultraThinMaterial)
                 .onTapGesture { onDismiss() }
 
             VStack(spacing: 12) {
-                if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
-                   let nsImage = NSImage(contentsOf: url) {
+                if let nsImage = loadAppIcon() {
                     Image(nsImage: nsImage)
                         .resizable()
                         .interpolation(.high)
@@ -814,7 +803,7 @@ struct AboutOverlay: View {
                     .font(.system(size: 16, weight: .medium))
 
                 Text("Session explorer for Claude Code")
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.secondary)
 
                 Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0")")

@@ -33,12 +33,12 @@ struct SettingsSidebarContent: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: section.icon)
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .frame(width: 16)
                             .foregroundStyle(selectedSection == section.id ? .white : .secondary)
 
                         Text(section.label)
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .foregroundStyle(selectedSection == section.id ? .white : .primary)
 
                         Spacer()
@@ -284,7 +284,7 @@ struct SettingsMainPanelView: View {
                             FlowLayout(spacing: 6) {
                                 ForEach(allowList, id: \.self) { item in
                                     Text(item)
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(Typography.code)
                                         .foregroundStyle(.green)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 3)
@@ -306,7 +306,7 @@ struct SettingsMainPanelView: View {
                             FlowLayout(spacing: 6) {
                                 ForEach(denyList, id: \.self) { item in
                                     Text(item)
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(Typography.code)
                                         .foregroundStyle(.red)
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 3)
@@ -428,7 +428,7 @@ struct SettingsMainPanelView: View {
                                 store.rescanAllSessions()
                             } label: {
                                 Text(provider == .anthropic ? "Anthropic" : "Vertex AI")
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(Typography.bodyMedium)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 6)
                                     .background(store.pricingProvider == provider ? Color.accentColor : Color.clear)
@@ -445,7 +445,7 @@ struct SettingsMainPanelView: View {
 
                 // Rates table
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Rates (per MTok)")
+                    Text("Rates (per 1M tokens)")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
@@ -476,7 +476,7 @@ struct SettingsMainPanelView: View {
                                 Text(row.output)
                                     .frame(width: 70, alignment: .trailing)
                             }
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(Typography.code)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
                         }
@@ -540,7 +540,7 @@ struct SettingsMainPanelView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 11))
-                        Text("YOLO mode enabled: dangerous permission prompts are skipped")
+                        Text("Auto-approve mode active: permission prompts for destructive operations are skipped")
                             .font(.system(size: 11, weight: .medium))
                     }
                     .foregroundStyle(.white)
@@ -562,7 +562,7 @@ struct SettingsMainPanelView: View {
                         FlowLayout(spacing: 6) {
                             ForEach(sandbox!.unsandboxedCommands, id: \.self) { cmd in
                                 Text(cmd)
-                                    .font(.system(size: 11, design: .monospaced))
+                                    .font(Typography.code)
                                     .foregroundStyle(.orange)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 3)
@@ -606,7 +606,7 @@ struct SettingsMainPanelView: View {
                         set: { store.realtimeSecretScanEnabled = $0 }
                     ))
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
 
                     Text("Scan active sessions for leaked secrets and show alerts.")
                         .font(.system(size: 10))
@@ -633,7 +633,7 @@ struct SettingsMainPanelView: View {
                                 .padding(.horizontal, 12)
 
                             Text(commit)
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(Typography.code)
                                 .padding(8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(AnyShapeStyle(.quaternary))
@@ -651,7 +651,7 @@ struct SettingsMainPanelView: View {
                                 .padding(.horizontal, 12)
 
                             Text(pr)
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(Typography.code)
                                 .padding(8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(AnyShapeStyle(.quaternary))
@@ -704,7 +704,7 @@ struct SettingsMainPanelView: View {
                                             .fill(plugin.enabled ? Color.green : Color.gray)
                                             .frame(width: 6, height: 6)
                                         Text(plugin.name)
-                                            .font(.system(size: 11, design: .monospaced))
+                                            .font(Typography.code)
                                         if let mp = plugin.marketplace {
                                             Text("@\(mp)")
                                                 .font(.system(size: 10))
@@ -737,10 +737,10 @@ struct SettingsMainPanelView: View {
                                             .foregroundStyle(.secondary)
                                             .frame(width: 16)
                                         Text(mp.name)
-                                            .font(.system(size: 12, weight: .medium))
+                                            .font(Typography.bodyMedium)
                                         Spacer()
                                         Text(mp.detail)
-                                            .font(.system(size: 11, design: .monospaced))
+                                            .font(Typography.code)
                                             .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                             .truncationMode(.middle)
@@ -785,7 +785,7 @@ struct SettingsMainPanelView: View {
                         if row.isBadge {
                             HStack {
                                 Text(row.key)
-                                    .font(.system(size: 12))
+                                    .font(Typography.body)
                                     .foregroundStyle(.tertiary)
                                 Spacer()
                                 Text(row.value)
@@ -828,7 +828,7 @@ struct SettingsMainPanelView: View {
             rows.append(AccountRow(key: "Org Role", value: role))
         }
         if let n = profile.numStartups {
-            rows.append(AccountRow(key: "Startups", value: "\(n)"))
+            rows.append(AccountRow(key: "App Launches", value: "\(n)"))
         }
         if let theme = profile.theme {
             rows.append(AccountRow(key: "Theme", value: theme))
@@ -874,7 +874,7 @@ struct SettingsMainPanelView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.secondary)
                     .frame(width: 16)
                 Text(title)
@@ -941,7 +941,7 @@ private struct CleanupPeriodRow: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Transcript Retention")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.bodyMedium)
                     Text(isDefault ? "Default: 30 days" : "\(displayDays) days")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -1006,6 +1006,20 @@ private struct CleanupPeriodRow: View {
 
 // MARK: - Key-Value Row
 
+private func settingsKeyDisplayName(_ key: String) -> String {
+    switch key {
+    case "model": return "Model"
+    case "smallFastModel": return "Small/Fast Model"
+    case "skipDangerousModePermissionPrompt": return "Skip Dangerous Mode Prompt"
+    case "autoMemoryEnabled": return "Auto Memory"
+    case "cleanupPeriodDays": return "Cleanup Period (Days)"
+    case "includeCoAuthoredBy": return "Include Co-Authored-By"
+    case "attributionStyle": return "Attribution Style"
+    case "sandbox": return "Sandbox"
+    default: return key
+    }
+}
+
 private struct SettingsKeyValueRow: View {
     let key: String
     let value: String
@@ -1013,8 +1027,8 @@ private struct SettingsKeyValueRow: View {
 
     var body: some View {
         HStack {
-            Text(key)
-                .font(.system(size: 12))
+            Text(settingsKeyDisplayName(key))
+                .font(Typography.body)
                 .foregroundStyle(.tertiary)
 
             Spacer()
@@ -1026,7 +1040,7 @@ private struct SettingsKeyValueRow: View {
                     .textSelection(.enabled)
             } else {
                 Text(value)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.primary)
                     .textSelection(.enabled)
             }
@@ -1099,7 +1113,7 @@ struct UpdatesSectionContent: View {
             // Current version
             HStack(spacing: 8) {
                 Text("Current version")
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundStyle(.secondary)
                 Spacer()
                 Text(updateService.currentVersion)
@@ -1113,7 +1127,7 @@ struct UpdatesSectionContent: View {
             HStack {
                 @Bindable var service = updateService
                 Toggle("Check for updates automatically", isOn: $service.autoCheckEnabled)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .toggleStyle(.checkbox)
             }
             .padding(.horizontal, 12)
@@ -1129,7 +1143,7 @@ struct UpdatesSectionContent: View {
                                 .fill(.orange)
                                 .frame(width: 8, height: 8)
                             Text("Version \(update.version) available")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(Typography.bodyMedium)
                         }
                         if let notes = update.releaseNotes, !notes.isEmpty {
                             Text(notes.prefix(200) + (notes.count > 200 ? "..." : ""))
@@ -1146,7 +1160,7 @@ struct UpdatesSectionContent: View {
                             ProgressView(value: updateService.downloadProgress)
                                 .frame(width: 100)
                             Text("\(Int(updateService.downloadProgress * 100))%")
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(Typography.codeSmall)
                                 .foregroundStyle(.secondary)
                         }
                         Button("Cancel") {
@@ -1157,11 +1171,11 @@ struct UpdatesSectionContent: View {
                         Button("Download and Install") {
                             updateService.downloadAndInstall()
                         }
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                     }
                 } else {
                     Text(updateService.updateAvailable == nil && !updateService.isChecking ? "You're up to date" : "")
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundStyle(.secondary)
 
                     Spacer()
@@ -1177,7 +1191,7 @@ struct UpdatesSectionContent: View {
                             Text("Check Now")
                         }
                     }
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .disabled(updateService.isChecking)
                 }
             }
