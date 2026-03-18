@@ -1,17 +1,21 @@
 import Foundation
 import AppKit
 import Security
+import os
 
 @Observable
 final class UpdateService {
     var updateAvailable: UpdateInfo?
+    var whatsNewInfo: JustUpdatedInfo?
     var isChecking = false
     var isDownloading = false
     var downloadProgress: Double = 0
     var error: String?
 
     var onUpdateFound: ((UpdateInfo) -> Void)?
+    var onOpenWhatsNew: (() -> Void)?
 
+    private let logger = Logger(subsystem: "com.cordwainersmith.Claudoscope", category: "Update")
     private var checkTimer: Timer?
     private var downloadingTask: Task<Void, Never>?
 
@@ -95,6 +99,7 @@ final class UpdateService {
         guard !isChecking else { return }
         isChecking = true
         error = nil
+        logger.info("Checking for updates, current version: \(self.currentVersion)")
 
         defer {
             isChecking = false
@@ -103,6 +108,7 @@ final class UpdateService {
 
         let urlString = "https://api.github.com/repos/\(Self.repoOwner)/\(Self.repoName)/releases/latest"
         guard let url = URL(string: urlString) else {
+            logger.error("Invalid API URL: \(urlString)")
             error = "Invalid API URL"
             return
         }
@@ -114,12 +120,15 @@ final class UpdateService {
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+                logger.error("GitHub API error, status code: \(statusCode)")
                 error = "GitHub API returned an error"
                 return
             }
 
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tagName = json["tag_name"] as? String else {
+                logger.error("Unexpected response format from GitHub API")
                 error = "Unexpected response format"
                 return
             }
@@ -127,9 +136,12 @@ final class UpdateService {
             let remoteVersion = tagName.hasPrefix("v") ? String(tagName.dropFirst()) : tagName
 
             guard isNewerVersion(remoteVersion, than: currentVersion) else {
+                logger.info("Already up to date (remote: \(remoteVersion), current: \(self.currentVersion))")
                 updateAvailable = nil
                 return
             }
+
+            logger.info("Update available: \(remoteVersion) (current: \(self.currentVersion))")
 
             // Build download URL through the Worker for tracking
             let downloadURL = URL(string: "https://dl.claudoscope.com/v\(remoteVersion)/Claudoscope.dmg?type=update")!
@@ -153,6 +165,7 @@ final class UpdateService {
                 onUpdateFound?(info)
             }
         } catch {
+            logger.error("Update check failed: \(error.localizedDescription)")
             self.error = error.localizedDescription
         }
     }
@@ -180,6 +193,7 @@ final class UpdateService {
             try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
 
             let dmgPath = tempDir.appendingPathComponent("Claudoscope.dmg")
+            logger.info("Downloading update from \(update.downloadURL.absoluteString)")
             try await downloadFile(from: update.downloadURL, to: dmgPath)
 
             // Mount DMG
@@ -191,8 +205,10 @@ final class UpdateService {
                 arguments: ["attach", dmgPath.path, "-nobrowse", "-readonly", "-mountpoint", mountPoint.path]
             )
             guard mountResult.exitCode == 0 else {
+                logger.error("DMG mount failed: \(mountResult.output)")
                 throw UpdateError.mountFailed(mountResult.output)
             }
+            logger.info("DMG mounted at \(mountPoint.path)")
 
             defer {
                 // Always try to unmount
@@ -209,6 +225,7 @@ final class UpdateService {
 
             // Verify code signature
             try verifyCodeSignature(at: newAppURL)
+            logger.info("Code signature verified for \(newAppURL.lastPathComponent)")
 
             // Replace current app
             guard let currentAppURL = Bundle.main.bundleURL as URL? else {
@@ -245,8 +262,10 @@ final class UpdateService {
             UserDefaults.standard.synchronize()
 
             // Relaunch
+            logger.info("App replaced successfully, relaunching to v\(update.version)")
             relaunch(at: currentAppURL)
         } catch {
+            logger.error("Download/install failed: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isDownloading = false
         }
@@ -261,11 +280,10 @@ final class UpdateService {
         guard let version = UserDefaults.standard.string(forKey: Self.justUpdatedVersionKey) else {
             return nil
         }
-        let notes = ChangelogParser.bundledNotes(for: version)
         UserDefaults.standard.removeObject(forKey: Self.justUpdatedVersionKey)
         // Clean up legacy key from older versions
         UserDefaults.standard.removeObject(forKey: "justUpdatedReleaseNotes")
-        return JustUpdatedInfo(version: version, releaseNotes: notes)
+        return JustUpdatedInfo(version: version, releaseNotes: nil)
     }
 
     func cancelDownload() {
@@ -343,6 +361,7 @@ final class UpdateService {
         // corrupts the Dock icon state for LSUIElement apps.
         let pid = ProcessInfo.processInfo.processIdentifier
         let path = appURL.path
+        logger.info("Relaunching: pid=\(pid), path=\(path)")
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/bin/sh")
         task.arguments = ["-c", "while kill -0 \(pid) 2>/dev/null; do sleep 0.1; done; open \"\(path)\""]

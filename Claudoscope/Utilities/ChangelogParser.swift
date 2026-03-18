@@ -1,42 +1,63 @@
 import Foundation
 
+struct ChangelogEntry {
+    let version: String
+    let notes: String
+
+    var releaseURL: URL? {
+        URL(string: "https://github.com/cordwainersmith/Claudoscope/releases/tag/v\(version)")
+    }
+}
+
 enum ChangelogParser {
-    /// Parse notes for a specific version from changelog text.
-    static func notes(for version: String, in text: String) -> String? {
+    private static let rawURL = URL(string:
+        "https://raw.githubusercontent.com/cordwainersmith/Claudoscope/master/CHANGELOG.md"
+    )!
+
+    /// Fetch CHANGELOG.md from GitHub and parse all entries.
+    static func fetchEntries() async -> [ChangelogEntry] {
+        do {
+            let (data, response) = try await URLSession.shared.data(from: rawURL)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let text = String(data: data, encoding: .utf8) else {
+                return []
+            }
+            return allEntries(in: text)
+        } catch {
+            return []
+        }
+    }
+
+    /// Parse all version entries from changelog text.
+    static func allEntries(in text: String) -> [ChangelogEntry] {
         let lines = text.components(separatedBy: .newlines)
-        var capturing = false
-        var result: [String] = []
+        var entries: [ChangelogEntry] = []
+        var currentVersion: String?
+        var currentLines: [String] = []
 
         for line in lines {
             if line.hasPrefix("## ") {
-                if capturing {
-                    break
+                if let version = currentVersion {
+                    let notes = currentLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !notes.isEmpty {
+                        entries.append(ChangelogEntry(version: version, notes: notes))
+                    }
                 }
                 let header = line.dropFirst(3).trimmingCharacters(in: .whitespaces)
-                let bracketed = header
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-                if bracketed == version {
-                    capturing = true
-                }
-                continue
-            }
-            if capturing {
-                result.append(line)
+                currentVersion = header.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+                currentLines = []
+            } else if currentVersion != nil {
+                currentLines.append(line)
             }
         }
 
-        let trimmed = result
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
-
-    /// Read notes from the bundled CHANGELOG.md for a given version.
-    static func bundledNotes(for version: String) -> String? {
-        guard let url = Bundle.main.url(forResource: "CHANGELOG", withExtension: "md"),
-              let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return nil
+        if let version = currentVersion {
+            let notes = currentLines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !notes.isEmpty {
+                entries.append(ChangelogEntry(version: version, notes: notes))
+            }
         }
-        return notes(for: version, in: text)
+
+        return entries
     }
 }

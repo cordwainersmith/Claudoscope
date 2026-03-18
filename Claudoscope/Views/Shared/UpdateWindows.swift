@@ -1,89 +1,80 @@
 import SwiftUI
 
-// MARK: - Update Available Window
+// MARK: - Window Content Wrappers
 
-final class UpdateWindowController {
-    static let shared = UpdateWindowController()
+struct UpdateAvailableWindowContent: View {
+    @Environment(UpdateService.self) private var updateService
+    @Environment(\.dismissWindow) private var dismissWindow
 
-    private var window: NSWindow?
-
-    func showUpdateAvailable(_ update: UpdateService.UpdateInfo, updateService: UpdateService) {
-        dismiss()
-
-        let contentView = UpdateAvailableView(
-            update: update,
-            updateService: updateService,
-            onDismiss: { self.dismiss() },
-            onSkip: {
-                updateService.skipVersion(update.version)
-                self.dismiss()
-            }
-        )
-
-        let hostingView = NSHostingView(rootView: contentView)
-
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 0),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Update Available"
-        window.contentView = hostingView
-        window.isReleasedWhenClosed = false
-        window.level = .floating
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-
-        NSApplication.shared.setActivationPolicy(.regular)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-
-        self.window = window
-    }
-
-    func showWhatsNew(version: String, releaseNotes: String?) {
-        dismiss()
-
-        let contentView = WhatsNewView(
-            version: version,
-            releaseNotes: releaseNotes,
-            onDismiss: { self.dismiss() }
-        )
-
-        let hostingView = NSHostingView(rootView: contentView)
-
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 0),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Claudoscope Updated"
-        window.contentView = hostingView
-        window.isReleasedWhenClosed = false
-        window.level = .floating
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-
-        NSApplication.shared.setActivationPolicy(.regular)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-
-        self.window = window
-    }
-
-    func dismiss() {
-        let dismissingWindow = window
-        window?.close()
-        window = nil
-        // Only revert to accessory if no other app windows are visible
-        let hasOtherVisibleWindow = NSApp.windows.contains { w in
-            w !== dismissingWindow && w.isVisible && w.level == .normal
-        }
-        if !hasOtherVisibleWindow {
-            NSApplication.shared.setActivationPolicy(.accessory)
+    var body: some View {
+        if let update = updateService.updateAvailable {
+            UpdateAvailableView(
+                update: update,
+                updateService: updateService,
+                onDismiss: { dismissWindow(id: "update-available") },
+                onSkip: {
+                    updateService.skipVersion(update.version)
+                    dismissWindow(id: "update-available")
+                }
+            )
+        } else {
+            Color.clear
+                .frame(width: 0, height: 0)
+                .onAppear { dismissWindow(id: "update-available") }
         }
     }
 }
+
+struct WhatsNewWindowContent: View {
+    @Environment(UpdateService.self) private var updateService
+    @Environment(\.dismissWindow) private var dismissWindow
+    @State private var entries: [ChangelogEntry] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        if updateService.whatsNewInfo != nil {
+            WhatsNewView(
+                entries: entries,
+                highlightVersion: updateService.whatsNewInfo?.version,
+                isLoading: isLoading,
+                onDismiss: {
+                    updateService.whatsNewInfo = nil
+                    dismissWindow(id: "whats-new")
+                }
+            )
+            .task {
+                entries = await ChangelogParser.fetchEntries()
+                isLoading = false
+            }
+        } else {
+            Color.clear
+                .frame(width: 0, height: 0)
+                .onAppear { dismissWindow(id: "whats-new") }
+        }
+    }
+}
+
+// MARK: - Activation Policy Management
+
+private struct ActivationPolicyModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                NSApplication.shared.setActivationPolicy(.regular)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+            }
+            .onDisappear {
+                let hasOtherVisibleWindow = NSApp.windows.contains { w in
+                    w.isVisible && w.level == .normal
+                }
+                if !hasOtherVisibleWindow {
+                    NSApplication.shared.setActivationPolicy(.accessory)
+                }
+            }
+    }
+}
+
+// MARK: - Update Available View
 
 struct UpdateAvailableView: View {
     let update: UpdateService.UpdateInfo
@@ -112,14 +103,10 @@ struct UpdateAvailableView: View {
 
             if let notes = update.releaseNotes, !notes.isEmpty {
                 ScrollView {
-                    Text(notes)
-                        .font(Typography.body)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+                    MarkdownNotesView(markdown: notes)
                         .padding(10)
                 }
-                .frame(maxHeight: 160)
+                .frame(height: 200)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
                         .fill(AnyShapeStyle(.quaternary))
@@ -165,12 +152,16 @@ struct UpdateAvailableView: View {
         }
         .padding(24)
         .frame(width: 400)
+        .modifier(ActivationPolicyModifier())
     }
 }
 
+// MARK: - What's New View (Full Changelog)
+
 struct WhatsNewView: View {
-    let version: String
-    let releaseNotes: String?
+    var entries: [ChangelogEntry]
+    var highlightVersion: String?
+    var isLoading: Bool = false
     let onDismiss: () -> Void
 
     var body: some View {
@@ -183,34 +174,47 @@ struct WhatsNewView: View {
                     .frame(width: 48, height: 48)
             }
 
-            VStack(spacing: 4) {
-                Text("Updated to Claudoscope \(version)")
-                    .font(.system(size: 15, weight: .semibold))
+            Text("Release Notes")
+                .font(.system(size: 15, weight: .semibold))
 
-                Text("The update was installed successfully.")
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, minHeight: 60)
+            } else if entries.isEmpty {
+                Text("No release notes available.")
                     .font(Typography.body)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let notes = releaseNotes, !notes.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("What's New")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+            } else {
+                ScrollViewReader { proxy in
                     ScrollView {
-                        Text(notes)
-                            .font(Typography.body)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .padding(10)
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(entries, id: \.version) { entry in
+                                ChangelogEntryView(
+                                    entry: entry,
+                                    isHighlighted: entry.version == highlightVersion
+                                )
+                                .id(entry.version)
+
+                                if entry.version != entries.last?.version {
+                                    Divider()
+                                        .padding(.vertical, 8)
+                                }
+                            }
+                        }
+                        .padding(12)
                     }
-                    .frame(maxHeight: 160)
+                    .frame(height: 400)
                     .background(
                         RoundedRectangle(cornerRadius: 6)
                             .fill(AnyShapeStyle(.quaternary))
                     )
+                    .onAppear {
+                        if let version = highlightVersion {
+                            proxy.scrollTo(version, anchor: .top)
+                        }
+                    }
                 }
             }
 
@@ -223,6 +227,127 @@ struct WhatsNewView: View {
             }
         }
         .padding(24)
-        .frame(width: 400)
+        .frame(width: 440)
+        .modifier(ActivationPolicyModifier())
+    }
+}
+
+// MARK: - Changelog Entry View
+
+private struct ChangelogEntryView: View {
+    let entry: ChangelogEntry
+    var isHighlighted: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("v\(entry.version)")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isHighlighted ? Color.accentColor : .primary)
+
+                if isHighlighted {
+                    Text("current")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(.tint))
+                }
+
+                Spacer()
+
+                if let url = entry.releaseURL {
+                    Link(destination: url) {
+                        HStack(spacing: 3) {
+                            Text("Release")
+                                .font(.system(size: 11))
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 9))
+                        }
+                        .foregroundStyle(Color.accentColor)
+                    }
+                }
+            }
+
+            MarkdownNotesView(markdown: entry.notes)
+        }
+    }
+}
+
+// MARK: - Markdown Notes Renderer
+
+struct MarkdownNotesView: View {
+    let markdown: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(parseLines().enumerated()), id: \.offset) { _, element in
+                switch element {
+                case .header(let text, let level):
+                    Text(text)
+                        .font(level <= 2
+                            ? .system(size: 13, weight: .semibold)
+                            : .system(size: 12, weight: .medium))
+                        .foregroundStyle(level <= 2 ? .primary : .secondary)
+                        .padding(.top, 4)
+
+                case .bullet(let attributed):
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\u{2022}")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(attributed)
+                            .font(Typography.body)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                case .text(let attributed):
+                    Text(attributed)
+                        .font(Typography.body)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private enum Line {
+        case header(String, Int)
+        case bullet(AttributedString)
+        case text(AttributedString)
+    }
+
+    private func parseLines() -> [Line] {
+        var result: [Line] = []
+        for raw in markdown.components(separatedBy: .newlines) {
+            let trimmed = raw.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+
+            // Strip "Full Changelog" link lines
+            if trimmed.hasPrefix("**Full Changelog**") { continue }
+
+            if trimmed.hasPrefix("### ") {
+                let text = String(trimmed.dropFirst(4))
+                result.append(.header(text, 3))
+            } else if trimmed.hasPrefix("## ") {
+                let text = String(trimmed.dropFirst(3))
+                result.append(.header(text, 2))
+            } else if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") {
+                let text = String(trimmed.dropFirst(2))
+                result.append(.bullet(inlineMarkdown(text)))
+            } else {
+                result.append(.text(inlineMarkdown(trimmed)))
+            }
+        }
+        return result
+    }
+
+    private func inlineMarkdown(_ text: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
     }
 }

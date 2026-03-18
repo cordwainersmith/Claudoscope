@@ -851,11 +851,7 @@ struct UpdatesSectionContent: View {
 
                     if let notes = update.releaseNotes, !notes.isEmpty {
                         ScrollView {
-                            Text(notes)
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .textSelection(.enabled)
+                            MarkdownNotesView(markdown: notes)
                                 .padding(10)
                         }
                         .frame(maxHeight: 160)
@@ -873,12 +869,11 @@ struct UpdatesSectionContent: View {
                         Spacer()
 
                         Button("What's New") {
-                            let version = updateService.currentVersion
-                            let notes = ChangelogParser.bundledNotes(for: version)
-                            UpdateWindowController.shared.showWhatsNew(
-                                version: version,
-                                releaseNotes: notes
+                            updateService.whatsNewInfo = .init(
+                                version: updateService.currentVersion,
+                                releaseNotes: nil
                             )
+                            updateService.onOpenWhatsNew?()
                         }
                         .font(Typography.body)
 

@@ -12,22 +12,9 @@ struct ClaudoscopeApp: App {
             MenuBarPopoverContent()
                 .environment(store)
                 .environment(updateService)
-                .task {
-                    // Show "What's New" if we just updated (runs once)
-                    if let info = updateService.consumeJustUpdatedInfo() {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
-                        UpdateWindowController.shared.showWhatsNew(
-                            version: info.version,
-                            releaseNotes: info.releaseNotes
-                        )
-                    }
-
-                    // Auto-check shows popup when update found
-                    updateService.onUpdateFound = { update in
-                        UpdateWindowController.shared.showUpdateAvailable(update, updateService: updateService)
-                    }
-
-                    updateService.startPeriodicChecks()
+                .background {
+                    UpdateTriggerView()
+                        .environment(updateService)
                 }
                 .onChange(of: store.activeSecretAlert != nil) { _, hasAlert in
                     if hasAlert, let alert = store.activeSecretAlert {
@@ -47,6 +34,20 @@ struct ClaudoscopeApp: App {
             MenuBarIcon(hasUpdate: updateService.updateAvailable != nil)
         }
         .menuBarExtraStyle(.window)
+
+        Window("Update Available", id: "update-available") {
+            UpdateAvailableWindowContent()
+                .environment(updateService)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 400, height: 450)
+
+        Window("Claudoscope Updated", id: "whats-new") {
+            WhatsNewWindowContent()
+                .environment(updateService)
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 440, height: 450)
     }
 
     init() {
@@ -55,6 +56,39 @@ struct ClaudoscopeApp: App {
                 OnboardingWindowController.shared.show()
             }
         }
+    }
+}
+
+// MARK: - Update Trigger View
+
+/// Zero-size view embedded in MenuBarExtra to access openWindow environment action.
+private struct UpdateTriggerView: View {
+    @Environment(UpdateService.self) private var updateService
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .task {
+                // Show "What's New" if we just updated (runs once)
+                if let info = updateService.consumeJustUpdatedInfo() {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    updateService.whatsNewInfo = info
+                    openWindow(id: "whats-new")
+                }
+
+                // Auto-check shows popup when update found
+                updateService.onUpdateFound = { _ in
+                    openWindow(id: "update-available")
+                }
+
+                // Allow Settings (NSHostingView) to open the What's New window
+                updateService.onOpenWhatsNew = {
+                    openWindow(id: "whats-new")
+                }
+
+                updateService.startPeriodicChecks()
+            }
     }
 }
 
