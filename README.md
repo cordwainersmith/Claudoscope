@@ -18,7 +18,7 @@
 
 ---
 
-Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation, analytics, plan browsing, timeline history, and complete visibility into your Claude Code configuration, all without sending any data off your machine.
+Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation, analytics, plan browsing, timeline history, configuration health checks, and **secret scanning that detects leaked credentials in your session history with real-time alerts**, all without sending any data off your machine.
 
 ## Table of Contents
 
