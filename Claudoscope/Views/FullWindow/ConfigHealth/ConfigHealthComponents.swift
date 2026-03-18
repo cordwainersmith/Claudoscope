@@ -404,18 +404,30 @@ func sessionBadges(for result: LintResult) -> [(text: String, color: Color)] {
 
 @ViewBuilder
 func SessionBadgeView(result: LintResult) -> some View {
-    let badges = sessionBadges(for: result)
-    if !badges.isEmpty {
-        HStack(spacing: 4) {
-            ForEach(badges, id: \.text) { badge in
-                Text(badge.text)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(badge.color)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(badge.color.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+    HStack(spacing: 4) {
+        if result.subagentFileName != nil {
+            HStack(spacing: 3) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 9))
+                Text("Subagent")
+                    .font(.system(size: 11, weight: .medium))
             }
+            .foregroundStyle(.orange)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.orange.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+        }
+
+        let badges = sessionBadges(for: result)
+        ForEach(badges, id: \.text) { badge in
+            Text(badge.text)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(badge.color)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(badge.color.opacity(0.12))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
         }
     }
 }
