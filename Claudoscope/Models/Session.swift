@@ -10,6 +10,18 @@ struct ParsedSession: Sendable {
     let toolResultMap: [String: ToolResultEntry]
     let metadata: SessionMetadata
     let parentSessionId: String?
+    let isSubagent: Bool
+
+    init(id: String, projectId: String, slug: String?, records: [ParsedRecordRaw], toolResultMap: [String: ToolResultEntry], metadata: SessionMetadata, parentSessionId: String?, isSubagent: Bool = false) {
+        self.id = id
+        self.projectId = projectId
+        self.slug = slug
+        self.records = records
+        self.toolResultMap = toolResultMap
+        self.metadata = metadata
+        self.parentSessionId = parentSessionId
+        self.isSubagent = isSubagent
+    }
 }
 
 struct ToolResultEntry: Sendable {

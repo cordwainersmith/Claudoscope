@@ -24,8 +24,8 @@ struct MainPanelView: View {
     // Settings
     @Binding var selectedSettingsSection: String?
 
-    // Session navigation from config health
-    var onNavigateToSession: ((String, String) -> Void)?
+    // Session navigation from config health (projectId, sessionId, subagentFileName?)
+    var onNavigateToSession: ((String, String, String?) -> Void)?
 
     var body: some View {
         Group {

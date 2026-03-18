@@ -252,6 +252,7 @@ extension ConfigLinterService {
             for fileURL in filesToScan {
                 guard let data = try? String(contentsOf: fileURL, encoding: .utf8) else { continue }
                 let lines = data.components(separatedBy: "\n")
+                let isSubagent = fileURL != mainFile
 
                 let findings = scanLinesForSecrets(lines)
                 for finding in findings {
@@ -279,7 +280,8 @@ extension ConfigLinterService {
                         fix: "Rotate this credential immediately. Avoid pasting secrets into Claude Code sessions. Use environment variables or secret managers instead.",
                         displayPath: displayTitle,
                         contextLines: context.isEmpty ? nil : context,
-                        unmaskedSecret: finding.matchedText
+                        unmaskedSecret: finding.matchedText,
+                        subagentFileName: isSubagent ? fileURL.lastPathComponent : nil
                     ))
                 }
             }

@@ -71,9 +71,10 @@ struct LintResult: Identifiable, Sendable {
     let displayPath: String?
     let contextLines: [String]?
     let unmaskedSecret: String?
+    let subagentFileName: String?
 
-    init(severity: LintSeverity, checkId: LintCheckId, filePath: String, line: Int? = nil, message: String, fix: String? = nil, displayPath: String? = nil, contextLines: [String]? = nil, unmaskedSecret: String? = nil) {
-        self.id = "\(checkId.rawValue)-\(filePath)-\(line ?? 0)-\(message.hash)"
+    init(severity: LintSeverity, checkId: LintCheckId, filePath: String, line: Int? = nil, message: String, fix: String? = nil, displayPath: String? = nil, contextLines: [String]? = nil, unmaskedSecret: String? = nil, subagentFileName: String? = nil) {
+        self.id = "\(checkId.rawValue)-\(filePath)-\(subagentFileName ?? "")-\(line ?? 0)-\(message.hash)"
         self.severity = severity
         self.checkId = checkId
         self.filePath = filePath
@@ -83,6 +84,7 @@ struct LintResult: Identifiable, Sendable {
         self.displayPath = displayPath
         self.contextLines = contextLines
         self.unmaskedSecret = unmaskedSecret
+        self.subagentFileName = subagentFileName
     }
 }
 
@@ -114,4 +116,15 @@ struct SecretAlert: Sendable {
     let sessionTitle: String
     let projectId: String
     let sessionId: String
+    let isSubagent: Bool
+
+    init(checkId: LintCheckId, patternName: String, maskedValue: String, sessionTitle: String, projectId: String, sessionId: String, isSubagent: Bool = false) {
+        self.checkId = checkId
+        self.patternName = patternName
+        self.maskedValue = maskedValue
+        self.sessionTitle = sessionTitle
+        self.projectId = projectId
+        self.sessionId = sessionId
+        self.isSubagent = isSubagent
+    }
 }

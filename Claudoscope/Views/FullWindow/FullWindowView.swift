@@ -25,6 +25,7 @@ struct FullWindowView: View {
 
     // Pending navigation (deferred until after rail change)
     @State private var pendingNavigation: (projectId: String, sessionId: String)?
+    @State private var pendingSubagentFileName: String?
 
     // Timeline state
     @State private var selectedTimelineDay: String?
@@ -74,12 +75,10 @@ struct FullWindowView: View {
                 selectedHealthItem: selectedHealthItem,
                 selectedProjectId: selectedProjectId,
                 selectedSettingsSection: $selectedSettingsSection,
-                onNavigateToSession: { projectId, sessionId in
+                onNavigateToSession: { projectId, sessionId, subagentFileName in
+                    pendingSubagentFileName = subagentFileName
                     pendingNavigation = (projectId, sessionId)
                     selectedRail = .sessions
-                    Task {
-                        await store.loadSession(id: sessionId, projectId: projectId)
-                    }
                 }
             )
         }
@@ -105,8 +104,10 @@ struct FullWindowView: View {
         }
         .onChange(of: selectedSessionId) { _, newId in
             if let sessionId = newId, let projectId = selectedProjectId {
+                let subagent = pendingSubagentFileName
+                pendingSubagentFileName = nil
                 Task {
-                    await store.loadSession(id: sessionId, projectId: projectId)
+                    await store.loadSession(id: sessionId, projectId: projectId, subagentFileName: subagent)
                 }
             }
         }

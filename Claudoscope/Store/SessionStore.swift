@@ -291,13 +291,15 @@ final class SessionStore {
             let title = sessionsByProject[projectId]?
                 .first(where: { $0.id == sessionId })?.title ?? sessionId
 
+            let isSubagent = url.pathComponents.contains("subagents")
             activeSecretAlert = SecretAlert(
                 checkId: finding.checkId,
                 patternName: finding.patternName,
                 maskedValue: masked,
                 sessionTitle: title,
                 projectId: projectId,
-                sessionId: sessionId
+                sessionId: sessionId,
+                isSubagent: isSubagent
             )
         }
     }
@@ -363,23 +365,59 @@ final class SessionStore {
         )
     }
 
-    func loadSession(id: String, projectId: String) async {
+    func loadSession(id: String, projectId: String, subagentFileName: String? = nil) async {
+        let cacheKey = if let subagentFileName {
+            "\(id)/subagents/\(subagentFileName)"
+        } else {
+            id
+        }
+
         // Check cache first
-        if let cached = await cache.get(id) {
+        if let cached = await cache.get(cacheKey) {
             await MainActor.run {
                 self.selectedSession = cached
             }
             return
         }
 
-        let fileURL = claudeDir
-            .appendingPathComponent("projects")
-            .appendingPathComponent(projectId)
-            .appendingPathComponent("\(id).jsonl")
+        let fileURL: URL
+        if let subagentFileName {
+            fileURL = claudeDir
+                .appendingPathComponent("projects")
+                .appendingPathComponent(projectId)
+                .appendingPathComponent(id)
+                .appendingPathComponent("subagents")
+                .appendingPathComponent(subagentFileName)
+        } else {
+            fileURL = claudeDir
+                .appendingPathComponent("projects")
+                .appendingPathComponent(projectId)
+                .appendingPathComponent("\(id).jsonl")
+        }
+
+        let parseSessionId = if let subagentFileName {
+            String(subagentFileName.dropLast(6)) // drop ".jsonl"
+        } else {
+            id
+        }
 
         do {
-            let session = try await parser.parse(url: fileURL, sessionId: id)
-            await cache.set(id, value: session)
+            let parsed = try await parser.parse(url: fileURL, sessionId: parseSessionId)
+            let session = if subagentFileName != nil {
+                ParsedSession(
+                    id: parsed.id,
+                    projectId: parsed.projectId,
+                    slug: parsed.slug,
+                    records: parsed.records,
+                    toolResultMap: parsed.toolResultMap,
+                    metadata: parsed.metadata,
+                    parentSessionId: parsed.parentSessionId,
+                    isSubagent: true
+                )
+            } else {
+                parsed
+            }
+            await cache.set(cacheKey, value: session)
             await MainActor.run {
                 self.selectedSession = session
             }

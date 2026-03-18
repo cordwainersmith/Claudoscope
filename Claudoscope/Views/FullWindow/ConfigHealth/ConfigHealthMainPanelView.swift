@@ -11,7 +11,7 @@ struct ConfigHealthMainPanelView: View {
     @Binding var hiddenSeverities: Set<LintSeverity>
     var selectedItem: String? = nil
     var onRescan: (() -> Void)?
-    var onNavigateToSession: ((String, String) -> Void)?
+    var onNavigateToSession: ((String, String, String?) -> Void)?
 
     private var selectedResult: LintResult? {
         guard let id = selectedResultId else { return nil }

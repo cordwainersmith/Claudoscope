@@ -51,6 +51,19 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottomTrailing) {
                 VStack(spacing: 0) {
+                    if session.isSubagent {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.triangle.branch")
+                                .font(.system(size: 12))
+                            Text("Subagent Session")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.orange.opacity(0.08))
+                    }
                     searchBar(proxy: proxy)
                     chatScrollView
                 }

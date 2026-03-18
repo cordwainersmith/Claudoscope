@@ -108,6 +108,17 @@ private struct SecretAlertView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                 }
+
+                if alert.isSubagent {
+                    HStack(spacing: 6) {
+                        Text("Source:")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        Text("Subagent task")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)

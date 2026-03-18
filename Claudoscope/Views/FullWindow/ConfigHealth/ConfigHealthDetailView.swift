@@ -4,7 +4,7 @@ import SwiftUI
 
 struct HealthResultDetailView: View {
     let result: LintResult
-    var onNavigateToSession: ((String, String) -> Void)?
+    var onNavigateToSession: ((String, String, String?) -> Void)?
     let onBack: () -> Void
     @State private var showUnmasked = false
 
@@ -79,20 +79,37 @@ struct HealthResultDetailView: View {
                             }
                         }
 
+                        if let subagentFile = result.subagentFileName {
+                            HStack(spacing: 6) {
+                                Image(systemName: "arrow.triangle.branch")
+                                    .font(.system(size: 12))
+                                Text("Found in subagent: \(subagentFile)")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(.orange)
+                                    .textSelection(.enabled)
+                            }
+                        }
+
                         if isSessionResult, let ids = sessionIds, let onNavigateToSession {
                             Button {
-                                onNavigateToSession(ids.projectId, ids.sessionId)
+                                onNavigateToSession(ids.projectId, ids.sessionId, result.subagentFileName)
                             } label: {
                                 HStack(spacing: 4) {
                                     Image(systemName: "arrow.right.circle")
                                         .font(.system(size: 12))
-                                    Text("View Session")
+                                    Text(result.subagentFileName != nil ? "View Subagent Session" : "View Session")
                                         .font(Typography.bodyMedium)
                                 }
                                 .foregroundStyle(Color.accentColor)
                             }
                             .buttonStyle(.plain)
                             .padding(.top, 4)
+
+                            if result.subagentFileName != nil {
+                                Text("Opens the subagent conversation where the secret was found.")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                            }
                         }
                     }
                     .padding(Spacing.lg)
