@@ -190,6 +190,7 @@ actor SessionParser {
         var lastTimestamp = ""
         var firstLine = ""
         var perMessageCost = 0.0
+        var compactionCount = 0
 
         let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
 
@@ -264,6 +265,10 @@ actor SessionParser {
                 if raw.type == .toolResult, raw.toolUseResult?.isError == true {
                     hasError = true
                 }
+
+                if raw.type == .system && raw.subtype == "compact_boundary" {
+                    compactionCount += 1
+                }
             } catch {
                 continue
             }
@@ -285,6 +290,7 @@ actor SessionParser {
             totalOutputTokens: totalOutputTokens,
             totalCacheReadTokens: totalCacheReadTokens,
             totalCacheCreationTokens: totalCacheCreationTokens,
+            compactionCount: compactionCount,
             estimatedCost: perMessageCost,
             hasError: hasError
         )

@@ -41,12 +41,12 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         hint: "Session estimated cost exceeds $25. Consider breaking expensive tasks into smaller sessions."
     ),
     .SES002: RuleMetadata(
-        displayName: "Very long conversation",
-        hint: "Session has an unusually high message count. Long sessions increase compaction frequency and degrade context quality."
+        displayName: "Frequent context compaction",
+        hint: "Session triggered multiple compaction cycles, indicating repeated context window saturation. Earlier decisions and instructions get lost each cycle."
     ),
     .SES003: RuleMetadata(
-        displayName: "Runaway token consumption",
-        hint: "Session exceeded expected token budget. Consider breaking the task into smaller sessions or adding a /compact checkpoint mid-flow."
+        displayName: "High cost session",
+        hint: "Session exceeded expected spending. Consider breaking expensive tasks into smaller sessions to keep per-session costs manageable."
     ),
     .SES004: RuleMetadata(
         displayName: "Stale session with history",

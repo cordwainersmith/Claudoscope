@@ -7,6 +7,7 @@ actor ConfigLinterService {
     // Session health check thresholds
     static let sesHighCostThreshold: Double = 25.0
     static let sesHighMessageThreshold = 200
+    static let sesHighCompactionThreshold = 3
     static let sesHighTokenThreshold = 5_000_000
     static let sesStaleDaysThreshold = 7
     static let sesStaleMinMessages = 50

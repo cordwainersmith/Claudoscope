@@ -3,10 +3,10 @@ import Foundation
 func formatTokens(_ count: Int) -> String {
     if count >= 1_000_000 {
         let value = Double(count) / 1_000_000.0
-        return String(format: "%.1fM", value)
+        return String(format: value >= 10 ? "%.0fM" : "%.1fM", value)
     } else if count >= 1_000 {
         let value = Double(count) / 1_000.0
-        return String(format: "%.1fK", value)
+        return String(format: value >= 100 ? "%.0fK" : "%.1fK", value)
     }
     return "\(count)"
 }

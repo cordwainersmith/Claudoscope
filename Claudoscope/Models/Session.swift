@@ -61,6 +61,7 @@ struct SessionSummary: Identifiable, Sendable {
     let totalOutputTokens: Int
     let totalCacheReadTokens: Int
     let totalCacheCreationTokens: Int
+    let compactionCount: Int
     let estimatedCost: Double
     let hasError: Bool
 }

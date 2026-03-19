@@ -101,51 +101,7 @@ struct MenuBarPopoverContent: View {
 
                 Divider()
 
-                Button {
-                    Task {
-                        showUpToDate = false
-                        // Clear any skipped version for manual checks so the popup always shows
-                        updateService.clearSkippedVersion()
-                        await updateService.checkForUpdates()
-                        // onUpdateFound already shows the popup if an update is found,
-                        // so only handle the "up to date" feedback path here
-                        if updateService.updateAvailable == nil, updateService.error == nil {
-                            showUpToDate = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                showUpToDate = false
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(Typography.body)
-                            .frame(width: 16)
-                        Text(showUpToDate ? "You're up to date!" : "Check for Updates...")
-                            .font(Typography.body)
-                            .foregroundStyle(showUpToDate ? .green : .primary)
-                        Spacer()
-                        if updateService.isChecking {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else if showUpToDate {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(Typography.body)
-                                .foregroundStyle(.green)
-                        } else if updateService.updateAvailable != nil {
-                            Text("New")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(.orange))
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                UpdateMenuButton(showUpToDate: $showUpToDate)
 
                 Divider()
 
@@ -226,6 +182,7 @@ struct PopoverMenuButton: View {
     var systemImage: String? = nil
     var shortcut: String? = nil
     let action: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
@@ -246,8 +203,69 @@ struct PopoverMenuButton: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color.white.opacity(0.08) : Color.clear)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+struct UpdateMenuButton: View {
+    @Environment(UpdateService.self) private var updateService
+    @Binding var showUpToDate: Bool
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            Task {
+                showUpToDate = false
+                updateService.clearSkippedVersion()
+                await updateService.checkForUpdates()
+                if updateService.updateAvailable == nil, updateService.error == nil {
+                    showUpToDate = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        showUpToDate = false
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(Typography.body)
+                    .frame(width: 16)
+                Text(showUpToDate ? "You're up to date!" : "Check for Updates...")
+                    .font(Typography.body)
+                    .foregroundStyle(showUpToDate ? .green : .primary)
+                Spacer()
+                if updateService.isChecking {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if showUpToDate {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(Typography.body)
+                        .foregroundStyle(.green)
+                } else if updateService.updateAvailable != nil {
+                    Text("New")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.orange))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color.white.opacity(0.08) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }

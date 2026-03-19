@@ -52,13 +52,13 @@ extension ConfigLinterService {
                     fix: "Start fresh sessions at natural boundaries (e.g., after finishing a feature). Periodic /compact reduces redundant context re-reads.",
                     displayPath: displayTitle
                 ))
-            } else if session.messageCount > Self.sesHighMessageThreshold {
+            } else if session.compactionCount >= Self.sesHighCompactionThreshold {
                 results.append(LintResult(
                     severity: .warning,
                     checkId: .SES002,
                     filePath: syntheticPath,
-                    message: "Session has \(session.messageCount) messages. Long conversations degrade instruction-following as earlier context gets compressed or evicted, reducing Claude's ability to recall prior decisions." + statsTag,
-                    fix: "Use /compact every 30-45 minutes or after completing each milestone. Use /clear when switching between unrelated tasks.",
+                    message: "Session hit \(session.compactionCount) compaction cycles. Frequent compaction means the context window filled repeatedly, causing Claude to lose earlier decisions and instructions." + statsTag,
+                    fix: "Break work into focused sessions at natural boundaries. Use /compact proactively before the context fills, or start a fresh session after each milestone.",
                     displayPath: displayTitle
                 ))
             } else if let lastDate = parseDate(session.lastTimestamp),
