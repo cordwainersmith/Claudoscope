@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v0.4.6"><img src="https://img.shields.io/github/v/release/cordwainersmith/Claudoscope?color=blue" alt="Release"></a>
+  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v0.4.7"><img src="https://img.shields.io/github/v/release/cordwainersmith/Claudoscope?color=blue" alt="Release"></a>
   <a href="https://claudoscope.com/"><img src="https://img.shields.io/badge/website-claudoscope.com-6366f1" alt="Website"></a>
   <img src="https://img.shields.io/badge/platform-macOS%2014.0+-000000?logo=apple&logoColor=white" alt="Platform">
   <img src="https://img.shields.io/badge/install-brew%20install%20--cask%20claudoscope-FBB040?logo=homebrew&logoColor=white" alt="Homebrew">
@@ -29,6 +29,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
 - [Dashboard Window](#dashboard-window)
   - [Analytics](#analytics)
   - [Sessions](#sessions)
+  - [Tools](#tools)
   - [Plans](#plans)
   - [Timeline](#timeline)
   - [Hooks](#hooks)
@@ -38,6 +39,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
   - [Memory](#memory)
   - [Config Health](#config-health)
   - [Settings](#settings)
+- [Command Palette](#command-palette)
 - [Cost Estimation](#cost-estimation)
 - [License](#license)
 
@@ -102,14 +104,13 @@ The dashboard is a three-column layout: a narrow icon rail on the left for navig
 
 ![Analytics Dashboard](screenshots/analytics.png)
 
-The analytics view aggregates token usage and cost data across all your Claude Code sessions. It provides:
+The analytics view aggregates token usage and cost data across all your Claude Code sessions. A segmented picker switches between three tabs:
 
-- **Summary cards**: total sessions, messages, tokens, cache tokens, and estimated cost for the selected time range
-- **Daily usage chart**: a bar chart showing daily token consumption (input, output, cache read, cache creation) over time
-- **Project cost breakdown**: a ranked list of projects by estimated cost, with session count and token totals per project
-- **Model distribution**: usage breakdown by model family (Opus, Sonnet, Haiku) showing turn counts and token volumes
-- **Time range selector**: filter analytics to the last 7 days, 30 days, 90 days, or a custom date range
-- **Project filter**: scope analytics to a single project or view all projects combined
+- **Overview**: summary cards (sessions, messages, tokens, cache tokens, estimated cost), daily usage bar chart, project cost breakdown, and model distribution by family
+- **Cache**: hit ratio with cache-busting detection, stability callout, 5-minute vs. 1-hour TTL tier breakdown, per-session efficiency ranking, model-aware savings estimate, and cached vs. uncached cost comparison
+- **Models**: daily cost by model chart, model efficiency table, and a what-if calculator that estimates savings from switching Opus usage to Sonnet
+
+All tabs share a time range selector (7/30/90 days or custom) and an optional project filter.
 
 ### Sessions
 
@@ -123,6 +124,10 @@ The chat view renders the complete conversation thread with:
 - Tool result content (file reads, bash output, search results)
 - Error indicators on sessions or tool calls that encountered failures
 - In-conversation search that finds text inside messages, thinking blocks, tool inputs, and tool results, with auto-expansion of matching collapsed blocks
+
+### Tools
+
+The tools view extracts tool call data from conversation history and presents it per session. Each session shows a category breakdown (Read, Write, Exec, Other) and a detailed list of individual tool calls. Tool analytics surface total calls, error rate, and unique files touched across sessions.
 
 ### Plans
 
@@ -196,6 +201,10 @@ The settings view reads your `~/.claude/settings.json` and presents each configu
 - **General**: transcript retention period, auto-memory toggle, and other general preferences.
 - **Environment**: environment-level configuration values.
 - **Pricing**: choose between Anthropic API and Vertex AI pricing, with region selection for Vertex (Global, us-east5, europe-west1, asia-southeast1). Changing the pricing configuration recalculates all cost estimates across the app.
+
+## Command Palette
+
+Press **Cmd+K** to open the command palette for quick navigation between rails and actions. Start typing to filter, then press Enter to jump.
 
 ## Cost Estimation
 

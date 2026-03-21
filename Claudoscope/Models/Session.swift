@@ -61,7 +61,20 @@ struct SessionSummary: Identifiable, Sendable {
     let totalOutputTokens: Int
     let totalCacheReadTokens: Int
     let totalCacheCreationTokens: Int
+    let totalCacheCreation5mTokens: Int
+    let totalCacheCreation1hTokens: Int
     let compactionCount: Int
     let estimatedCost: Double
     let hasError: Bool
+    let modelBreakdown: [ModelTokenBreakdown]
+    let toolCallCount: Int
+}
+
+struct ModelTokenBreakdown: Sendable {
+    let model: String           // model family: "opus", "sonnet", "haiku"
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let estimatedCost: Double
+    let turnCount: Int
 }

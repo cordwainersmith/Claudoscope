@@ -183,6 +183,8 @@ actor SessionParser {
         var totalOutputTokens = 0
         var totalCacheReadTokens = 0
         var totalCacheCreationTokens = 0
+        var totalCacheCreation5mTokens = 0
+        var totalCacheCreation1hTokens = 0
         var modelOutputTokens: [String: Int] = [:]
         var hasError = false
         var slug: String?
@@ -191,6 +193,13 @@ actor SessionParser {
         var firstLine = ""
         var perMessageCost = 0.0
         var compactionCount = 0
+        var toolCallCount = 0
+
+        // Per-model breakdown accumulators
+        var modelInputTokens: [String: Int] = [:]
+        var modelCacheReadTokens: [String: Int] = [:]
+        var modelCost: [String: Double] = [:]
+        var modelTurnCount: [String: Int] = [:]
 
         let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
 
@@ -221,40 +230,55 @@ actor SessionParser {
                     slug = s
                 }
 
-                if raw.type == .assistant, raw.message?.stopReason != nil, let usage = raw.message?.usage {
-                    // Deduplicate: skip records already counted from another file
-                    if let uuid = raw.uuid {
-                        if seenUUIDs.contains(uuid) { continue }
-                        seenUUIDs.insert(uuid)
+                if raw.type == .assistant {
+                    // Count tool_use blocks for tool call count
+                    if case .blocks(let blocks) = raw.message?.content {
+                        toolCallCount += blocks.filter { $0.type == "tool_use" }.count
                     }
 
-                    let msgInput = usage.inputTokens ?? 0
-                    let msgOutput = usage.outputTokens ?? 0
-                    let msgCacheRead = usage.cacheReadInputTokens ?? 0
-                    let msgCacheCreate = usage.cacheCreationInputTokens ?? 0
+                    if raw.message?.stopReason != nil, let usage = raw.message?.usage {
+                        // Deduplicate: skip records already counted from another file
+                        if let uuid = raw.uuid {
+                            if seenUUIDs.contains(uuid) { continue }
+                            seenUUIDs.insert(uuid)
+                        }
 
-                    // Split cache creation into 5m/1h tiers if available
-                    let msgCache5m = usage.cacheCreation?.ephemeral5mInputTokens ?? msgCacheCreate
-                    let msgCache1h = usage.cacheCreation?.ephemeral1hInputTokens ?? 0
+                        let msgInput = usage.inputTokens ?? 0
+                        let msgOutput = usage.outputTokens ?? 0
+                        let msgCacheRead = usage.cacheReadInputTokens ?? 0
+                        let msgCacheCreate = usage.cacheCreationInputTokens ?? 0
 
-                    totalInputTokens += msgInput
-                    totalOutputTokens += msgOutput
-                    totalCacheReadTokens += msgCacheRead
-                    totalCacheCreationTokens += msgCacheCreate
+                        // Split cache creation into 5m/1h tiers if available
+                        let msgCache5m = usage.cacheCreation?.ephemeral5mInputTokens ?? msgCacheCreate
+                        let msgCache1h = usage.cacheCreation?.ephemeral1hInputTokens ?? 0
 
-                    // Accumulate cost per-message using each message's actual model
-                    perMessageCost += estimateCostFromTokens(
-                        model: raw.message?.model,
-                        inputTokens: msgInput,
-                        outputTokens: msgOutput,
-                        cacheReadTokens: msgCacheRead,
-                        cacheCreation5mTokens: msgCache5m,
-                        cacheCreation1hTokens: msgCache1h,
-                        table: pricingTable
-                    )
+                        totalInputTokens += msgInput
+                        totalOutputTokens += msgOutput
+                        totalCacheReadTokens += msgCacheRead
+                        totalCacheCreationTokens += msgCacheCreate
+                        totalCacheCreation5mTokens += msgCache5m
+                        totalCacheCreation1hTokens += msgCache1h
 
-                    if let model = raw.message?.model {
-                        modelOutputTokens[model, default: 0] += msgOutput
+                        // Accumulate cost per-message using each message's actual model
+                        let msgCost = estimateCostFromTokens(
+                            model: raw.message?.model,
+                            inputTokens: msgInput,
+                            outputTokens: msgOutput,
+                            cacheReadTokens: msgCacheRead,
+                            cacheCreation5mTokens: msgCache5m,
+                            cacheCreation1hTokens: msgCache1h,
+                            table: pricingTable
+                        )
+                        perMessageCost += msgCost
+
+                        if let model = raw.message?.model {
+                            let family = getModelFamily(model)
+                            modelOutputTokens[model, default: 0] += msgOutput
+                            modelInputTokens[family, default: 0] += msgInput
+                            modelCacheReadTokens[family, default: 0] += msgCacheRead
+                            modelCost[family, default: 0] += msgCost
+                            modelTurnCount[family, default: 0] += 1
+                        }
                     }
                 }
 
@@ -277,6 +301,19 @@ actor SessionParser {
         let title = deriveTitle(slug: slug, firstLine: firstLine, sessionId: sessionId)
         let primaryModel = modelOutputTokens.max(by: { $0.value < $1.value })?.key
 
+        // Build model breakdown
+        let allFamilies = Set(modelTurnCount.keys)
+        let modelBreakdown = allFamilies.map { family in
+            ModelTokenBreakdown(
+                model: family,
+                inputTokens: modelInputTokens[family, default: 0],
+                outputTokens: modelOutputTokens.filter { getModelFamily($0.key) == family }.values.reduce(0, +),
+                cacheReadTokens: modelCacheReadTokens[family, default: 0],
+                estimatedCost: modelCost[family, default: 0],
+                turnCount: modelTurnCount[family, default: 0]
+            )
+        }.sorted { $0.estimatedCost > $1.estimatedCost }
+
         return SessionSummary(
             id: sessionId,
             projectId: projectId,
@@ -290,9 +327,13 @@ actor SessionParser {
             totalOutputTokens: totalOutputTokens,
             totalCacheReadTokens: totalCacheReadTokens,
             totalCacheCreationTokens: totalCacheCreationTokens,
+            totalCacheCreation5mTokens: totalCacheCreation5mTokens,
+            totalCacheCreation1hTokens: totalCacheCreation1hTokens,
             compactionCount: compactionCount,
             estimatedCost: perMessageCost,
-            hasError: hasError
+            hasError: hasError,
+            modelBreakdown: modelBreakdown,
+            toolCallCount: toolCallCount
         )
     }
 

@@ -42,6 +42,16 @@ struct MainPanelView: View {
                         message: "Choose a session from the sidebar to view its conversation."
                     )
                 }
+            case .tools:
+                if let session = store.selectedSession {
+                    ToolsMainPanelView(session: session)
+                } else {
+                    EmptyStateView(
+                        icon: "wrench.and.screwdriver",
+                        title: "Select a session",
+                        message: "Choose a session from the sidebar to audit its tool usage."
+                    )
+                }
             case .plans:
                 PlansMainPanelView(
                     selectedPlanFilename: $selectedPlanFilename,

@@ -47,6 +47,14 @@ struct SidebarView: View {
                         selectedSessionId: $selectedSessionId,
                         selectedProjectId: $selectedProjectId
                     )
+                case .tools:
+                    ToolsSidebarContent(
+                        projects: store.projects,
+                        sessionsByProject: store.sessionsByProject,
+                        filterText: filterText,
+                        selectedSessionId: $selectedSessionId,
+                        selectedProjectId: $selectedProjectId
+                    )
                 case .analytics:
                     AnalyticsSidebarContent(
                         projectCosts: store.sidebarAnalyticsData.projectCosts,

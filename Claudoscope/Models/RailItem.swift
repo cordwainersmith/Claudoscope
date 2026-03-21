@@ -4,6 +4,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     // Primary (above separator)
     case analytics
     case sessions
+    case tools
     case plans
     case timeline
 
@@ -22,6 +23,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         switch self {
         case .analytics: return "chart.bar"
         case .sessions:  return "text.line.first.and.arrowtriangle.forward"
+        case .tools:     return "wrench.and.screwdriver"
         case .plans:     return "doc.text"
         case .timeline:  return "clock.arrow.circlepath"
         case .hooks:     return "arrow.triangle.turn.up.right.diamond"
@@ -38,6 +40,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         switch self {
         case .analytics: return "Analytics"
         case .sessions:  return "Sessions"
+        case .tools:     return "Tools"
         case .plans:     return "Plans"
         case .timeline:  return "Timeline"
         case .hooks:     return "Hooks"
@@ -50,6 +53,6 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         }
     }
 
-    static var primaryItems: [RailItem] { [.analytics, .sessions, .plans, .timeline] }
+    static var primaryItems: [RailItem] { [.analytics, .sessions, .tools, .plans, .timeline] }
     static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .memory, .configHealth] }
 }

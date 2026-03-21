@@ -65,39 +65,9 @@ struct ToolCallBlockView: View {
         return false
     }
 
-    private var categoryColor: Color {
-        let readTools = ["Read", "Glob", "Grep", "LSP", "WebFetch", "WebSearch"]
-        let writeTools = ["Write", "Edit", "NotebookEdit"]
-        let execTools = ["Bash", "Agent", "Skill"]
-
-        if readTools.contains(toolName) { return Color(red: 0.52, green: 0.72, blue: 0.92) } // #85B7EB
-        if writeTools.contains(toolName) { return Color(red: 0.36, green: 0.79, blue: 0.65) } // #5DCAA5
-        if execTools.contains(toolName) { return Color(red: 0.83, green: 0.66, blue: 0.26) } // #D4A843
-        return .secondary
-    }
-
-    private var toolIcon: String {
-        switch toolName {
-        case "Read": return "doc.text"
-        case "Write": return "doc.text.fill"
-        case "Edit": return "pencil"
-        case "Bash": return "terminal"
-        case "Grep", "Glob": return "magnifyingglass"
-        case "Agent": return "person.2"
-        case "WebFetch", "WebSearch": return "globe"
-        default: return "wrench"
-        }
-    }
-
-    private var primaryArg: String? {
-        switch toolName {
-        case "Bash": return input["command"]?.stringValue
-        case "Read", "Write", "Edit": return input["file_path"]?.stringValue
-        case "Grep", "Glob": return input["pattern"]?.stringValue
-        case "Agent": return input["description"]?.stringValue
-        default: return nil
-        }
-    }
+    private var toolCategoryColor: Color { categoryColor(for: toolName) }
+    private var toolIconName: String { toolIcon(for: toolName) }
+    private var primaryArg: String? { primaryArgument(from: input, toolName: toolName) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -112,9 +82,9 @@ struct ToolCallBlockView: View {
                         .foregroundStyle(.tertiary)
                         .frame(width: 10)
 
-                    Image(systemName: toolIcon)
+                    Image(systemName: toolIconName)
                         .font(.system(size: 12))
-                        .foregroundStyle(categoryColor)
+                        .foregroundStyle(toolCategoryColor)
 
                     Text(toolName)
                         .font(Typography.bodyMedium)
@@ -162,7 +132,7 @@ struct ToolCallBlockView: View {
         )
         .overlay(alignment: .leading) {
             Rectangle()
-                .fill(categoryColor)
+                .fill(toolCategoryColor)
                 .frame(width: 3)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         }

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.7]
+- Tabbed analytics view with Overview, Cache, and Models segments
+- Actionable cache dashboard: busting detection, stability callout, 5m/1h TTL tier breakdown, per-session efficiency table, model-aware savings
+- Model analysis tab: daily cost by model chart, model efficiency table, what-if Opus-to-Sonnet calculator
+- Tools rail: per-session tool call extraction, category breakdown (Read/Write/Exec/Other), tool analytics
+- Command palette (Cmd+K) for quick navigation between rails
+- Subagent session content loading and badge for secret scan findings
+- Replaced NSPanel update dialogs with native SwiftUI Window scenes
+- Improved health check scoring and popover UX
+
 ## [0.4.6]
 - Added Config Health screen: 19 lint rules across CLAUDE.md, rules, and skills with group-by-rule view, severity filters, health gauge, and one-click rescan
 - Added session health checks (SES001-SES004) surfacing expensive, long, or idle sessions

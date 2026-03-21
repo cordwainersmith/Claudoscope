@@ -23,6 +23,9 @@ struct FullWindowView: View {
     @State private var hiddenLintSeverities: Set<LintSeverity> = []
     @State private var selectedHealthItem: String?
 
+    // Command palette
+    @State private var showCommandPalette = false
+
     // Pending navigation (deferred until after rail change)
     @State private var pendingNavigation: (projectId: String, sessionId: String)?
     @State private var pendingSubagentFileName: String?
@@ -34,53 +37,9 @@ struct FullWindowView: View {
     @State private var selectedSettingsSection: String?
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Rail: 48px fixed
-            RailView(selected: $selectedRail)
-
-            Divider()
-
-            // Sidebar: 240px
-            SidebarView(
-                rail: selectedRail,
-                selectedProjectId: $selectedProjectId,
-                selectedSessionId: $selectedSessionId,
-                selectedPlanFilename: $selectedPlanFilename,
-                selectedHookEventId: $selectedHookEventId,
-                selectedCommandName: $selectedCommandName,
-                selectedSkillName: $selectedSkillName,
-                selectedMcpName: $selectedMcpName,
-                selectedMemoryId: $selectedMemoryId,
-                selectedMemoryProjectId: $selectedMemoryProjectId,
-                selectedSettingsSection: $selectedSettingsSection,
-                selectedLintResultId: $selectedLintResultId,
-                hiddenLintSeverities: $hiddenLintSeverities,
-                selectedHealthItem: $selectedHealthItem,
-                selectedTimelineDay: $selectedTimelineDay
-            )
-
-            Divider()
-
-            // Main panel: flexible
-            MainPanelView(
-                rail: selectedRail,
-                selectedPlanFilename: $selectedPlanFilename,
-                selectedHookEventId: selectedHookEventId,
-                selectedCommandName: $selectedCommandName,
-                selectedSkillName: $selectedSkillName,
-                selectedMcpName: selectedMcpName,
-                selectedMemoryId: $selectedMemoryId,
-                selectedLintResultId: $selectedLintResultId,
-                hiddenLintSeverities: $hiddenLintSeverities,
-                selectedHealthItem: selectedHealthItem,
-                selectedProjectId: selectedProjectId,
-                selectedSettingsSection: $selectedSettingsSection,
-                onNavigateToSession: { projectId, sessionId, subagentFileName in
-                    pendingSubagentFileName = subagentFileName
-                    pendingNavigation = (projectId, sessionId)
-                    selectedRail = .sessions
-                }
-            )
+        ZStack {
+            threeColumnLayout
+            commandPaletteLayer
         }
         .onChange(of: selectedRail) { oldRail, newRail in
             // Save current selection
@@ -125,6 +84,73 @@ struct FullWindowView: View {
                 await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
             }
         }
+        .background {
+            // Hidden button to capture Cmd+K globally
+            Button("") { showCommandPalette = true }
+                .keyboardShortcut("k", modifiers: .command)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+        }
+    }
+
+    private var threeColumnLayout: some View {
+        HStack(spacing: 0) {
+            RailView(selected: $selectedRail)
+
+            Divider()
+
+            SidebarView(
+                rail: selectedRail,
+                selectedProjectId: $selectedProjectId,
+                selectedSessionId: $selectedSessionId,
+                selectedPlanFilename: $selectedPlanFilename,
+                selectedHookEventId: $selectedHookEventId,
+                selectedCommandName: $selectedCommandName,
+                selectedSkillName: $selectedSkillName,
+                selectedMcpName: $selectedMcpName,
+                selectedMemoryId: $selectedMemoryId,
+                selectedMemoryProjectId: $selectedMemoryProjectId,
+                selectedSettingsSection: $selectedSettingsSection,
+                selectedLintResultId: $selectedLintResultId,
+                hiddenLintSeverities: $hiddenLintSeverities,
+                selectedHealthItem: $selectedHealthItem,
+                selectedTimelineDay: $selectedTimelineDay
+            )
+
+            Divider()
+
+            MainPanelView(
+                rail: selectedRail,
+                selectedPlanFilename: $selectedPlanFilename,
+                selectedHookEventId: selectedHookEventId,
+                selectedCommandName: $selectedCommandName,
+                selectedSkillName: $selectedSkillName,
+                selectedMcpName: selectedMcpName,
+                selectedMemoryId: $selectedMemoryId,
+                selectedLintResultId: $selectedLintResultId,
+                hiddenLintSeverities: $hiddenLintSeverities,
+                selectedHealthItem: selectedHealthItem,
+                selectedProjectId: selectedProjectId,
+                selectedSettingsSection: $selectedSettingsSection,
+                onNavigateToSession: { projectId, sessionId, subagentFileName in
+                    pendingSubagentFileName = subagentFileName
+                    pendingNavigation = (projectId, sessionId)
+                    selectedRail = .sessions
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var commandPaletteLayer: some View {
+        if showCommandPalette {
+            CommandPaletteOverlay(
+                isPresented: $showCommandPalette,
+                selectedRail: $selectedRail,
+                selectedProjectId: $selectedProjectId,
+                selectedSessionId: $selectedSessionId
+            )
+        }
     }
 
     private func loadDataForRail(_ rail: RailItem) {
@@ -141,7 +167,7 @@ struct FullWindowView: View {
                 await store.runConfigLintIfNeeded(projectId: selectedProjectId)
             case .hooks, .commands, .mcps, .skills, .settings:
                 await store.loadConfig(projectId: selectedProjectId)
-            default:
+            case .analytics, .sessions, .tools:
                 break
             }
         }

@@ -3,6 +3,13 @@ import Charts
 
 struct AnalyticsDetailView: View {
     @Environment(SessionStore.self) private var store
+    @State private var selectedTab: AnalyticsTab = .overview
+
+    enum AnalyticsTab: String, CaseIterable {
+        case overview = "Overview"
+        case cache = "Cache"
+        case models = "Models"
+    }
 
     var data: AnalyticsData { store.analyticsData }
 
@@ -12,9 +19,9 @@ struct AnalyticsDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                // Header with title, filter badge, and time range
+        VStack(spacing: 0) {
+            // Shared header area
+            VStack(alignment: .leading, spacing: 12) {
                 AnalyticsHeaderView(
                     selectedProjectName: selectedProjectName,
                     onClearProject: {
@@ -22,36 +29,60 @@ struct AnalyticsDetailView: View {
                         store.recomputeAnalytics()
                     }
                 )
-                .padding(.horizontal, 24)
 
-                // Stat cards
-                HStack(spacing: 12) {
-                    StatCard(title: "Sessions", value: "\(data.totalSessions)")
-                    StatCard(title: "Messages", value: formatTokens(data.totalMessages))
-                    StatCard(
-                        title: "Tokens",
-                        value: formatTokens(data.totalTokens),
-                        subtitle: data.totalCacheTokens > 0 ? "+ \(formatTokens(data.totalCacheTokens)) cache" : nil
-                    )
-                    StatCard(title: "Est. Cost", value: formatCost(data.totalCost), isHighlighted: true)
-                        .help("Estimated from token usage")
+                Picker("", selection: $selectedTab) {
+                    ForEach(AnalyticsTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
                 }
-                .padding(.horizontal, 24)
-
-                // Daily usage chart
-                if !data.dailyUsage.isEmpty {
-                    DailyUsageChartView(dailyUsage: data.dailyUsage)
-                        .padding(.horizontal, 24)
-                }
-
-                // Bottom row: Cost by Project + Model Distribution
-                HStack(alignment: .top, spacing: 16) {
-                    CostByProjectView(projectCosts: data.projectCosts, totalCost: data.totalCost)
-                    ModelDistributionView(modelUsage: data.modelUsage)
-                }
-                .padding(.horizontal, 24)
+                .pickerStyle(.segmented)
+                .frame(width: 280)
             }
-            .padding(.vertical, 24)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+
+            // Tab content
+            switch selectedTab {
+            case .overview:
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Stat cards
+                        HStack(spacing: 12) {
+                            StatCard(title: "Sessions", value: "\(data.totalSessions)")
+                            StatCard(title: "Messages", value: formatTokens(data.totalMessages))
+                            StatCard(
+                                title: "Tokens",
+                                value: formatTokens(data.totalTokens),
+                                subtitle: data.totalCacheTokens > 0 ? "+ \(formatTokens(data.totalCacheTokens)) cache" : nil
+                            )
+                            StatCard(title: "Est. Cost", value: formatCost(data.totalCost), isHighlighted: true)
+                                .help("Estimated from token usage")
+                        }
+                        .padding(.horizontal, 24)
+
+                        // Daily usage chart
+                        if !data.dailyUsage.isEmpty {
+                            DailyUsageChartView(dailyUsage: data.dailyUsage)
+                                .padding(.horizontal, 24)
+                        }
+
+                        // Bottom row: Cost by Project + Model Distribution
+                        HStack(alignment: .top, spacing: 16) {
+                            CostByProjectView(projectCosts: data.projectCosts, totalCost: data.totalCost)
+                            ModelDistributionView(modelUsage: data.modelUsage)
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                    .padding(.vertical, 24)
+                }
+
+            case .cache:
+                CacheEffectivenessView(data: data.cacheAnalytics, dailyUsage: data.dailyUsage)
+
+            case .models:
+                ModelAnalysisView()
+            }
         }
     }
 }
