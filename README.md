@@ -44,6 +44,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
 ## Requirements
 
 - macOS 14.0 (Sonoma) or later
+- Apple Silicon Mac (M1 or later). Intel Macs are not currently supported.
 - Claude Code installed and used at least once (so that `~/.claude/projects/` exists with session data)
 
 ## Installation
