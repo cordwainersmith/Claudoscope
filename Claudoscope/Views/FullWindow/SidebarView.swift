@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SidebarView: View {
     let rail: RailItem
+    let width: CGFloat
     @Environment(SessionStore.self) private var store
     @Binding var selectedProjectId: String?
     @Binding var selectedSessionId: String?
@@ -131,7 +132,7 @@ struct SidebarView: View {
             }
         }
         .onChange(of: rail) { _, _ in filterText = "" }
-        .frame(width: 240)
+        .frame(width: width)
         .background(.bar.opacity(0.5))
     }
 }
@@ -200,6 +201,7 @@ private struct ProjectGroup: View {
                     Text(project.name)
                         .font(Typography.bodyMedium)
                         .lineLimit(1)
+                        .help(project.name)
 
                     Spacer()
 
@@ -360,6 +362,7 @@ private struct AnalyticsProjectRow: View {
                         .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                         .foregroundStyle(isSelected ? Color.accentColor : .primary)
                         .lineLimit(1)
+                        .help(name)
                     Spacer()
                     Text(formatCost(cost))
                         .font(Typography.code)

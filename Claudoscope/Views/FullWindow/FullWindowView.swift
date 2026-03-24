@@ -36,6 +36,10 @@ struct FullWindowView: View {
     // Settings state
     @State private var selectedSettingsSection: String?
 
+    // Sidebar resize
+    @SceneStorage("sidebarWidth") private var sidebarWidth: Double = 240
+    @State private var dragStartWidth: CGFloat?
+
     var body: some View {
         ZStack {
             threeColumnLayout
@@ -101,6 +105,7 @@ struct FullWindowView: View {
 
             SidebarView(
                 rail: selectedRail,
+                width: sidebarWidth,
                 selectedProjectId: $selectedProjectId,
                 selectedSessionId: $selectedSessionId,
                 selectedPlanFilename: $selectedPlanFilename,
@@ -117,7 +122,7 @@ struct FullWindowView: View {
                 selectedTimelineDay: $selectedTimelineDay
             )
 
-            Divider()
+            SidebarResizeHandle(sidebarWidth: $sidebarWidth, dragStartWidth: $dragStartWidth)
 
             MainPanelView(
                 rail: selectedRail,
@@ -171,5 +176,50 @@ struct FullWindowView: View {
                 break
             }
         }
+    }
+}
+
+// MARK: - Sidebar Resize Handle
+
+private struct SidebarResizeHandle: View {
+    @Binding var sidebarWidth: Double
+    @Binding var dragStartWidth: CGFloat?
+    @State private var isHovered = false
+
+    private let minWidth: CGFloat = 180
+    private let maxWidth: CGFloat = 400
+    private let defaultWidth: CGFloat = 240
+
+    var body: some View {
+        Rectangle()
+            .fill(isHovered ? Color.accentColor.opacity(0.3) : .clear)
+            .frame(width: 5)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    NSCursor.resizeLeftRight.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        if dragStartWidth == nil {
+                            dragStartWidth = sidebarWidth
+                        }
+                        let newWidth = (dragStartWidth ?? sidebarWidth) + value.translation.width
+                        sidebarWidth = min(maxWidth, max(minWidth, newWidth))
+                    }
+                    .onEnded { _ in
+                        dragStartWidth = nil
+                    }
+            )
+            .onTapGesture(count: 2) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    sidebarWidth = defaultWidth
+                }
+            }
     }
 }
