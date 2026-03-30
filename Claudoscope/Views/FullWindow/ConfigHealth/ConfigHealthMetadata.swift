@@ -36,6 +36,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Platform token detected",
         hint: "Platform-specific token (GitHub, Slack, npm, etc.) found. Rotate the token and store it securely."
     ),
+    .SEC008: RuleMetadata(
+        displayName: "Credentials exposed without ENV_SCRUB",
+        hint: "Credential patterns found in session data while CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is not set. Credentials may leak into Bash tool, hooks, or MCP server subprocesses."
+    ),
     .SES001: RuleMetadata(
         displayName: "High cost session",
         hint: "Session estimated cost exceeds $25. Consider breaking expensive tasks into smaller sessions."
@@ -51,6 +55,14 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .SES004: RuleMetadata(
         displayName: "Stale session with history",
         hint: "Session has significant history but hasn't been active recently. Consider archiving or reviewing for relevant context."
+    ),
+    .SES005: RuleMetadata(
+        displayName: "Session errors detected",
+        hint: "Session experienced API errors (rate limits, auth failures, etc.). Check API configuration and consider request throttling."
+    ),
+    .SES006: RuleMetadata(
+        displayName: "Idle session resumed without /clear",
+        hint: "Session resumed after 75+ minutes idle without /clear. Stale context forces full re-caching, wasting tokens and cost."
     ),
     .SKL001: RuleMetadata(
         displayName: "Wrong SKILL.md casing",
@@ -147,6 +159,30 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .XCT003: RuleMetadata(
         displayName: "No .claude/ directory",
         hint: "No .claude/ directory found. Create one to configure Claude Code for this project."
+    ),
+    .CFG001: RuleMetadata(
+        displayName: "Sandbox enabled without lock files",
+        hint: "sandbox.enabled is true but no dependency lock files found. Sandbox may silently disable if required tools are missing."
+    ),
+    .CFG002: RuleMetadata(
+        displayName: "Contradictory filesystem permissions",
+        hint: "Same path appears in both allowRead and denyRead. Remove the conflict so permissions behave predictably."
+    ),
+    .CFG003: RuleMetadata(
+        displayName: "Claude.ai MCP servers disabled",
+        hint: "ENABLE_CLAUDEAI_MCP_SERVERS is set to false. Claude.ai MCP servers will not be available."
+    ),
+    .CFG004: RuleMetadata(
+        displayName: "Enterprise plugin control active",
+        hint: "allowedChannelPlugins is configured, restricting which plugins are available in this environment."
+    ),
+    .CFG005: RuleMetadata(
+        displayName: "Bare mode conflicts with hooks/MCP",
+        hint: "Bare mode is enabled but hooks or MCP servers are also configured. These are ignored in bare mode."
+    ),
+    .CFG006: RuleMetadata(
+        displayName: "Subprocess env scrub not enabled",
+        hint: "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is not set. Credentials from your shell environment may leak into Bash tool, hooks, and MCP server subprocesses."
     ),
 ]
 
