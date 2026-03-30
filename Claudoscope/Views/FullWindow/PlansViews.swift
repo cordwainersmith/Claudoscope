@@ -156,7 +156,7 @@ struct PlansMainPanelView: View {
 
             // Content
             ScrollView {
-                MarkdownContentView(content: detail.content, fontSize: 12)
+                RichMarkdownContentView(content: detail.content)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(24)
