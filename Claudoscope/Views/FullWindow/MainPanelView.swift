@@ -61,7 +61,8 @@ struct MainPanelView: View {
             case .timeline:
                 TimelineMainPanelView(
                     entries: store.timelineEntries,
-                    isLoading: store.timelineLoading
+                    isLoading: store.timelineLoading,
+                    onNavigateToSession: onNavigateToSession
                 )
             case .hooks:
                 HooksMainPanelView(
