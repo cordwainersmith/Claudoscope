@@ -36,6 +36,23 @@ struct AssistantMessageView: View {
     let record: ParsedRecordRaw
     let toolResultMap: [String: ToolResultEntry]
     var searchText: String = ""
+    var turnDuration: TurnDuration? = nil
+    var parallelToolCount: Int = 0
+
+    private var effortLevel: EffortLevel {
+        var thinkingChars = 0
+        if case .blocks(let blocks) = record.message?.content {
+            for block in blocks where block.type == "thinking" {
+                thinkingChars += block.thinking?.count ?? 0
+            }
+        }
+        let outputTokens = record.message?.usage?.outputTokens ?? 0
+        return ObservabilityAnalyzer.classifyEffort(
+            thinkingChars: thinkingChars,
+            outputTokens: outputTokens,
+            stopReason: record.message?.stopReason
+        )
+    }
 
     private var contentBlocks: [ContentBlockRaw] {
         guard let content = record.message?.content,
@@ -76,6 +93,20 @@ struct AssistantMessageView: View {
                         Text("\(formatTokens(inTok)) in / \(formatTokens(outTok)) out")
                             .font(Typography.codeSmall)
                             .foregroundStyle(.tertiary)
+                    }
+                }
+
+                if turnDuration != nil || effortLevel != .low || parallelToolCount > 1 {
+                    HStack(spacing: 4) {
+                        if let td = turnDuration, td.durationMs > 0 {
+                            TurnDurationBadge(durationMs: td.durationMs)
+                        }
+                        if effortLevel != .low {
+                            EffortLevelBadge(level: effortLevel)
+                        }
+                        if parallelToolCount > 1 {
+                            ParallelToolBadge(count: parallelToolCount)
+                        }
                     }
                 }
             }

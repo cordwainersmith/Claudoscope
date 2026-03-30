@@ -9,6 +9,8 @@ struct AnalyticsDetailView: View {
         case overview = "Overview"
         case cache = "Cache"
         case models = "Models"
+        case latency = "Latency"
+        case effort = "Effort"
     }
 
     var data: AnalyticsData { store.analyticsData }
@@ -36,7 +38,7 @@ struct AnalyticsDetailView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 280)
+                .frame(width: 440)
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -82,6 +84,12 @@ struct AnalyticsDetailView: View {
 
             case .models:
                 ModelAnalysisView()
+
+            case .latency:
+                LatencyAnalyticsView(data: data.latencyAnalytics)
+
+            case .effort:
+                EffortAnalyticsView(data: data.effortAnalytics)
             }
         }
     }

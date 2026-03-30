@@ -38,11 +38,15 @@ struct AnalyticsData: Sendable {
     let cacheAnalytics: CacheAnalytics
     let modelEfficiency: [ModelEfficiencyRow]
     let dailyModelCost: [DailyModelCost]
+    let latencyAnalytics: LatencyAnalytics
+    let effortAnalytics: EffortAnalytics
+    let parallelToolAnalytics: ParallelToolAnalytics
 
     static let empty = AnalyticsData(
         totalSessions: 0, totalMessages: 0, totalTokens: 0, totalCacheTokens: 0, totalCost: 0,
         dailyUsage: [], projectCosts: [], modelUsage: [],
-        cacheAnalytics: .empty, modelEfficiency: [], dailyModelCost: []
+        cacheAnalytics: .empty, modelEfficiency: [], dailyModelCost: [],
+        latencyAnalytics: .empty, effortAnalytics: .empty, parallelToolAnalytics: .empty
     )
 }
 
@@ -156,4 +160,74 @@ struct ModelUsage: Identifiable, Sendable {
     var turnCount: Int
     var totalInputTokens: Int
     var totalOutputTokens: Int
+}
+
+// MARK: - Latency Analytics
+
+struct LatencyAnalytics: Sendable {
+    let medianDurationMs: Double
+    let p95DurationMs: Double
+    let p99DurationMs: Double
+    let histogram: [LatencyBucket]
+    let slowestTurns: [SlowTurnEntry]
+    let postCompactionAvgMs: Double
+    let normalAvgMs: Double
+    let degradingSessionIds: [String]
+
+    static let empty = LatencyAnalytics(
+        medianDurationMs: 0, p95DurationMs: 0, p99DurationMs: 0,
+        histogram: [], slowestTurns: [],
+        postCompactionAvgMs: 0, normalAvgMs: 0, degradingSessionIds: []
+    )
+}
+
+struct LatencyBucket: Identifiable, Sendable {
+    var id: String { label }
+    let label: String
+    let count: Int
+}
+
+struct SlowTurnEntry: Identifiable, Sendable {
+    let id: String
+    let sessionId: String
+    let sessionTitle: String
+    let turnIndex: Int
+    let durationMs: Double
+    let isPostCompaction: Bool
+    let model: String?
+}
+
+// MARK: - Effort Analytics
+
+struct EffortAnalytics: Sendable {
+    let distribution: EffortDistribution
+    let costByEffort: [EffortCostBreakdown]
+    let effortOverTime: [DailyEffort]
+
+    static let empty = EffortAnalytics(distribution: .zero, costByEffort: [], effortOverTime: [])
+}
+
+struct DailyEffort: Sendable, Identifiable {
+    var id: String { date }
+    let date: String
+    let distribution: EffortDistribution
+}
+
+// MARK: - Parallel Tool Analytics
+
+struct ParallelToolAnalytics: Sendable {
+    let totalParallelGroups: Int
+    let avgToolsPerGroup: Double
+    let maxParallelDegree: Int
+    let distribution: [ParallelToolBucket]
+
+    static let empty = ParallelToolAnalytics(
+        totalParallelGroups: 0, avgToolsPerGroup: 0, maxParallelDegree: 0, distribution: []
+    )
+}
+
+struct ParallelToolBucket: Sendable, Identifiable {
+    var id: Int { toolCount }
+    let toolCount: Int
+    let occurrences: Int
 }

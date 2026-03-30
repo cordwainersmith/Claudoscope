@@ -75,6 +75,35 @@ extension ConfigLinterService {
                     ))
                 }
             }
+
+            // SES005: Error pattern detection (independent of priority chain above)
+            let errors = session.observability.errorClassifications
+            if !errors.isEmpty {
+                let errorLabels = errors.map(\.label).joined(separator: ", ")
+                let severity: LintSeverity = errors.contains(where: { $0 == .rateLimit || $0 == .authFailure }) ? .error : .warning
+                results.append(LintResult(
+                    severity: severity,
+                    checkId: .SES005,
+                    filePath: syntheticPath,
+                    message: "Session experienced \(errors.count) error type(s): \(errorLabels). Check API configuration and rate limits." + statsTag,
+                    fix: errors.contains(.rateLimit) ? "Consider adding request throttling or upgrading API tier" : "Review session logs for error details",
+                    displayPath: displayTitle
+                ))
+            }
+
+            // SES006: Idle/zombie session detection
+            if session.observability.hasIdleZombieGap {
+                let wasteCost = session.observability.estimatedIdleWasteCost
+                let costNote = wasteCost > 0 ? String(format: " (estimated $%.2f re-cache waste)", wasteCost) : ""
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .SES006,
+                    filePath: syntheticPath,
+                    message: "Session resumed after 75+ minute idle gap without /clear\(costNote). Stale context forces full re-caching." + statsTag,
+                    fix: "Use /clear when returning to a session after extended breaks",
+                    displayPath: displayTitle
+                ))
+            }
         }
 
         // Sort by severity (errors first, then warnings, then info), cap at 10

@@ -81,6 +81,10 @@ actor ConfigLinterService {
         // Cross-cutting token estimation
         results.append(contentsOf: crossCuttingChecks(projectRoot: projectRoot, globalDir: globalClaudeDir, claudeMdFiles: claudeMdFiles))
 
+        // Config health checks (CFG001-CFG006)
+        let projectRootURL = projectRoot.map { URL(fileURLWithPath: $0) }
+        results.append(contentsOf: lintConfig(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))
+
         // Sort by severity (errors first)
         results.sort { $0.severity < $1.severity }
         return results

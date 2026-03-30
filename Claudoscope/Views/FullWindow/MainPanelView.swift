@@ -34,7 +34,7 @@ struct MainPanelView: View {
                 AnalyticsDetailView()
             case .sessions:
                 if let session = store.selectedSession {
-                    ChatView(session: session)
+                    SessionDetailTabView(session: session)
                 } else {
                     EmptyStateView(
                         icon: "text.line.first.and.arrowtriangle.forward",
@@ -109,5 +109,43 @@ struct MainPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct SessionDetailTabView: View {
+    let session: ParsedSession
+    @Environment(SessionStore.self) private var store
+    @State private var selectedTab: SessionTab = .chat
+
+    enum SessionTab: String, CaseIterable {
+        case chat = "Chat"
+        case agentTree = "Agent Tree"
+    }
+
+    private var showAgentTreeTab: Bool {
+        store.hasSubagentFiles(sessionId: session.id, projectId: session.projectId)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if showAgentTreeTab {
+                Picker("", selection: $selectedTab) {
+                    ForEach(SessionTab.allCases, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+            }
+
+            switch selectedTab {
+            case .chat:
+                ChatView(session: session)
+            case .agentTree:
+                AgentTreeView(session: session)
+            }
+        }
     }
 }

@@ -44,6 +44,13 @@ struct SessionMetadata: Sendable {
     let totalCacheCreationTokens: Int
     let models: [String]
     let compactionCount: Int
+    let turnDurations: [TurnDuration]
+    let effortDistribution: EffortDistribution
+    let maxIdleGapSeconds: Double
+    let idleGapAfterTimestamp: String?
+    let compactionEvents: [CompactionEvent]
+    let parallelToolGroups: [ParallelToolGroup]
+    let errorDetails: [SessionErrorDetail]
 }
 
 // MARK: - Session Summary (lightweight for sidebar)
@@ -68,6 +75,7 @@ struct SessionSummary: Identifiable, Sendable {
     let hasError: Bool
     let modelBreakdown: [ModelTokenBreakdown]
     let toolCallCount: Int
+    let observability: SessionObservability
 }
 
 struct ModelTokenBreakdown: Sendable {

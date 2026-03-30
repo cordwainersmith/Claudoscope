@@ -125,6 +125,11 @@ struct AnalyticsEngine {
             totalCost: totalCost
         )
 
+        // Compute observability analytics
+        let latencyAnalytics = computeLatencyAnalytics(sessions: filtered)
+        let effortAnalytics = computeEffortAnalytics(sessions: filtered)
+        let parallelToolAnalytics = computeParallelToolAnalytics(sessions: filtered)
+
         return AnalyticsData(
             totalSessions: totalSessions,
             totalMessages: totalMessages,
@@ -136,7 +141,10 @@ struct AnalyticsEngine {
             modelUsage: modelUsage,
             cacheAnalytics: cacheAnalytics,
             modelEfficiency: modelEfficiency,
-            dailyModelCost: dailyModelCost
+            dailyModelCost: dailyModelCost,
+            latencyAnalytics: latencyAnalytics,
+            effortAnalytics: effortAnalytics,
+            parallelToolAnalytics: parallelToolAnalytics
         )
     }
 
@@ -367,6 +375,224 @@ struct AnalyticsEngine {
             savingsPercent: savingsPercent,
             turnsAffected: turnsAffected
         )
+    }
+
+    // MARK: - Latency Analytics
+
+    private static func computeLatencyAnalytics(
+        sessions: [(session: SessionSummary, project: Project)]
+    ) -> LatencyAnalytics {
+        let sessionsWithLatency = sessions.filter { $0.session.observability.medianTurnDurationMs != nil }
+        guard !sessionsWithLatency.isEmpty else { return .empty }
+
+        let medians = sessionsWithLatency.compactMap { $0.session.observability.medianTurnDurationMs }.sorted()
+        let count = medians.count
+
+        let p50 = percentile(sorted: medians, p: 0.50)
+        let p95 = percentile(sorted: medians, p: 0.95)
+        let p99 = percentile(sorted: medians, p: 0.99)
+
+        // Histogram buckets by median turn duration
+        let bucketRanges: [(label: String, lo: Double, hi: Double)] = [
+            ("<1s", 0, 1000),
+            ("1-5s", 1000, 5000),
+            ("5-10s", 5000, 10000),
+            ("10-30s", 10000, 30000),
+            ("30-60s", 30000, 60000),
+            (">60s", 60000, .infinity)
+        ]
+        var bucketCounts = [String: Int]()
+        for (label, _, _) in bucketRanges { bucketCounts[label] = 0 }
+        for median in medians {
+            for (label, lo, hi) in bucketRanges {
+                if median >= lo && median < hi {
+                    bucketCounts[label, default: 0] += 1
+                    break
+                }
+            }
+        }
+        let histogram = bucketRanges.map { LatencyBucket(label: $0.label, count: bucketCounts[$0.label, default: 0]) }
+
+        // Slowest turns (top 10 by maxTurnDurationMs)
+        let slowestTurns: [SlowTurnEntry] = sessionsWithLatency
+            .compactMap { pair -> (session: SessionSummary, maxMs: Double)? in
+                guard let maxMs = pair.session.observability.maxTurnDurationMs else { return nil }
+                return (session: pair.session, maxMs: maxMs)
+            }
+            .sorted { $0.maxMs > $1.maxMs }
+            .prefix(10)
+            .enumerated()
+            .map { (index, item) in
+                SlowTurnEntry(
+                    id: "\(item.session.id)-max",
+                    sessionId: item.session.id,
+                    sessionTitle: item.session.title,
+                    turnIndex: index + 1,
+                    durationMs: item.maxMs,
+                    isPostCompaction: !item.session.observability.compactionTimestamps.isEmpty,
+                    model: item.session.primaryModel != nil ? getModelFamily(item.session.primaryModel) : nil
+                )
+            }
+
+        // Compaction correlation
+        let postCompactionSessions = sessionsWithLatency.filter { !$0.session.observability.compactionTimestamps.isEmpty }
+        let normalSessions = sessionsWithLatency.filter { $0.session.observability.compactionTimestamps.isEmpty }
+
+        let postCompactionAvgMs: Double = {
+            let values = postCompactionSessions.compactMap { $0.session.observability.medianTurnDurationMs }
+            guard !values.isEmpty else { return 0 }
+            return values.reduce(0, +) / Double(values.count)
+        }()
+
+        let normalAvgMs: Double = {
+            let values = normalSessions.compactMap { $0.session.observability.medianTurnDurationMs }
+            guard !values.isEmpty else { return 0 }
+            return values.reduce(0, +) / Double(values.count)
+        }()
+
+        // Degrading sessions: any session with a turn exceeding 60s
+        let degradingSessionIds = sessionsWithLatency
+            .filter { ($0.session.observability.maxTurnDurationMs ?? 0) > 60000 }
+            .map { $0.session.id }
+
+        return LatencyAnalytics(
+            medianDurationMs: p50,
+            p95DurationMs: p95,
+            p99DurationMs: p99,
+            histogram: histogram,
+            slowestTurns: slowestTurns,
+            postCompactionAvgMs: postCompactionAvgMs,
+            normalAvgMs: normalAvgMs,
+            degradingSessionIds: degradingSessionIds
+        )
+    }
+
+    // MARK: - Effort Analytics
+
+    private static func computeEffortAnalytics(
+        sessions: [(session: SessionSummary, project: Project)]
+    ) -> EffortAnalytics {
+        // Aggregate effort distribution across all sessions
+        var totalLow = 0
+        var totalMedium = 0
+        var totalHigh = 0
+        var totalUltrathink = 0
+
+        for (session, _) in sessions {
+            let dist = session.observability.effortDistribution
+            totalLow += dist.low
+            totalMedium += dist.medium
+            totalHigh += dist.high
+            totalUltrathink += dist.ultrathink
+        }
+
+        let distribution = EffortDistribution(
+            low: totalLow,
+            medium: totalMedium,
+            high: totalHigh,
+            ultrathink: totalUltrathink
+        )
+
+        // Cost by effort level: group sessions by dominant effort level
+        var effortCostMap: [EffortLevel: (turnCount: Int, totalCost: Double)] = [:]
+        for (session, _) in sessions {
+            guard let level = session.observability.dominantEffortLevel else { continue }
+            var entry = effortCostMap[level, default: (turnCount: 0, totalCost: 0)]
+            entry.turnCount += session.messageCount
+            entry.totalCost += session.estimatedCost
+            effortCostMap[level] = entry
+        }
+
+        let costByEffort: [EffortCostBreakdown] = EffortLevel.allCases.compactMap { level in
+            guard let entry = effortCostMap[level], entry.turnCount > 0 else { return nil }
+            return EffortCostBreakdown(
+                level: level,
+                turnCount: entry.turnCount,
+                totalCost: entry.totalCost,
+                avgCostPerTurn: entry.totalCost / Double(entry.turnCount)
+            )
+        }
+
+        // Effort over time: group by date
+        var dailyEffortMap: [String: (low: Int, medium: Int, high: Int, ultrathink: Int)] = [:]
+        for (session, _) in sessions {
+            let day = String(session.firstTimestamp.prefix(10))
+            guard day.count == 10 else { continue }
+            let dist = session.observability.effortDistribution
+            var entry = dailyEffortMap[day, default: (low: 0, medium: 0, high: 0, ultrathink: 0)]
+            entry.low += dist.low
+            entry.medium += dist.medium
+            entry.high += dist.high
+            entry.ultrathink += dist.ultrathink
+            dailyEffortMap[day] = entry
+        }
+
+        let effortOverTime: [DailyEffort] = dailyEffortMap.keys.sorted().map { date in
+            let entry = dailyEffortMap[date]!
+            return DailyEffort(
+                date: date,
+                distribution: EffortDistribution(
+                    low: entry.low,
+                    medium: entry.medium,
+                    high: entry.high,
+                    ultrathink: entry.ultrathink
+                )
+            )
+        }
+
+        return EffortAnalytics(
+            distribution: distribution,
+            costByEffort: costByEffort,
+            effortOverTime: effortOverTime
+        )
+    }
+
+    // MARK: - Parallel Tool Analytics
+
+    private static func computeParallelToolAnalytics(
+        sessions: [(session: SessionSummary, project: Project)]
+    ) -> ParallelToolAnalytics {
+        var totalParallelGroups = 0
+        var maxDegree = 0
+        var degreeCounts: [Int: Int] = [:] // maxParallelDegree -> session count
+
+        for (session, _) in sessions {
+            let obs = session.observability
+            totalParallelGroups += obs.parallelToolCallCount
+            if obs.maxParallelDegree > maxDegree {
+                maxDegree = obs.maxParallelDegree
+            }
+            if obs.maxParallelDegree > 0 {
+                degreeCounts[obs.maxParallelDegree, default: 0] += 1
+            }
+        }
+
+        guard totalParallelGroups > 0 else { return .empty }
+
+        // Estimate average tools per group from max degree (best available approximation)
+        let avgToolsPerGroup = Double(maxDegree)
+
+        let distribution = degreeCounts.keys.sorted().map { degree in
+            ParallelToolBucket(toolCount: degree, occurrences: degreeCounts[degree, default: 0])
+        }
+
+        return ParallelToolAnalytics(
+            totalParallelGroups: totalParallelGroups,
+            avgToolsPerGroup: avgToolsPerGroup,
+            maxParallelDegree: maxDegree,
+            distribution: distribution
+        )
+    }
+
+    // MARK: - Helpers
+
+    private static func percentile(sorted values: [Double], p: Double) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let index = p * Double(values.count - 1)
+        let lower = Int(index)
+        let upper = min(lower + 1, values.count - 1)
+        let fraction = index - Double(lower)
+        return values[lower] + fraction * (values[upper] - values[lower])
     }
 
     private static func dateKey(_ timestamp: String) -> String? {

@@ -258,6 +258,20 @@ private struct SessionRow: View {
                     Text("\(session.messageCount) msgs")
                         .font(.system(size: 11))
 
+                    if !session.observability.errorClassifications.isEmpty {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red)
+                            .help("Errors: \(session.observability.errorClassifications.map(\.label).joined(separator: ", "))")
+                    }
+
+                    if session.observability.hasIdleZombieGap {
+                        Image(systemName: "moon.zzz.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.orange)
+                            .help("Session resumed after 75+ min idle without /clear")
+                    }
+
                     if let model = session.primaryModel {
                         let family = getModelFamily(model)
                         Spacer()

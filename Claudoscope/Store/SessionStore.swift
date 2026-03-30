@@ -57,6 +57,10 @@ final class SessionStore {
     var extendedConfig: ExtendedConfig?
     var configLoading: Bool = false
 
+    // Observability data
+    var subagentTree: SubagentNode? = nil
+    var sessionBadges: [String: SessionBadgeData] = [:]
+
     // Lint data
     var lintResults: [LintResult] = []
     var lintSummary: LintSummary = .empty
@@ -517,6 +521,19 @@ final class SessionStore {
         await MainActor.run {
             var allResults = phase1Results
             allResults.append(contentsOf: secretResults)
+
+            // SEC008: correlate ENV_SCRUB not set with actual secret findings
+            if allResults.contains(where: { $0.checkId == .CFG006 }) && !secretResults.isEmpty {
+                allResults.append(LintResult(
+                    severity: .warning,
+                    checkId: .SEC008,
+                    filePath: "settings.json",
+                    message: "\(secretResults.count) credential pattern(s) found in session data while CLAUDE_CODE_SUBPROCESS_ENV_SCRUB is not set. Credentials may leak via Bash tool, hooks, or MCP servers.",
+                    fix: "Add CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1 to settings.json env section to prevent credential leakage into subprocess environments.",
+                    displayPath: "settings.json"
+                ))
+            }
+
             allResults.sort { $0.severity < $1.severity }
             self.lintResults = allResults
             self.lintSummary = LintSummary.from(results: allResults)
@@ -543,5 +560,64 @@ final class SessionStore {
             self.extendedConfig = extended
             self.configLoading = false
         }
+    }
+
+    // MARK: - Subagent Tree
+
+    func loadSubagentTree(sessionId: String, projectId: String) async {
+        let fm = FileManager.default
+        let subagentsDir = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects")
+            .appendingPathComponent(projectId)
+            .appendingPathComponent(sessionId)
+            .appendingPathComponent("subagents")
+
+        guard fm.fileExists(atPath: subagentsDir.path) else {
+            await MainActor.run { self.subagentTree = nil }
+            return
+        }
+
+        do {
+            let subFiles = try fm.contentsOfDirectory(atPath: subagentsDir.path)
+                .filter { $0.hasSuffix(".jsonl") }
+
+            var subagentSummaries: [SessionSummary] = []
+            for file in subFiles {
+                let subId = String(file.dropLast(6))
+                let url = subagentsDir.appendingPathComponent(file)
+                if let summary = try? await parser.parseMetadata(
+                    url: url,
+                    sessionId: subId,
+                    pricingTable: pricingTable
+                ) {
+                    subagentSummaries.append(summary)
+                }
+            }
+
+            if let parentSessions = sessionsByProject[projectId],
+               let parentSummary = parentSessions.first(where: { $0.id == sessionId }) {
+                let tree = ObservabilityAnalyzer.buildSubagentTree(
+                    parentSession: parentSummary,
+                    subagentSummaries: subagentSummaries
+                )
+                await MainActor.run { self.subagentTree = tree }
+            } else {
+                await MainActor.run { self.subagentTree = nil }
+            }
+        } catch {
+            await MainActor.run { self.subagentTree = nil }
+        }
+    }
+
+    func hasSubagentFiles(sessionId: String, projectId: String) -> Bool {
+        let subagentsDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects")
+            .appendingPathComponent(projectId)
+            .appendingPathComponent(sessionId)
+            .appendingPathComponent("subagents")
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: subagentsDir.path) else {
+            return false
+        }
+        return files.contains { $0.hasSuffix(".jsonl") }
     }
 }

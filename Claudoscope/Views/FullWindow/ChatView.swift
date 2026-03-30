@@ -7,6 +7,39 @@ struct ChatView: View {
     @State private var searchText = ""
     @State private var currentMatchIndex = 0
 
+    private var turnDurations: [Int: TurnDuration] {
+        let durations = ObservabilityAnalyzer.computeTurnDurations(records: session.records)
+        var dict: [Int: TurnDuration] = [:]
+        // Build a map from record index to turn index
+        var turnIndex = 0
+        var recordToTurn: [Int: Int] = [:]
+        for (i, record) in session.records.enumerated() {
+            if record.type == .assistant && record.message?.stopReason != nil {
+                recordToTurn[i] = turnIndex
+                turnIndex += 1
+            }
+        }
+        for duration in durations {
+            for (recordIdx, turn) in recordToTurn where turn == duration.turnIndex {
+                dict[recordIdx] = duration
+            }
+        }
+        return dict
+    }
+
+    private var parallelToolCounts: [Int: Int] {
+        var dict: [Int: Int] = [:]
+        for (i, record) in session.records.enumerated() {
+            if record.type == .assistant, case .blocks(let blocks) = record.message?.content {
+                let count = blocks.filter { $0.type == "tool_use" }.count
+                if count > 1 {
+                    dict[i] = count
+                }
+            }
+        }
+        return dict
+    }
+
     private var matchingIndices: [Int] {
         guard !searchText.isEmpty else { return [] }
         let query = searchText.lowercased()
@@ -204,7 +237,13 @@ struct ChatView: View {
             UserMessageBubble(record: record)
 
         case .assistant:
-            AssistantMessageView(record: record, toolResultMap: session.toolResultMap, searchText: searchText)
+            AssistantMessageView(
+                record: record,
+                toolResultMap: session.toolResultMap,
+                searchText: searchText,
+                turnDuration: turnDurations[index],
+                parallelToolCount: parallelToolCounts[index] ?? 0
+            )
 
         case .system:
             if record.subtype == "compact_boundary" {

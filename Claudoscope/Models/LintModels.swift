@@ -50,6 +50,18 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SES003  // runaway token consumption (>2M tokens)
     case SES004  // stale session with significant history
 
+    // Session observability checks
+    case SES005  // error pattern detection (StopFailure, rate limits)
+    case SES006  // idle/zombie session (>75 min gap without /clear)
+
+    // Config health checks
+    case CFG001  // sandbox.enabled without dependency lock files
+    case CFG002  // allowRead/denyRead contradictory paths
+    case CFG003  // ENABLE_CLAUDEAI_MCP_SERVERS=false
+    case CFG004  // allowedChannelPlugins for enterprise
+    case CFG005  // bare mode with hooks/MCP configured
+    case CFG006  // CLAUDE_CODE_SUBPROCESS_ENV_SCRUB not set
+
     // Secret detection checks
     case SEC001  // private key
     case SEC002  // AWS access key
@@ -58,6 +70,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SEC005  // password/secret literal
     case SEC006  // connection string with credentials
     case SEC007  // platform token (GitHub, Slack, npm, Stripe, Google)
+    case SEC008  // ENV_SCRUB not set with credential patterns in tool output
 }
 
 struct LintResult: Identifiable, Sendable {

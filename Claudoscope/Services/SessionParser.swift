@@ -156,7 +156,14 @@ actor SessionParser {
             totalCacheReadTokens: totalCacheReadTokens,
             totalCacheCreationTokens: totalCacheCreationTokens,
             models: Array(modelsSet),
-            compactionCount: compactionCount
+            compactionCount: compactionCount,
+            turnDurations: [],
+            effortDistribution: .zero,
+            maxIdleGapSeconds: 0,
+            idleGapAfterTimestamp: nil,
+            compactionEvents: [],
+            parallelToolGroups: [],
+            errorDetails: []
         )
 
         return ParsedSession(
@@ -176,6 +183,10 @@ actor SessionParser {
         guard let content = String(data: data, encoding: .utf8) else {
             throw SessionParserError.invalidEncoding
         }
+
+        // Bug fix: use local dedup set instead of actor-level seenUUIDs
+        // to avoid cross-session dedup that causes costs to drop to $0 over time
+        var localSeenUUIDs = Set<String>()
 
         let projectId = deriveProjectId(from: url)
         var lineCount = 0
@@ -200,6 +211,23 @@ actor SessionParser {
         var modelCacheReadTokens: [String: Int] = [:]
         var modelCost: [String: Double] = [:]
         var modelTurnCount: [String: Int] = [:]
+
+        // Observability tracking
+        var turnDurations: [TurnDuration] = []
+        var effortCounts: [EffortLevel: Int] = [:]
+        var errorDetails: [SessionErrorDetail] = []
+        var compactionEvents: [CompactionEvent] = []
+        var parallelToolGroups: [ParallelToolGroup] = []
+        var lastUserTimestamp: String?
+        var turnIndex = 0
+        var hadCompactionSinceLast = false
+        var turnsSinceLastCompaction = 0
+        var allRecords: [ParsedRecordRaw] = []
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoFormatterNoFrac = ISO8601DateFormatter()
+        isoFormatterNoFrac.formatOptions = [.withInternetDateTime]
 
         let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
 
@@ -230,17 +258,25 @@ actor SessionParser {
                     slug = s
                 }
 
+                // Track user timestamps for turn duration computation
+                if raw.type == .user {
+                    lastUserTimestamp = raw.timestamp
+                }
+
                 if raw.type == .assistant {
                     // Count tool_use blocks for tool call count
+                    var turnToolNames: [String] = []
                     if case .blocks(let blocks) = raw.message?.content {
-                        toolCallCount += blocks.filter { $0.type == "tool_use" }.count
+                        let toolUseBlocks = blocks.filter { $0.type == "tool_use" }
+                        toolCallCount += toolUseBlocks.count
+                        turnToolNames = toolUseBlocks.compactMap(\.name)
                     }
 
                     if raw.message?.stopReason != nil, let usage = raw.message?.usage {
                         // Deduplicate: skip records already counted from another file
                         if let uuid = raw.uuid {
-                            if seenUUIDs.contains(uuid) { continue }
-                            seenUUIDs.insert(uuid)
+                            if localSeenUUIDs.contains(uuid) { continue }
+                            localSeenUUIDs.insert(uuid)
                         }
 
                         let msgInput = usage.inputTokens ?? 0
@@ -279,20 +315,97 @@ actor SessionParser {
                             modelCost[family, default: 0] += msgCost
                             modelTurnCount[family, default: 0] += 1
                         }
+
+                        // Observability: compute turn duration
+                        var durationMs: Double = 0
+                        if let userTs = lastUserTimestamp, let assistantTs = raw.timestamp {
+                            let userDate = isoFormatter.date(from: userTs) ?? isoFormatterNoFrac.date(from: userTs)
+                            let assistantDate = isoFormatter.date(from: assistantTs) ?? isoFormatterNoFrac.date(from: assistantTs)
+                            if let ud = userDate, let ad = assistantDate {
+                                durationMs = max(0, ad.timeIntervalSince(ud) * 1000)
+                            }
+                        }
+
+                        turnDurations.append(TurnDuration(
+                            turnIndex: turnIndex,
+                            userTimestamp: lastUserTimestamp,
+                            assistantTimestamp: raw.timestamp,
+                            durationMs: durationMs,
+                            isPostCompaction: hadCompactionSinceLast,
+                            inputTokens: msgInput,
+                            model: raw.message?.model
+                        ))
+
+                        // Observability: classify effort from thinking blocks
+                        var thinkingChars = 0
+                        if case .blocks(let blocks) = raw.message?.content {
+                            for block in blocks {
+                                if block.type == "thinking", let thinking = block.thinking {
+                                    thinkingChars += thinking.count
+                                }
+                            }
+                        }
+                        let effort = ObservabilityAnalyzer.classifyEffort(
+                            thinkingChars: thinkingChars,
+                            outputTokens: msgOutput,
+                            stopReason: raw.message?.stopReason
+                        )
+                        effortCounts[effort, default: 0] += 1
+
+                        // Observability: parallel tool groups (more than 1 tool_use in one turn)
+                        if turnToolNames.count > 1 {
+                            parallelToolGroups.append(ParallelToolGroup(
+                                turnIndex: turnIndex,
+                                timestamp: raw.timestamp,
+                                toolNames: turnToolNames,
+                                toolCount: turnToolNames.count
+                            ))
+                        }
+
+                        turnIndex += 1
+                        turnsSinceLastCompaction += 1
+                        lastUserTimestamp = nil
                     }
                 }
 
                 if raw.type == .result, raw.message?.stopReason == "error" {
                     hasError = true
+                    let errorText = raw.message?.content?.textContent ?? ""
+                    let classification = ObservabilityAnalyzer.classifyError(
+                        contentText: errorText,
+                        stopReason: raw.message?.stopReason
+                    )
+                    errorDetails.append(SessionErrorDetail(
+                        classification: classification,
+                        turnIndex: turnIndex,
+                        timestamp: raw.timestamp,
+                        message: String(errorText.prefix(200))
+                    ))
                 }
 
                 if raw.type == .toolResult, raw.toolUseResult?.isError == true {
                     hasError = true
+                    errorDetails.append(SessionErrorDetail(
+                        classification: .toolError,
+                        turnIndex: turnIndex,
+                        timestamp: raw.timestamp,
+                        message: String((raw.toolUseResult?.content ?? "").prefix(200))
+                    ))
                 }
 
                 if raw.type == .system && raw.subtype == "compact_boundary" {
                     compactionCount += 1
+                    compactionEvents.append(CompactionEvent(
+                        index: compactionCount,
+                        timestamp: raw.timestamp,
+                        preTokens: raw.compactMetadata?.preTokens,
+                        turnsSinceLastCompaction: turnsSinceLastCompaction
+                    ))
+                    hadCompactionSinceLast = true
+                    turnsSinceLastCompaction = 0
                 }
+
+                allRecords.append(raw)
             } catch {
                 continue
             }
@@ -314,6 +427,19 @@ actor SessionParser {
             )
         }.sorted { $0.estimatedCost > $1.estimatedCost }
 
+        // Compute idle gap detection
+        let idleGapResult = ObservabilityAnalyzer.detectIdleGaps(records: allRecords)
+
+        // Compute session observability
+        let observability = ObservabilityAnalyzer.computeObservability(
+            turnDurations: turnDurations,
+            effortCounts: effortCounts,
+            errorDetails: errorDetails,
+            idleGapResult: idleGapResult,
+            compactionEvents: compactionEvents,
+            parallelToolGroups: parallelToolGroups
+        )
+
         return SessionSummary(
             id: sessionId,
             projectId: projectId,
@@ -333,7 +459,8 @@ actor SessionParser {
             estimatedCost: perMessageCost,
             hasError: hasError,
             modelBreakdown: modelBreakdown,
-            toolCallCount: toolCallCount
+            toolCallCount: toolCallCount,
+            observability: observability
         )
     }
 
