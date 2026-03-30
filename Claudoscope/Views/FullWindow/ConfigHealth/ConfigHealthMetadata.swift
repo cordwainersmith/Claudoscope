@@ -214,6 +214,43 @@ func categoryFor(_ checkId: LintCheckId) -> CategoryDef {
     return otherCategory
 }
 
+// MARK: - Auto-Fix Support
+
+let autoFixableRules: Set<LintCheckId> = [.CFG006]
+
+struct ConfigAutoFixer {
+    static func canFix(_ checkId: LintCheckId) -> Bool {
+        autoFixableRules.contains(checkId)
+    }
+
+    static func apply(checkId: LintCheckId, settingsPath: String) -> Bool {
+        switch checkId {
+        case .CFG006:
+            return addEnvVar(key: "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", value: "1", settingsPath: settingsPath)
+        default:
+            return false
+        }
+    }
+
+    private static func addEnvVar(key: String, value: String, settingsPath: String) -> Bool {
+        let url = URL(fileURLWithPath: settingsPath)
+        guard let data = try? Data(contentsOf: url),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+
+        var env = json["env"] as? [String: Any] ?? [:]
+        env[key] = value
+        json["env"] = env
+
+        guard let outputData = try? JSONSerialization.data(
+            withJSONObject: json,
+            options: [.prettyPrinted, .sortedKeys]
+        ) else { return false }
+
+        return (try? outputData.write(to: url)) != nil
+    }
+}
+
 func displayNameFor(_ checkId: LintCheckId) -> String {
     ruleMetadata[checkId]?.displayName ?? checkId.rawValue
 }

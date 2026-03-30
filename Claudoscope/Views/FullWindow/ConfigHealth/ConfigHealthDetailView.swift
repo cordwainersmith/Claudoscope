@@ -5,8 +5,10 @@ import SwiftUI
 struct HealthResultDetailView: View {
     let result: LintResult
     var onNavigateToSession: ((String, String, String?) -> Void)?
+    var onRescan: (() -> Void)?
     let onBack: () -> Void
     @State private var showUnmasked = false
+    @State private var fixApplied = false
 
     private var isSecretResult: Bool {
         result.checkId.rawValue.hasPrefix("SEC")
@@ -270,15 +272,55 @@ struct HealthResultDetailView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(.tertiary)
 
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "wrench")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: "wrench")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.secondary)
 
-                            Text(fix)
-                                .font(Typography.body)
-                                .foregroundStyle(.primary)
-                                .textSelection(.enabled)
+                                Text(fix)
+                                    .font(Typography.body)
+                                    .foregroundStyle(.primary)
+                                    .textSelection(.enabled)
+                            }
+
+                            if ConfigAutoFixer.canFix(result.checkId) {
+                                Divider()
+
+                                if fixApplied {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 13))
+                                        Text("Applied")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .foregroundStyle(.green)
+                                } else {
+                                    Button {
+                                        let success = ConfigAutoFixer.apply(
+                                            checkId: result.checkId,
+                                            settingsPath: result.filePath
+                                        )
+                                        if success {
+                                            fixApplied = true
+                                            onRescan?()
+                                        }
+                                    } label: {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "wand.and.stars")
+                                                .font(.system(size: 12))
+                                            Text("Apply Fix")
+                                                .font(.system(size: 13, weight: .medium))
+                                        }
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 7)
+                                        .background(Color.accentColor)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
                         .padding(Spacing.lg)
                         .frame(maxWidth: .infinity, alignment: .leading)

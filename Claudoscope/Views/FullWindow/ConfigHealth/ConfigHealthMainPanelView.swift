@@ -29,7 +29,7 @@ struct ConfigHealthMainPanelView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let result = selectedResult {
-            HealthResultDetailView(result: result, onNavigateToSession: onNavigateToSession) {
+            HealthResultDetailView(result: result, onNavigateToSession: onNavigateToSession, onRescan: onRescan) {
                 selectedResultId = nil
             }
         } else if lintResults.isEmpty {
