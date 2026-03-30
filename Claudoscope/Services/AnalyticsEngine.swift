@@ -187,7 +187,7 @@ struct AnalyticsEngine {
                 counts[getModelFamily(s.primaryModel), default: 0] += 1
             }
             let topModel = modelCounts.max(by: { $0.value < $1.value })?.key
-            return pricingTable[topModel ?? "sonnet"] ?? pricingTable["sonnet"]!
+            return getModelPricing(topModel, table: pricingTable)
         }()
         let tierCost = CacheTierCost(
             cost5m: Double(totalCache5m) / 1e6 * blendedPricing.cacheCreation5m,
@@ -235,7 +235,7 @@ struct AnalyticsEngine {
 
         // Cache busting detection: days where hit ratio drops >30pp from previous day
         var cacheBustingDays: [String] = []
-        for i in 1..<dailyHitRatio.count {
+        for i in dailyHitRatio.indices.dropFirst() {
             let drop = dailyHitRatio[i - 1].ratio - dailyHitRatio[i].ratio
             if drop > 0.30 {
                 cacheBustingDays.append(dailyHitRatio[i].date)
