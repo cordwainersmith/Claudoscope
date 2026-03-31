@@ -36,7 +36,7 @@ struct RailView: View {
             .padding(.bottom, 8)
         }
         .padding(.top, 8)
-        .frame(width: 56)
+        .frame(width: 68)
         .background(.bar)
     }
 }
@@ -56,7 +56,7 @@ private struct RailButton: View {
                     .font(Typography.caption)
                     .lineLimit(1)
             }
-            .frame(width: 48, height: 40)
+            .frame(width: 60, height: 40)
             .background(isSelected ? Color.accentColor.opacity(0.15) : .clear)
             .foregroundStyle(isSelected ? Color.accentColor : .secondary)
             .clipShape(RoundedRectangle(cornerRadius: 6))
