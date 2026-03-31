@@ -2,9 +2,38 @@ import SwiftUI
 
 @main
 struct ClaudoscopeApp: App {
-    @State private var store = SessionStore()
-    @State private var updateService = UpdateService()
+    @State private var store: SessionStore
+    @State private var updateService: UpdateService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+
+    init() {
+        let store = SessionStore()
+        let updateService = UpdateService()
+        _store = State(initialValue: store)
+        _updateService = State(initialValue: updateService)
+
+        MainWindowController.shared.setUpdateService(updateService)
+
+        store.onSecretAlert = { [weak store] alert in
+            guard let store else { return }
+            SecretAlertController.shared.show(
+                alert: alert,
+                onView: {
+                    MainWindowController.shared.open(store: store)
+                    store.activeSecretAlert = nil
+                },
+                onDismiss: {
+                    store.activeSecretAlert = nil
+                }
+            )
+        }
+
+        if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                OnboardingWindowController.shared.show()
+            }
+        }
+    }
 
     var body: some Scene {
         // Menu bar popover (always present)
@@ -15,20 +44,6 @@ struct ClaudoscopeApp: App {
                 .background {
                     UpdateTriggerView()
                         .environment(updateService)
-                }
-                .onChange(of: store.activeSecretAlert != nil) { _, hasAlert in
-                    if hasAlert, let alert = store.activeSecretAlert {
-                        SecretAlertController.shared.show(
-                            alert: alert,
-                            onView: {
-                                MainWindowController.shared.open(store: store, updateService: updateService)
-                                store.activeSecretAlert = nil
-                            },
-                            onDismiss: {
-                                store.activeSecretAlert = nil
-                            }
-                        )
-                    }
                 }
         } label: {
             MenuBarIcon(hasUpdate: updateService.updateAvailable != nil)
@@ -50,13 +65,6 @@ struct ClaudoscopeApp: App {
         .defaultSize(width: 440, height: 450)
     }
 
-    init() {
-        if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                OnboardingWindowController.shared.show()
-            }
-        }
-    }
 }
 
 // MARK: - Update Trigger View

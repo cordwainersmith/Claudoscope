@@ -37,14 +37,7 @@ final class SecretAlertController {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
 
-        // Position in top-right area of screen
-        if let screen = NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            let panelSize = panel.frame.size
-            let x = screenFrame.maxX - panelSize.width - 20
-            let y = screenFrame.maxY - panelSize.height - 20
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
+        panel.center()
 
         panel.makeKeyAndOrderFront(nil)
         self.window = panel

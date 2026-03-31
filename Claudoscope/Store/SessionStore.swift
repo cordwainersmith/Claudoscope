@@ -69,6 +69,7 @@ final class SessionStore {
 
     // Real-time secret alert
     var activeSecretAlert: SecretAlert?
+    var onSecretAlert: ((SecretAlert) -> Void)?
     private var alertedSecrets: Set<String> = []
 
     // Lint caching
@@ -296,7 +297,7 @@ final class SessionStore {
                 .first(where: { $0.id == sessionId })?.title ?? sessionId
 
             let isSubagent = url.pathComponents.contains("subagents")
-            activeSecretAlert = SecretAlert(
+            let alert = SecretAlert(
                 checkId: finding.checkId,
                 patternName: finding.patternName,
                 maskedValue: masked,
@@ -305,6 +306,8 @@ final class SessionStore {
                 sessionId: sessionId,
                 isSubagent: isSubagent
             )
+            activeSecretAlert = alert
+            onSecretAlert?(alert)
         }
     }
 

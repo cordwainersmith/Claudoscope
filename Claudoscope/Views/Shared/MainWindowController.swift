@@ -17,6 +17,10 @@ final class MainWindowController {
 
     private var updateService: UpdateService?
 
+    func setUpdateService(_ service: UpdateService) {
+        self.updateService = service
+    }
+
     func open(store: SessionStore, updateService: UpdateService? = nil) {
         if let updateService { self.updateService = updateService }
 
