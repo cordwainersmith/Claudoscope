@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0]
+### New Features
+- 9 observability features: turn duration analytics (histogram + percentiles), effort level classification with donut chart and cost breakdown, subagent tree visualization in session detail, error pattern detection with sidebar badges, idle/zombie session detection, config health linter expansion (CFG001-CFG006), parallel tool call badges, SEC008 ENV_SCRUB correlation
+- Timeline overhaul: time-gutter layout with project color strips, adaptive gap spacing, message type differentiation, collapsed project badges, clickable session navigation
+- Config health auto-fix: one-click Apply Fix for CFG006 (subprocess env scrub)
+- Rich markdown rendering in plans detail panel
+- Resizable sidebar (180-400pt) with persistence and double-click reset
+- Tooltips on truncated project names in sessions and analytics sidebars
+
+### Improvements
+- Wider rail buttons for better label readability
+- Secret alerts fire immediately via App.init() callback, no longer require popover to be open; alert panel centered on screen
+
+### Bug Fixes
+- Fix crash in cache analytics when all sessions have zero cache tokens
+- Fix UUID dedup bug (scoped per parseMetadata call) and streaming intermediate filtering
+
 ## [0.4.7]
 - Tabbed analytics view with Overview, Cache, and Models segments
 - Actionable cache dashboard: busting detection, stability callout, 5m/1h TTL tier breakdown, per-session efficiency table, model-aware savings
