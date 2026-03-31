@@ -66,13 +66,16 @@ private struct SecretAlertView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: "shield.trianglebadge.exclamationmark")
-                    .font(.system(size: 20))
-                    .foregroundStyle(.red)
+            HStack(spacing: 10) {
+                if let url = Bundle.main.url(forResource: "app-icon-rounded", withExtension: "png"),
+                   let nsImage = NSImage(contentsOf: url) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Secret Detected")
+                    Text("Claude Code Secret Detected")
                         .font(Typography.sectionTitle)
                     Text(alert.patternName)
                         .font(Typography.body)
