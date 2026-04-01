@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test:harness": "rm -rf .harness && npx tsc --noEmit false --module commonjs --moduleResolution node --target ES2022 --lib ES2022 --strict --skipLibCheck src/counting-policy.ts harness/counting-policy-harness.ts --outDir .harness && node .harness/harness/counting-policy-harness.js && rm -rf .harness"
   },
   "devDependencies": {
     "wrangler": "^3.99.0",
