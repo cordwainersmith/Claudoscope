@@ -16,6 +16,10 @@
   <a href="https://dl.claudoscope.com/stats"><img src="https://img.shields.io/endpoint?url=https://dl.claudoscope.com/badge&color=green" alt="Downloads"></a>
 </p>
 
+<p align="center">
+  <a href="https://www.producthunt.com/products/claudoscope?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-claudoscope" target="_blank" rel="noopener noreferrer"><img alt="Claudoscope - Browse, search &amp; track costs across Claude Code sessions | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1112495&theme=light&t=1775035320571"></a>
+</p>
+
 ---
 
 Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation, analytics, plan browsing, timeline history, configuration health checks, and **secret scanning that detects leaked credentials in your session history with real-time alerts**, all without sending any data off your machine.
