@@ -40,7 +40,7 @@ final class MainWindowController {
         }
 
         guard let profileManager = self.profileManager else {
-            assertionFailure("ProfileManager must be set before opening the main window")
+            preconditionFailure("ProfileManager must be set before opening the main window")
             return
         }
         let contentView = FullWindowView()
