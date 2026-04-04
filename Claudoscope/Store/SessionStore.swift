@@ -166,7 +166,6 @@ final class SessionStore {
         performInitialScan()
 
         profileManager.activeProfileChanged
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] profile in
                 Task { @MainActor [weak self] in
                     self?.reloadForProfile(profile)
@@ -192,6 +191,11 @@ final class SessionStore {
         // Releasing watcherCancellable lets the old ClaudeFileWatcher deinit,
         // which calls stop() automatically on its FSEvent stream.
         watcherCancellable = nil
+        selectedSession = nil
+        isLoading = true
+        lintResultsValid = false
+        plans = []
+        timelineEntries = []
         claudeDir = URL(fileURLWithPath: profile.path)
         watcher = ClaudeFileWatcher(claudeDir: claudeDir)
         plansService = PlansService(claudeDir: claudeDir)

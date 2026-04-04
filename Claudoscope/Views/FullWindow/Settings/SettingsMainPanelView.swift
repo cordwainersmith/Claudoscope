@@ -104,7 +104,7 @@ struct SettingsMainPanelView: View {
                 Image(systemName: "info.circle")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                Text("Settings from ~/.claude/settings.json")
+                Text("Settings from \(store.claudeDir.appendingPathComponent("settings.json").path)")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Spacer()
