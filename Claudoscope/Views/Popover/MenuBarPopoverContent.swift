@@ -4,12 +4,77 @@ import SwiftUI
 struct MenuBarPopoverContent: View {
     @Environment(SessionStore.self) private var store
     @Environment(UpdateService.self) private var updateService
+    @Environment(ProfileManager.self) private var profileManager
     @State private var showAbout = false
     @State private var showUpToDate = false
+    @State private var showProfilePicker = false
     @AppStorage("hasSeenRepositionTip") private var hasSeenTip = false
 
     var body: some View {
         VStack(spacing: 0) {
+            // Profile switcher
+            VStack(spacing: 0) {
+                Button {
+                    showProfilePicker.toggle()
+                } label: {
+                    HStack {
+                        Image(systemName: "person.2")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text(profileManager.activeProfile.name)
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Image(systemName: showProfilePicker ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+
+                if showProfilePicker {
+                    Divider()
+                    VStack(spacing: 0) {
+                        ForEach(profileManager.profiles) { profile in
+                            Button {
+                                _ = profileManager.activate(profile)
+                                showProfilePicker = false
+                            } label: {
+                                HStack {
+                                    Image(systemName: profile.id == profileManager.activeProfile.id ? "checkmark" : "")
+                                        .frame(width: 14)
+                                        .font(.system(size: 11))
+                                    Text(profile.name)
+                                        .font(.system(size: 12))
+                                    Spacer()
+                                    Text(URL(fileURLWithPath: profile.path).lastPathComponent)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                            }
+                            .buttonStyle(.plain)
+                            .background(profile.id == profileManager.activeProfile.id ? Color.accentColor.opacity(0.1) : .clear)
+                        }
+                        Divider()
+                        Button("Manage Profiles…") {
+                            showProfilePicker = false
+                            MainWindowController.shared.open(store: store, updateService: updateService)
+                        }
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .buttonStyle(.plain)
+                    }
+                    Divider()
+                }
+            }
+
+            Divider()
+
             // Header
             HStack {
                 Text("CLAUDOSCOPE")
