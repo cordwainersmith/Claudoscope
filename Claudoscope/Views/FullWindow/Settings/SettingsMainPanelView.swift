@@ -66,6 +66,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("security") { securitySection() }
                     if shouldShow("account") { accountSection() }
                     if shouldShow("general") { generalSection([:]) }
+                    if shouldShow("profiles") { profilesSection() }
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("updates") { updatesSection() }
                 }
@@ -124,6 +125,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("plugins") { pluginsSection() }
                     if shouldShow("account") { accountSection() }
                     if shouldShow("general") { generalSection(dict) }
+                    if shouldShow("profiles") { profilesSection() }
                     if shouldShow("environment") { environmentSection(dict) }
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("updates") { updatesSection() }
