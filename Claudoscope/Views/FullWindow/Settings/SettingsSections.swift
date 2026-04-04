@@ -714,7 +714,7 @@ extension SettingsMainPanelView {
                         profile: profile,
                         isActive: profile.id == profileManager.activeProfile.id,
                         canDelete: profileManager.profiles.count > 1,
-                        onActivate: { _ = profileManager.activate(profile) },
+                        onActivate: { profileManager.activate(profile) },
                         onUpdate: { updated in profileManager.update(updated) },
                         onDelete: { profileManager.delete(profile) }
                     )
@@ -732,7 +732,7 @@ private struct ProfileRowView: View {
     var profile: ClaudeProfile
     var isActive: Bool
     var canDelete: Bool
-    var onActivate: () -> Void
+    var onActivate: () -> Bool
     var onUpdate: (ClaudeProfile) -> Void
     var onDelete: () -> Void
 
@@ -781,11 +781,7 @@ private struct ProfileRowView: View {
                 } else {
                     if !isActive {
                         Button("Activate") {
-                            activationError = false
-                            onActivate()
-                            if !FileManager.default.fileExists(atPath: profile.path) {
-                                activationError = true
-                            }
+                            activationError = !onActivate()
                         }
                         .controlSize(.small)
                     }
@@ -836,6 +832,7 @@ private struct ProfileRowView: View {
             }
         }
         .padding(.vertical, 4)
+        .onChange(of: profile.path) { activationError = false }
     }
 }
 
