@@ -92,15 +92,16 @@ final class SessionStore {
         PricingTables.table(provider: pricingProvider, region: pricingRegion)
     }
 
-    private let claudeDir: URL
+    private(set) var claudeDir: URL
     private let parser = SessionParser()
     private let cache = SessionCache()
-    private let watcher: ClaudeFileWatcher
-    private let plansService: PlansService
-    private let timelineService: TimelineService
-    private let configService: ConfigService
+    @ObservationIgnored private var watcher: ClaudeFileWatcher
+    @ObservationIgnored private var plansService: PlansService
+    @ObservationIgnored private var timelineService: TimelineService
+    @ObservationIgnored private var configService: ConfigService
     private let linterService = ConfigLinterService()
-    private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored private var watcherCancellable: AnyCancellable?
 
     /// All sessions flattened with their project
     var allSessionsWithProjects: [(session: SessionSummary, project: Project)] {
@@ -148,13 +149,14 @@ final class SessionStore {
         todaySessions.reduce(0.0) { $0 + $1.estimatedCost }
     }
 
-    init() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        self.claudeDir = home.appendingPathComponent(".claude")
-        self.watcher = ClaudeFileWatcher(claudeDir: claudeDir)
-        self.plansService = PlansService(claudeDir: claudeDir)
-        self.timelineService = TimelineService(claudeDir: claudeDir)
-        self.configService = ConfigService(claudeDir: claudeDir)
+    @MainActor
+    init(profileManager: ProfileManager) {
+        let dir = URL(fileURLWithPath: profileManager.activeProfile.path)
+        self.claudeDir = dir
+        self.watcher = ClaudeFileWatcher(claudeDir: dir)
+        self.plansService = PlansService(claudeDir: dir)
+        self.timelineService = TimelineService(claudeDir: dir)
+        self.configService = ConfigService(claudeDir: dir)
 
         if UserDefaults.standard.object(forKey: "realtimeSecretScanEnabled") == nil {
             UserDefaults.standard.set(true, forKey: "realtimeSecretScanEnabled")
@@ -162,10 +164,19 @@ final class SessionStore {
 
         setupWatcher()
         performInitialScan()
+
+        profileManager.activeProfileChanged
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] profile in
+                Task { @MainActor [weak self] in
+                    self?.reloadForProfile(profile)
+                }
+            }
+            .store(in: &cancellables)
     }
 
     private func setupWatcher() {
-        watcher.changes
+        watcherCancellable = watcher.changes
             .receive(on: DispatchQueue.main)
             .sink { [weak self] change in
                 guard let self else { return }
@@ -173,9 +184,23 @@ final class SessionStore {
                     await self.handleFileChange(change)
                 }
             }
-            .store(in: &cancellables)
-
         watcher.start()
+    }
+
+    @MainActor
+    private func reloadForProfile(_ profile: ClaudeProfile) {
+        // Releasing watcherCancellable lets the old ClaudeFileWatcher deinit,
+        // which calls stop() automatically on its FSEvent stream.
+        watcherCancellable = nil
+        claudeDir = URL(fileURLWithPath: profile.path)
+        watcher = ClaudeFileWatcher(claudeDir: claudeDir)
+        plansService = PlansService(claudeDir: claudeDir)
+        timelineService = TimelineService(claudeDir: claudeDir)
+        configService = ConfigService(claudeDir: claudeDir)
+        projects = []
+        sessionsByProject = [:]
+        setupWatcher()
+        performInitialScan()
     }
 
     private func performInitialScan() {

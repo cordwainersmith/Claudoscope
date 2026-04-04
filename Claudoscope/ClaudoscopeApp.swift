@@ -2,19 +2,22 @@ import SwiftUI
 
 @main
 struct ClaudoscopeApp: App {
+    @State private var profileManager: ProfileManager
     @State private var store: SessionStore
     @State private var updateService: UpdateService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     init() {
-        let store = SessionStore()
+        let profileManager = MainActor.assumeIsolated { ProfileManager() }
+        let store = MainActor.assumeIsolated { SessionStore(profileManager: profileManager) }
         let updateService = UpdateService()
+        _profileManager = State(initialValue: profileManager)
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
 
         MainWindowController.shared.setUpdateService(updateService)
 
-        store.onSecretAlert = { [weak store] alert in
+        store.onSecretAlert = { [weak store] (alert: SecretAlert) in
             guard let store else { return }
             SecretAlertController.shared.show(
                 alert: alert,
