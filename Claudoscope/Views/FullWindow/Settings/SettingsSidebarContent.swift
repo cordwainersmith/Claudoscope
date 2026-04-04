@@ -14,6 +14,7 @@ struct SettingsSidebarContent: View {
         ("attribution", "signature", "Attribution"),
         ("plugins", "puzzlepiece", "Plugins"),
         ("account", "person.crop.circle", "Account"),
+        ("profiles", "person.2", "Profiles"),
         ("general", "gear", "General"),
         ("environment", "terminal", "Environment"),
         ("pricing", "dollarsign.circle", "Pricing"),
