@@ -4,16 +4,16 @@ import SwiftUI
 
 struct SettingsMainPanelView: View {
     @Environment(SessionStore.self) var store
+    @Environment(ProfileManager.self) var profileManager
     @Binding var selectedSection: String?
     @State var settings: [String: Any]?
     @State var loadError: String?
     @State var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "environment", "pricing", "updates"
+        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "profiles", "environment", "pricing", "updates"
     ]
 
     var settingsPath: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/.claude/settings.json"
+        store.claudeDir.appendingPathComponent("settings.json").path
     }
 
     func shouldShow(_ sectionId: String) -> Bool {
@@ -37,7 +37,7 @@ struct SettingsMainPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
+        .task(id: store.claudeDir) {
             loadSettings()
         }
     }
@@ -66,6 +66,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("security") { securitySection() }
                     if shouldShow("account") { accountSection() }
                     if shouldShow("general") { generalSection([:]) }
+                    if shouldShow("profiles") { profilesSection() }
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("updates") { updatesSection() }
                 }
@@ -103,7 +104,7 @@ struct SettingsMainPanelView: View {
                 Image(systemName: "info.circle")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
-                Text("Settings from ~/.claude/settings.json")
+                Text("Settings from \(store.claudeDir.appendingPathComponent("settings.json").path)")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -124,6 +125,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("plugins") { pluginsSection() }
                     if shouldShow("account") { accountSection() }
                     if shouldShow("general") { generalSection(dict) }
+                    if shouldShow("profiles") { profilesSection() }
                     if shouldShow("environment") { environmentSection(dict) }
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("updates") { updatesSection() }

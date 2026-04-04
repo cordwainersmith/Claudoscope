@@ -665,7 +665,7 @@ extension SettingsMainPanelView {
         var isBadge: Bool = false
     }
 
-    func accountRows(_ profile: ClaudeProfile) -> [AccountRow] {
+    func accountRows(_ profile: ClaudeAccountProfile) -> [AccountRow] {
         var rows: [AccountRow] = []
         if let email = profile.maskedEmail {
             rows.append(AccountRow(key: "Account", value: email))
@@ -700,6 +700,199 @@ extension SettingsMainPanelView {
     func updatesSection() -> some View {
         settingsSection(id: "updates", icon: "arrow.triangle.2.circlepath", title: "Updates") {
             UpdatesSectionContent()
+        }
+    }
+
+    // MARK: - Profiles Section
+
+    @ViewBuilder
+    func profilesSection() -> some View {
+        settingsSection(id: "profiles", icon: "person.2", title: "Profiles") {
+            VStack(spacing: 6) {
+                ForEach(profileManager.profiles) { profile in
+                    ProfileRowView(
+                        profile: profile,
+                        isActive: profile.id == profileManager.activeProfile.id,
+                        canDelete: profileManager.profiles.count > 1,
+                        onActivate: { profileManager.activate(profile) },
+                        onUpdate: { updated in profileManager.update(updated) },
+                        onDelete: { profileManager.delete(profile) }
+                    )
+                }
+                Divider().padding(.vertical, 2)
+                AddProfileRowView(onAdd: { name, path in
+                    profileManager.add(name: name, path: path)
+                })
+            }
+        }
+    }
+}
+
+private struct ProfileRowView: View {
+    var profile: ClaudeProfile
+    var isActive: Bool
+    var canDelete: Bool
+    var onActivate: () -> Bool
+    var onUpdate: (ClaudeProfile) -> Void
+    var onDelete: () -> Void
+
+    @State private var isEditing = false
+    @State private var editName = ""
+    @State private var editPath = ""
+    @State private var activationError = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                    .frame(width: 16)
+
+                if isEditing {
+                    TextField("Name", text: $editName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 120)
+                } else {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(profile.name)
+                            .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                        Text(profile.path)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+
+                Spacer()
+
+                if isEditing {
+                    Button("Save") {
+                        var updated = profile
+                        updated.name = editName
+                        updated.path = editPath
+                        onUpdate(updated)
+                        isEditing = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    Button("Cancel") { isEditing = false }
+                        .controlSize(.small)
+                } else {
+                    if !isActive {
+                        Button("Activate") {
+                            activationError = !onActivate()
+                        }
+                        .controlSize(.small)
+                    }
+                    Button {
+                        editName = profile.name
+                        editPath = profile.path
+                        isEditing = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Edit profile")
+                    Button(role: .destructive) { onDelete() } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(canDelete ? .red : .secondary)
+                    .disabled(!canDelete)
+                    .help(canDelete ? "Delete profile" : "Cannot delete the only profile")
+                }
+            }
+
+            if isEditing {
+                HStack {
+                    TextField("Path", text: $editPath)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11, design: .monospaced))
+                    Button("Browse…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = false
+                        panel.canChooseDirectories = true
+                        panel.allowsMultipleSelection = false
+                        panel.prompt = "Select"
+                        if panel.runModal() == .OK, let url = panel.url {
+                            editPath = url.path
+                        }
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.leading, 24)
+            }
+
+            if activationError {
+                Text("Directory not found. Please check the path.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+                    .padding(.leading, 24)
+            }
+        }
+        .padding(.vertical, 4)
+        .onChange(of: profile.path) { activationError = false }
+    }
+}
+
+private struct AddProfileRowView: View {
+    var onAdd: (String, String) -> Void
+
+    @State private var isExpanded = false
+    @State private var name = ""
+    @State private var path = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                isExpanded.toggle()
+                if !isExpanded { name = ""; path = "" }
+            } label: {
+                Label("Add Profile", systemImage: "plus.circle")
+                    .font(.system(size: 13))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+
+            if isExpanded {
+                VStack(spacing: 6) {
+                    TextField("Profile name", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        TextField("Directory path", text: $path)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+                        Button("Browse…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseFiles = false
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.prompt = "Select"
+                            if panel.runModal() == .OK, let url = panel.url {
+                                path = url.path
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Cancel") { isExpanded = false; name = ""; path = "" }
+                            .controlSize(.small)
+                        Button("Add") {
+                            guard !name.isEmpty, !path.isEmpty else { return }
+                            onAdd(name, path)
+                            isExpanded = false
+                            name = ""
+                            path = ""
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(name.isEmpty || path.isEmpty)
+                    }
+                }
+                .padding(.leading, 4)
+            }
         }
     }
 }

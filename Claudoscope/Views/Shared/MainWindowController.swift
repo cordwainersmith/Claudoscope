@@ -16,9 +16,14 @@ final class MainWindowController {
     private var window: NSWindow?
 
     private var updateService: UpdateService?
+    private var profileManager: ProfileManager?
 
     func setUpdateService(_ service: UpdateService) {
         self.updateService = service
+    }
+
+    func setProfileManager(_ manager: ProfileManager) {
+        self.profileManager = manager
     }
 
     func open(store: SessionStore, updateService: UpdateService? = nil) {
@@ -34,8 +39,13 @@ final class MainWindowController {
             return
         }
 
+        guard let profileManager = self.profileManager else {
+            preconditionFailure("ProfileManager must be set before opening the main window")
+            return
+        }
         let contentView = FullWindowView()
             .environment(store)
+            .environment(profileManager)
             .environment(self.updateService ?? UpdateService())
             .frame(minWidth: 900, minHeight: 600)
 
