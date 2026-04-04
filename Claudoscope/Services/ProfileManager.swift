@@ -3,6 +3,7 @@ import Combine
 import Observation
 
 @Observable
+@MainActor
 final class ProfileManager {
 
     var profiles: [ClaudeProfile]
@@ -69,7 +70,7 @@ final class ProfileManager {
     func activate(_ profile: ClaudeProfile) -> Bool {
         guard FileManager.default.fileExists(atPath: profile.path) else { return false }
         activeProfile = profile
-        defaults.set(profile.id.uuidString, forKey: ProfileManager.activeProfileIdKey)
+        save()
         activeProfileChanged.send(profile)
         return true
     }
