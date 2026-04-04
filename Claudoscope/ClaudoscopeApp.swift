@@ -7,15 +7,16 @@ struct ClaudoscopeApp: App {
     @State private var updateService: UpdateService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
-    init() {
-        let profileManager = MainActor.assumeIsolated { ProfileManager() }
-        let store = MainActor.assumeIsolated { SessionStore(profileManager: profileManager) }
+    @MainActor init() {
+        let profileManager = ProfileManager()
+        let store = SessionStore(profileManager: profileManager)
         let updateService = UpdateService()
         _profileManager = State(initialValue: profileManager)
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
 
         MainWindowController.shared.setUpdateService(updateService)
+        MainWindowController.shared.setProfileManager(profileManager)
 
         store.onSecretAlert = { [weak store] (alert: SecretAlert) in
             guard let store else { return }
@@ -43,6 +44,7 @@ struct ClaudoscopeApp: App {
         MenuBarExtra {
             MenuBarPopoverContent()
                 .environment(store)
+                .environment(profileManager)
                 .environment(updateService)
                 .background {
                     UpdateTriggerView()
