@@ -38,13 +38,20 @@ struct MenuBarPopoverContent: View {
                     VStack(spacing: 0) {
                         ForEach(profileManager.profiles) { profile in
                             Button {
-                                _ = profileManager.activate(profile)
-                                showProfilePicker = false
+                                if profileManager.activate(profile) {
+                                    showProfilePicker = false
+                                }
                             } label: {
                                 HStack {
-                                    Image(systemName: profile.id == profileManager.activeProfile.id ? "checkmark" : "")
-                                        .frame(width: 14)
-                                        .font(.system(size: 11))
+                                    Group {
+                                        if profile.id == profileManager.activeProfile.id {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 11))
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
+                                    .frame(width: 14)
                                     Text(profile.name)
                                         .font(.system(size: 12))
                                     Spacer()
@@ -57,6 +64,7 @@ struct MenuBarPopoverContent: View {
                             }
                             .buttonStyle(.plain)
                             .background(profile.id == profileManager.activeProfile.id ? Color.accentColor.opacity(0.1) : .clear)
+                            .disabled(profile.id == profileManager.activeProfile.id)
                         }
                         Divider()
                         Button("Manage Profiles…") {
