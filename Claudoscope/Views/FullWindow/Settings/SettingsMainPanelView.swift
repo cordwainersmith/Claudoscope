@@ -4,16 +4,16 @@ import SwiftUI
 
 struct SettingsMainPanelView: View {
     @Environment(SessionStore.self) var store
+    @Environment(ProfileManager.self) var profileManager
     @Binding var selectedSection: String?
     @State var settings: [String: Any]?
     @State var loadError: String?
     @State var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "environment", "pricing", "updates"
+        "appearance", "model", "permissions", "security", "attribution", "plugins", "account", "general", "profiles", "environment", "pricing", "updates"
     ]
 
     var settingsPath: String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        return "\(home)/.claude/settings.json"
+        store.claudeDir.appendingPathComponent("settings.json").path
     }
 
     func shouldShow(_ sectionId: String) -> Bool {
@@ -37,7 +37,7 @@ struct SettingsMainPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task {
+        .task(id: store.claudeDir) {
             loadSettings()
         }
     }
