@@ -594,8 +594,8 @@ final class SessionStore {
 
     func loadSubagentTree(sessionId: String, projectId: String) async {
         let fm = FileManager.default
-        let subagentsDir = fm.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/projects")
+        let subagentsDir = claudeDir
+            .appendingPathComponent("projects")
             .appendingPathComponent(projectId)
             .appendingPathComponent(sessionId)
             .appendingPathComponent("subagents")
@@ -638,8 +638,8 @@ final class SessionStore {
     }
 
     func hasSubagentFiles(sessionId: String, projectId: String) -> Bool {
-        let subagentsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/projects")
+        let subagentsDir = claudeDir
+            .appendingPathComponent("projects")
             .appendingPathComponent(projectId)
             .appendingPathComponent(sessionId)
             .appendingPathComponent("subagents")
