@@ -665,7 +665,7 @@ extension SettingsMainPanelView {
         var isBadge: Bool = false
     }
 
-    func accountRows(_ profile: ClaudeProfile) -> [AccountRow] {
+    func accountRows(_ profile: ClaudeAccountProfile) -> [AccountRow] {
         var rows: [AccountRow] = []
         if let email = profile.maskedEmail {
             rows.append(AccountRow(key: "Account", value: email))
