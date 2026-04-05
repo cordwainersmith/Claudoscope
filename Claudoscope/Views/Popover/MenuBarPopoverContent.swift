@@ -4,8 +4,10 @@ import SwiftUI
 struct MenuBarPopoverContent: View {
     @Environment(SessionStore.self) private var store
     @Environment(UpdateService.self) private var updateService
+    @Environment(WorkspaceManager.self) private var workspaceManager
     @State private var showAbout = false
     @State private var showUpToDate = false
+    @State private var showWorkspacePicker = false
     @AppStorage("hasSeenRepositionTip") private var hasSeenTip = false
 
     var body: some View {
@@ -31,9 +33,82 @@ struct MenuBarPopoverContent: View {
 
             Divider()
 
+            // Workspace switcher
+            VStack(spacing: 0) {
+                Button {
+                    showWorkspacePicker.toggle()
+                } label: {
+                    HStack {
+                        Image(systemName: "person.2")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text(workspaceManager.activeWorkspace.name)
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Image(systemName: showWorkspacePicker ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                }
+                .buttonStyle(.plain)
+
+                if showWorkspacePicker {
+                    Divider()
+                    VStack(spacing: 0) {
+                        ForEach(workspaceManager.workspaces) { workspace in
+                            Button {
+                                if workspaceManager.activate(workspace) {
+                                    showWorkspacePicker = false
+                                }
+                            } label: {
+                                HStack {
+                                    Group {
+                                        if workspace.id == workspaceManager.activeWorkspace.id {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 11))
+                                        } else {
+                                            Color.clear
+                                        }
+                                    }
+                                    .frame(width: 14)
+                                    Text(workspace.name)
+                                        .font(.system(size: 12))
+                                    Spacer()
+                                    Text(URL(fileURLWithPath: workspace.path).lastPathComponent)
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                            }
+                            .buttonStyle(.plain)
+                            .background(workspace.id == workspaceManager.activeWorkspace.id ? Color.accentColor.opacity(0.1) : .clear)
+                            .disabled(workspace.id == workspaceManager.activeWorkspace.id)
+                        }
+                        Divider()
+                        Button("Manage Workspaces…") {
+                            showWorkspacePicker = false
+                            MainWindowController.shared.open(store: store, updateService: updateService)
+                            NSApp.activate(ignoringOtherApps: true)
+                            store.pendingSettingsNavigation = .workspaces
+                        }
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .buttonStyle(.plain)
+                    }
+                    Divider()
+                }
+            }
+
+            Divider()
+
             if store.isLoading {
                 // Loading state with animated logo
-                LoadingLogoView()
+                LoadingLogoView(message: "Loading \(workspaceManager.activeWorkspace.name)…")
 
                 Divider()
             } else {
@@ -143,6 +218,7 @@ struct MenuBarPopoverContent: View {
 // MARK: - Loading Logo
 
 struct LoadingLogoView: View {
+    var message: String = "Loading sessions…"
     @State private var isAnimating = false
 
     var body: some View {
@@ -162,7 +238,7 @@ struct LoadingLogoView: View {
                     )
             }
 
-            Text("Loading sessions...")
+            Text(message)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .opacity(isAnimating ? 1.0 : 0.5)

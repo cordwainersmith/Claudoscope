@@ -24,3 +24,6 @@ node_modules/
 
 # Claude Code config
 CLAUDE.md
+
+# Git worktrees
+.worktrees/

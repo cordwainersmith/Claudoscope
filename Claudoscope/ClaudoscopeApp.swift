@@ -2,19 +2,23 @@ import SwiftUI
 
 @main
 struct ClaudoscopeApp: App {
+    @State private var workspaceManager: WorkspaceManager
     @State private var store: SessionStore
     @State private var updateService: UpdateService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
-    init() {
-        let store = SessionStore()
+    @MainActor init() {
+        let workspaceManager = WorkspaceManager()
+        let store = SessionStore(workspaceManager: workspaceManager)
         let updateService = UpdateService()
+        _workspaceManager = State(initialValue: workspaceManager)
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
 
         MainWindowController.shared.setUpdateService(updateService)
+        MainWindowController.shared.setWorkspaceManager(workspaceManager)
 
-        store.onSecretAlert = { [weak store] alert in
+        store.onSecretAlert = { [weak store] (alert: SecretAlert) in
             guard let store else { return }
             SecretAlertController.shared.show(
                 alert: alert,
@@ -40,6 +44,7 @@ struct ClaudoscopeApp: App {
         MenuBarExtra {
             MenuBarPopoverContent()
                 .environment(store)
+                .environment(workspaceManager)
                 .environment(updateService)
                 .background {
                     UpdateTriggerView()

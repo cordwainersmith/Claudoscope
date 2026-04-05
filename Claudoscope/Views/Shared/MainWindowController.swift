@@ -16,9 +16,14 @@ final class MainWindowController {
     private var window: NSWindow?
 
     private var updateService: UpdateService?
+    private var workspaceManager: WorkspaceManager?
 
     func setUpdateService(_ service: UpdateService) {
         self.updateService = service
+    }
+
+    func setWorkspaceManager(_ manager: WorkspaceManager) {
+        self.workspaceManager = manager
     }
 
     func open(store: SessionStore, updateService: UpdateService? = nil) {
@@ -34,8 +39,13 @@ final class MainWindowController {
             return
         }
 
+        guard let workspaceManager = self.workspaceManager else {
+            preconditionFailure("WorkspaceManager must be set before opening the main window")
+            return
+        }
         let contentView = FullWindowView()
             .environment(store)
+            .environment(workspaceManager)
             .environment(self.updateService ?? UpdateService())
             .frame(minWidth: 900, minHeight: 600)
 

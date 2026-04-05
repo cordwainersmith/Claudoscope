@@ -93,7 +93,7 @@ struct MarketplaceSource: Identifiable, Sendable {
     let detail: String
 }
 
-struct ClaudeProfile: Sendable {
+struct ClaudeAccountProfile: Sendable {
     let numStartups: Int?
     let theme: String?
     let autoUpdatesChannel: String?
@@ -111,5 +111,5 @@ struct ExtendedConfig: Sendable {
     let attribution: AttributionConfig?
     let plugins: [PluginInfo]
     let marketplaces: [MarketplaceSource]
-    let profile: ClaudeProfile?
+    let profile: ClaudeAccountProfile?
 }

@@ -665,7 +665,7 @@ extension SettingsMainPanelView {
         var isBadge: Bool = false
     }
 
-    func accountRows(_ profile: ClaudeProfile) -> [AccountRow] {
+    func accountRows(_ profile: ClaudeAccountProfile) -> [AccountRow] {
         var rows: [AccountRow] = []
         if let email = profile.maskedEmail {
             rows.append(AccountRow(key: "Account", value: email))
@@ -700,6 +700,199 @@ extension SettingsMainPanelView {
     func updatesSection() -> some View {
         settingsSection(id: "updates", icon: "arrow.triangle.2.circlepath", title: "Updates") {
             UpdatesSectionContent()
+        }
+    }
+
+    // MARK: - Workspaces Section
+
+    @ViewBuilder
+    func workspacesSection() -> some View {
+        settingsSection(id: "workspaces", icon: "rectangle.stack.badge.person.crop", title: "Workspaces") {
+            VStack(spacing: 6) {
+                ForEach(workspaceManager.workspaces) { workspace in
+                    ProfileRowView(
+                        workspace: workspace,
+                        isActive: workspace.id == workspaceManager.activeWorkspace.id,
+                        canDelete: workspaceManager.workspaces.count > 1,
+                        onActivate: { workspaceManager.activate(workspace) },
+                        onUpdate: { updated in workspaceManager.update(updated) },
+                        onDelete: { workspaceManager.delete(workspace) }
+                    )
+                }
+                Divider().padding(.vertical, 2)
+                AddProfileRowView(onAdd: { name, path in
+                    workspaceManager.add(name: name, path: path)
+                })
+            }
+        }
+    }
+}
+
+private struct ProfileRowView: View {
+    var workspace: Workspace
+    var isActive: Bool
+    var canDelete: Bool
+    var onActivate: () -> Bool
+    var onUpdate: (Workspace) -> Void
+    var onDelete: () -> Void
+
+    @State private var isEditing = false
+    @State private var editName = ""
+    @State private var editPath = ""
+    @State private var activationError = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                    .frame(width: 16)
+
+                if isEditing {
+                    TextField("Name", text: $editName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 120)
+                } else {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(workspace.name)
+                            .font(.system(size: 13, weight: isActive ? .semibold : .regular))
+                        Text(workspace.path)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+
+                Spacer()
+
+                if isEditing {
+                    Button("Save") {
+                        var updated = workspace
+                        updated.name = editName
+                        updated.path = editPath
+                        onUpdate(updated)
+                        isEditing = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    Button("Cancel") { isEditing = false }
+                        .controlSize(.small)
+                } else {
+                    if !isActive {
+                        Button("Activate") {
+                            activationError = !onActivate()
+                        }
+                        .controlSize(.small)
+                    }
+                    Button {
+                        editName = workspace.name
+                        editPath = workspace.path
+                        isEditing = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Edit workspace")
+                    Button(role: .destructive) { onDelete() } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(canDelete ? .red : .secondary)
+                    .disabled(!canDelete)
+                    .help(canDelete ? "Delete workspace" : "Cannot delete the only workspace")
+                }
+            }
+
+            if isEditing {
+                HStack {
+                    TextField("Path", text: $editPath)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 11, design: .monospaced))
+                    Button("Browse…") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = false
+                        panel.canChooseDirectories = true
+                        panel.allowsMultipleSelection = false
+                        panel.prompt = "Select"
+                        if panel.runModal() == .OK, let url = panel.url {
+                            editPath = url.path
+                        }
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.leading, 24)
+            }
+
+            if activationError {
+                Text("Directory not found. Please check the path.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.red)
+                    .padding(.leading, 24)
+            }
+        }
+        .padding(.vertical, 4)
+        .onChange(of: workspace.path) { activationError = false }
+    }
+}
+
+private struct AddProfileRowView: View {
+    var onAdd: (String, String) -> Void
+
+    @State private var isExpanded = false
+    @State private var name = ""
+    @State private var path = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                isExpanded.toggle()
+                if !isExpanded { name = ""; path = "" }
+            } label: {
+                Label("Add Workspace", systemImage: "plus.circle")
+                    .font(.system(size: 13))
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.accentColor)
+
+            if isExpanded {
+                VStack(spacing: 6) {
+                    TextField("Workspace name", text: $name)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        TextField("Directory path", text: $path)
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 11, design: .monospaced))
+                        Button("Browse…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseFiles = false
+                            panel.canChooseDirectories = true
+                            panel.allowsMultipleSelection = false
+                            panel.prompt = "Select"
+                            if panel.runModal() == .OK, let url = panel.url {
+                                path = url.path
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    HStack {
+                        Spacer()
+                        Button("Cancel") { isExpanded = false; name = ""; path = "" }
+                            .controlSize(.small)
+                        Button("Add") {
+                            guard !name.isEmpty, !path.isEmpty else { return }
+                            onAdd(name, path)
+                            isExpanded = false
+                            name = ""
+                            path = ""
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(name.isEmpty || path.isEmpty)
+                    }
+                }
+                .padding(.leading, 4)
+            }
         }
     }
 }

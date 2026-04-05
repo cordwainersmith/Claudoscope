@@ -127,7 +127,7 @@ extension ConfigService {
 
         // Profile from ~/.claude.json
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let profile: ClaudeProfile?
+        let profile: ClaudeAccountProfile?
         if let profileJson = readJSON(at: homeDir.appendingPathComponent(".claude.json")) {
             let email: String?
             if let oauth = profileJson["oauthAccount"] as? [String: Any],
@@ -143,7 +143,7 @@ extension ConfigService {
                 orgRole = nil
             }
 
-            profile = ClaudeProfile(
+            profile = ClaudeAccountProfile(
                 numStartups: profileJson["numStartups"] as? Int,
                 theme: profileJson["theme"] as? String,
                 autoUpdatesChannel: profileJson["autoUpdatesChannel"] as? String,

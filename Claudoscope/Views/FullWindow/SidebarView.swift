@@ -4,6 +4,7 @@ struct SidebarView: View {
     let rail: RailItem
     let width: CGFloat
     @Environment(SessionStore.self) private var store
+    @Environment(WorkspaceManager.self) private var workspaceManager
     @Binding var selectedProjectId: String?
     @Binding var selectedSessionId: String?
     @Binding var selectedPlanFilename: String?
@@ -22,6 +23,45 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Workspace switcher
+            Divider()
+
+            HStack(spacing: 6) {
+                Text("Workspace:")
+                    .font(Typography.body)
+                    .foregroundStyle(.secondary)
+                    .layoutPriority(1)
+
+                Menu {
+                    ForEach(workspaceManager.workspaces) { workspace in
+                        Button {
+                            workspaceManager.activate(workspace)
+                        } label: {
+                            Label(workspace.name, systemImage: workspace.id == workspaceManager.activeWorkspace.id ? "checkmark" : "")
+                        }
+                        .disabled(workspace.id == workspaceManager.activeWorkspace.id)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(workspaceManager.activeWorkspace.name)
+                            .font(Typography.body)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+
+            Divider()
+
             // Filter field
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
