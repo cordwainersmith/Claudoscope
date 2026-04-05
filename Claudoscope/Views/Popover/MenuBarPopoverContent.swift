@@ -4,7 +4,7 @@ import SwiftUI
 struct MenuBarPopoverContent: View {
     @Environment(SessionStore.self) private var store
     @Environment(UpdateService.self) private var updateService
-    @Environment(ProfileManager.self) private var profileManager
+    @Environment(WorkspaceManager.self) private var workspaceManager
     @State private var showAbout = false
     @State private var showUpToDate = false
     @State private var showWorkspacePicker = false
@@ -42,7 +42,7 @@ struct MenuBarPopoverContent: View {
                         Image(systemName: "person.2")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                        Text(profileManager.activeProfile.name)
+                        Text(workspaceManager.activeWorkspace.name)
                             .font(.system(size: 12, weight: .medium))
                         Spacer()
                         Image(systemName: showWorkspacePicker ? "chevron.up" : "chevron.down")
@@ -57,15 +57,15 @@ struct MenuBarPopoverContent: View {
                 if showWorkspacePicker {
                     Divider()
                     VStack(spacing: 0) {
-                        ForEach(profileManager.profiles) { profile in
+                        ForEach(workspaceManager.workspaces) { workspace in
                             Button {
-                                if profileManager.activate(profile) {
+                                if workspaceManager.activate(workspace) {
                                     showWorkspacePicker = false
                                 }
                             } label: {
                                 HStack {
                                     Group {
-                                        if profile.id == profileManager.activeProfile.id {
+                                        if workspace.id == workspaceManager.activeWorkspace.id {
                                             Image(systemName: "checkmark")
                                                 .font(.system(size: 11))
                                         } else {
@@ -73,10 +73,10 @@ struct MenuBarPopoverContent: View {
                                         }
                                     }
                                     .frame(width: 14)
-                                    Text(profile.name)
+                                    Text(workspace.name)
                                         .font(.system(size: 12))
                                     Spacer()
-                                    Text(URL(fileURLWithPath: profile.path).lastPathComponent)
+                                    Text(URL(fileURLWithPath: workspace.path).lastPathComponent)
                                         .font(.system(size: 10))
                                         .foregroundStyle(.secondary)
                                 }
@@ -84,8 +84,8 @@ struct MenuBarPopoverContent: View {
                                 .padding(.vertical, 6)
                             }
                             .buttonStyle(.plain)
-                            .background(profile.id == profileManager.activeProfile.id ? Color.accentColor.opacity(0.1) : .clear)
-                            .disabled(profile.id == profileManager.activeProfile.id)
+                            .background(workspace.id == workspaceManager.activeWorkspace.id ? Color.accentColor.opacity(0.1) : .clear)
+                            .disabled(workspace.id == workspaceManager.activeWorkspace.id)
                         }
                         Divider()
                         Button("Manage Workspaces…") {
@@ -108,7 +108,7 @@ struct MenuBarPopoverContent: View {
 
             if store.isLoading {
                 // Loading state with animated logo
-                LoadingLogoView(message: "Loading \(profileManager.activeProfile.name)…")
+                LoadingLogoView(message: "Loading \(workspaceManager.activeWorkspace.name)…")
 
                 Divider()
             } else {

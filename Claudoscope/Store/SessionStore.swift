@@ -157,8 +157,8 @@ final class SessionStore {
     }
 
     @MainActor
-    init(profileManager: ProfileManager) {
-        let dir = URL(fileURLWithPath: profileManager.activeProfile.path)
+    init(workspaceManager: WorkspaceManager) {
+        let dir = URL(fileURLWithPath: workspaceManager.activeWorkspace.path)
         self.claudeDir = dir
         self.watcher = ClaudeFileWatcher(claudeDir: dir)
         self.plansService = PlansService(claudeDir: dir)
@@ -172,10 +172,10 @@ final class SessionStore {
         setupWatcher()
         performInitialScan()
 
-        profileManager.activeProfileChanged
-            .sink { [weak self] profile in
+        workspaceManager.activeWorkspaceChanged
+            .sink { [weak self] workspace in
                 Task { @MainActor [weak self] in
-                    self?.reloadForProfile(profile)
+                    self?.reloadForWorkspace(workspace)
                 }
             }
             .store(in: &cancellables)
@@ -194,7 +194,7 @@ final class SessionStore {
     }
 
     @MainActor
-    private func reloadForProfile(_ profile: ClaudeProfile) {
+    private func reloadForWorkspace(_ workspace: Workspace) {
         // Releasing watcherCancellable lets the old ClaudeFileWatcher deinit,
         // which calls stop() automatically on its FSEvent stream.
         watcherCancellable = nil
@@ -203,7 +203,7 @@ final class SessionStore {
         lintResultsValid = false
         plans = []
         timelineEntries = []
-        claudeDir = URL(fileURLWithPath: profile.path)
+        claudeDir = URL(fileURLWithPath: workspace.path)
         watcher = ClaudeFileWatcher(claudeDir: claudeDir)
         plansService = PlansService(claudeDir: claudeDir)
         timelineService = TimelineService(claudeDir: claudeDir)

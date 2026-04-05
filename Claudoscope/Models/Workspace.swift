@@ -1,6 +1,6 @@
 import Foundation
 
-struct ClaudeProfile: Codable, Identifiable, Equatable, Sendable {
+struct Workspace: Codable, Identifiable, Equatable, Sendable {
     var id: UUID
     var name: String   // e.g. "Personal", "Work"
     var path: String   // absolute expanded path, e.g. "/Users/ben/.claude"

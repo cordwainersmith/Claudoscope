@@ -4,7 +4,7 @@ import SwiftUI
 
 struct SettingsMainPanelView: View {
     @Environment(SessionStore.self) var store
-    @Environment(ProfileManager.self) var profileManager
+    @Environment(WorkspaceManager.self) var workspaceManager
     @Binding var selectedSection: String?
     @State var settings: [String: Any]?
     @State var loadError: String?

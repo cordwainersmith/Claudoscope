@@ -4,7 +4,7 @@ struct SidebarView: View {
     let rail: RailItem
     let width: CGFloat
     @Environment(SessionStore.self) private var store
-    @Environment(ProfileManager.self) private var profileManager
+    @Environment(WorkspaceManager.self) private var workspaceManager
     @Binding var selectedProjectId: String?
     @Binding var selectedSessionId: String?
     @Binding var selectedPlanFilename: String?
@@ -33,17 +33,17 @@ struct SidebarView: View {
                     .layoutPriority(1)
 
                 Menu {
-                    ForEach(profileManager.profiles) { profile in
+                    ForEach(workspaceManager.workspaces) { workspace in
                         Button {
-                            profileManager.activate(profile)
+                            workspaceManager.activate(workspace)
                         } label: {
-                            Label(profile.name, systemImage: profile.id == profileManager.activeProfile.id ? "checkmark" : "")
+                            Label(workspace.name, systemImage: workspace.id == workspaceManager.activeWorkspace.id ? "checkmark" : "")
                         }
-                        .disabled(profile.id == profileManager.activeProfile.id)
+                        .disabled(workspace.id == workspaceManager.activeWorkspace.id)
                     }
                 } label: {
                     HStack(spacing: 4) {
-                        Text(profileManager.activeProfile.name)
+                        Text(workspaceManager.activeWorkspace.name)
                             .font(Typography.body)
                             .lineLimit(1)
                         Image(systemName: "chevron.up.chevron.down")

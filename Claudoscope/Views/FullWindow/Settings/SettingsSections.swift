@@ -709,19 +709,19 @@ extension SettingsMainPanelView {
     func workspacesSection() -> some View {
         settingsSection(id: "workspaces", icon: "rectangle.stack.badge.person.crop", title: "Workspaces") {
             VStack(spacing: 6) {
-                ForEach(profileManager.profiles) { profile in
+                ForEach(workspaceManager.workspaces) { workspace in
                     ProfileRowView(
-                        profile: profile,
-                        isActive: profile.id == profileManager.activeProfile.id,
-                        canDelete: profileManager.profiles.count > 1,
-                        onActivate: { profileManager.activate(profile) },
-                        onUpdate: { updated in profileManager.update(updated) },
-                        onDelete: { profileManager.delete(profile) }
+                        workspace: workspace,
+                        isActive: workspace.id == workspaceManager.activeWorkspace.id,
+                        canDelete: workspaceManager.workspaces.count > 1,
+                        onActivate: { workspaceManager.activate(workspace) },
+                        onUpdate: { updated in workspaceManager.update(updated) },
+                        onDelete: { workspaceManager.delete(workspace) }
                     )
                 }
                 Divider().padding(.vertical, 2)
                 AddProfileRowView(onAdd: { name, path in
-                    profileManager.add(name: name, path: path)
+                    workspaceManager.add(name: name, path: path)
                 })
             }
         }
@@ -729,11 +729,11 @@ extension SettingsMainPanelView {
 }
 
 private struct ProfileRowView: View {
-    var profile: ClaudeProfile
+    var workspace: Workspace
     var isActive: Bool
     var canDelete: Bool
     var onActivate: () -> Bool
-    var onUpdate: (ClaudeProfile) -> Void
+    var onUpdate: (Workspace) -> Void
     var onDelete: () -> Void
 
     @State private var isEditing = false
@@ -754,9 +754,9 @@ private struct ProfileRowView: View {
                         .frame(maxWidth: 120)
                 } else {
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(profile.name)
+                        Text(workspace.name)
                             .font(.system(size: 13, weight: isActive ? .semibold : .regular))
-                        Text(profile.path)
+                        Text(workspace.path)
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -768,7 +768,7 @@ private struct ProfileRowView: View {
 
                 if isEditing {
                     Button("Save") {
-                        var updated = profile
+                        var updated = workspace
                         updated.name = editName
                         updated.path = editPath
                         onUpdate(updated)
@@ -786,8 +786,8 @@ private struct ProfileRowView: View {
                         .controlSize(.small)
                     }
                     Button {
-                        editName = profile.name
-                        editPath = profile.path
+                        editName = workspace.name
+                        editPath = workspace.path
                         isEditing = true
                     } label: {
                         Image(systemName: "pencil")
@@ -832,7 +832,7 @@ private struct ProfileRowView: View {
             }
         }
         .padding(.vertical, 4)
-        .onChange(of: profile.path) { activationError = false }
+        .onChange(of: workspace.path) { activationError = false }
     }
 }
 

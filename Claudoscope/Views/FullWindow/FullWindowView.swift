@@ -2,7 +2,7 @@ import SwiftUI
 
 struct FullWindowView: View {
     @Environment(SessionStore.self) private var store
-    @Environment(ProfileManager.self) private var profileManager
+    @Environment(WorkspaceManager.self) private var workspaceManager
     @State private var selectedRail: RailItem = .analytics
     @State private var selectedProjectId: String?
     @State private var selectedSessionId: String?
@@ -153,7 +153,7 @@ struct FullWindowView: View {
                 }
 
                 if store.isLoading {
-                    WorkspaceLoadingOverlay(workspaceName: profileManager.activeProfile.name)
+                    WorkspaceLoadingOverlay(workspaceName: workspaceManager.activeWorkspace.name)
                 }
             }
         }
