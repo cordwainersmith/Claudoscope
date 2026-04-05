@@ -24,6 +24,10 @@ enum AppAppearance: String, CaseIterable {
     }
 }
 
+enum SettingsDestination: Equatable {
+    case workspaces
+}
+
 /// Central observable store for all session/project data.
 /// Owns the file watcher and Combine pipeline for reactive updates.
 @Observable
@@ -80,6 +84,9 @@ final class SessionStore {
         get { UserDefaults.standard.bool(forKey: "realtimeSecretScanEnabled") }
         set { UserDefaults.standard.set(newValue, forKey: "realtimeSecretScanEnabled") }
     }
+
+    // Deep-link navigation
+    var pendingSettingsNavigation: SettingsDestination? = nil
 
     // Appearance
     var appearance: AppAppearance = .system

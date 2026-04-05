@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Settings Sidebar Content
 
 struct SettingsSidebarContent: View {
+    @Environment(SessionStore.self) private var store
     let filterText: String
     @Binding var selectedSection: String?
 
@@ -14,7 +15,7 @@ struct SettingsSidebarContent: View {
         ("attribution", "signature", "Attribution"),
         ("plugins", "puzzlepiece", "Plugins"),
         ("account", "person.crop.circle", "Account"),
-        ("profiles", "person.2", "Profiles"),
+        ("workspaces", "rectangle.stack.badge.person.crop", "Workspaces"),
         ("general", "gear", "General"),
         ("environment", "terminal", "Environment"),
         ("pricing", "dollarsign.circle", "Pricing"),
@@ -55,5 +56,13 @@ struct SettingsSidebarContent: View {
             }
         }
         .padding(.vertical, 4)
+        .task(id: store.pendingSettingsNavigation) {
+            guard let destination = store.pendingSettingsNavigation else { return }
+            switch destination {
+            case .workspaces:
+                selectedSection = "workspaces"
+            }
+            store.pendingSettingsNavigation = nil
+        }
     }
 }

@@ -703,11 +703,11 @@ extension SettingsMainPanelView {
         }
     }
 
-    // MARK: - Profiles Section
+    // MARK: - Workspaces Section
 
     @ViewBuilder
-    func profilesSection() -> some View {
-        settingsSection(id: "profiles", icon: "person.2", title: "Profiles") {
+    func workspacesSection() -> some View {
+        settingsSection(id: "workspaces", icon: "rectangle.stack.badge.person.crop", title: "Workspaces") {
             VStack(spacing: 6) {
                 ForEach(profileManager.profiles) { profile in
                     ProfileRowView(

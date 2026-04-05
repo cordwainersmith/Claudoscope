@@ -7,15 +7,15 @@ struct MenuBarPopoverContent: View {
     @Environment(ProfileManager.self) private var profileManager
     @State private var showAbout = false
     @State private var showUpToDate = false
-    @State private var showProfilePicker = false
+    @State private var showWorkspacePicker = false
     @AppStorage("hasSeenRepositionTip") private var hasSeenTip = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Profile switcher
+            // Workspace switcher
             VStack(spacing: 0) {
                 Button {
-                    showProfilePicker.toggle()
+                    showWorkspacePicker.toggle()
                 } label: {
                     HStack {
                         Image(systemName: "person.2")
@@ -24,7 +24,7 @@ struct MenuBarPopoverContent: View {
                         Text(profileManager.activeProfile.name)
                             .font(.system(size: 12, weight: .medium))
                         Spacer()
-                        Image(systemName: showProfilePicker ? "chevron.up" : "chevron.down")
+                        Image(systemName: showWorkspacePicker ? "chevron.up" : "chevron.down")
                             .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                     }
@@ -33,13 +33,13 @@ struct MenuBarPopoverContent: View {
                 }
                 .buttonStyle(.plain)
 
-                if showProfilePicker {
+                if showWorkspacePicker {
                     Divider()
                     VStack(spacing: 0) {
                         ForEach(profileManager.profiles) { profile in
                             Button {
                                 if profileManager.activate(profile) {
-                                    showProfilePicker = false
+                                    showWorkspacePicker = false
                                 }
                             } label: {
                                 HStack {
@@ -67,9 +67,11 @@ struct MenuBarPopoverContent: View {
                             .disabled(profile.id == profileManager.activeProfile.id)
                         }
                         Divider()
-                        Button("Manage Profiles…") {
-                            showProfilePicker = false
+                        Button("Manage Workspaces…") {
+                            showWorkspacePicker = false
                             MainWindowController.shared.open(store: store, updateService: updateService)
+                            NSApp.activate(ignoringOtherApps: true)
+                            store.pendingSettingsNavigation = .workspaces
                         }
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
