@@ -793,14 +793,14 @@ private struct ProfileRowView: View {
                         Image(systemName: "pencil")
                     }
                     .buttonStyle(.plain)
-                    .help("Edit profile")
+                    .help("Edit workspace")
                     Button(role: .destructive) { onDelete() } label: {
                         Image(systemName: "trash")
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(canDelete ? .red : .secondary)
                     .disabled(!canDelete)
-                    .help(canDelete ? "Delete profile" : "Cannot delete the only profile")
+                    .help(canDelete ? "Delete workspace" : "Cannot delete the only workspace")
                 }
             }
 
@@ -849,7 +849,7 @@ private struct AddProfileRowView: View {
                 isExpanded.toggle()
                 if !isExpanded { name = ""; path = "" }
             } label: {
-                Label("Add Profile", systemImage: "plus.circle")
+                Label("Add Workspace", systemImage: "plus.circle")
                     .font(.system(size: 13))
             }
             .buttonStyle(.plain)
@@ -857,7 +857,7 @@ private struct AddProfileRowView: View {
 
             if isExpanded {
                 VStack(spacing: 6) {
-                    TextField("Profile name", text: $name)
+                    TextField("Workspace name", text: $name)
                         .textFieldStyle(.roundedBorder)
                     HStack {
                         TextField("Directory path", text: $path)
