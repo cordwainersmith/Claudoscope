@@ -12,6 +12,27 @@ struct MenuBarPopoverContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Header
+            HStack {
+                Text("CLAUDOSCOPE")
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(1.5)
+                Spacer()
+                if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
+                   let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 18, height: 18)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            Divider()
+
             // Workspace switcher
             VStack(spacing: 0) {
                 Button {
@@ -82,27 +103,6 @@ struct MenuBarPopoverContent: View {
                     Divider()
                 }
             }
-
-            Divider()
-
-            // Header
-            HStack {
-                Text("CLAUDOSCOPE")
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(1.5)
-                Spacer()
-                if let url = Bundle.main.url(forResource: "logo-c-t", withExtension: "png"),
-                   let image = NSImage(contentsOf: url) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .interpolation(.high)
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 18, height: 18)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
 
             Divider()
 
