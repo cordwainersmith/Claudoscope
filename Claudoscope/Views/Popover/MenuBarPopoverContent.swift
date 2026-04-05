@@ -108,7 +108,7 @@ struct MenuBarPopoverContent: View {
 
             if store.isLoading {
                 // Loading state with animated logo
-                LoadingLogoView()
+                LoadingLogoView(message: "Loading \(profileManager.activeProfile.name)…")
 
                 Divider()
             } else {
@@ -218,6 +218,7 @@ struct MenuBarPopoverContent: View {
 // MARK: - Loading Logo
 
 struct LoadingLogoView: View {
+    var message: String = "Loading sessions…"
     @State private var isAnimating = false
 
     var body: some View {
@@ -237,7 +238,7 @@ struct LoadingLogoView: View {
                     )
             }
 
-            Text("Loading sessions...")
+            Text(message)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .opacity(isAnimating ? 1.0 : 0.5)

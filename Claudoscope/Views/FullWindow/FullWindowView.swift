@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FullWindowView: View {
     @Environment(SessionStore.self) private var store
+    @Environment(ProfileManager.self) private var profileManager
     @State private var selectedRail: RailItem = .analytics
     @State private var selectedProjectId: String?
     @State private var selectedSessionId: String?
@@ -107,46 +108,54 @@ struct FullWindowView: View {
 
             Divider()
 
-            SidebarView(
-                rail: selectedRail,
-                width: sidebarWidth,
-                selectedProjectId: $selectedProjectId,
-                selectedSessionId: $selectedSessionId,
-                selectedPlanFilename: $selectedPlanFilename,
-                selectedHookEventId: $selectedHookEventId,
-                selectedCommandName: $selectedCommandName,
-                selectedSkillName: $selectedSkillName,
-                selectedMcpName: $selectedMcpName,
-                selectedMemoryId: $selectedMemoryId,
-                selectedMemoryProjectId: $selectedMemoryProjectId,
-                selectedSettingsSection: $selectedSettingsSection,
-                selectedLintResultId: $selectedLintResultId,
-                hiddenLintSeverities: $hiddenLintSeverities,
-                selectedHealthItem: $selectedHealthItem,
-                selectedTimelineDay: $selectedTimelineDay
-            )
+            ZStack {
+                HStack(spacing: 0) {
+                    SidebarView(
+                        rail: selectedRail,
+                        width: sidebarWidth,
+                        selectedProjectId: $selectedProjectId,
+                        selectedSessionId: $selectedSessionId,
+                        selectedPlanFilename: $selectedPlanFilename,
+                        selectedHookEventId: $selectedHookEventId,
+                        selectedCommandName: $selectedCommandName,
+                        selectedSkillName: $selectedSkillName,
+                        selectedMcpName: $selectedMcpName,
+                        selectedMemoryId: $selectedMemoryId,
+                        selectedMemoryProjectId: $selectedMemoryProjectId,
+                        selectedSettingsSection: $selectedSettingsSection,
+                        selectedLintResultId: $selectedLintResultId,
+                        hiddenLintSeverities: $hiddenLintSeverities,
+                        selectedHealthItem: $selectedHealthItem,
+                        selectedTimelineDay: $selectedTimelineDay
+                    )
 
-            SidebarResizeHandle(sidebarWidth: $sidebarWidth, dragStartWidth: $dragStartWidth)
+                    SidebarResizeHandle(sidebarWidth: $sidebarWidth, dragStartWidth: $dragStartWidth)
 
-            MainPanelView(
-                rail: selectedRail,
-                selectedPlanFilename: $selectedPlanFilename,
-                selectedHookEventId: selectedHookEventId,
-                selectedCommandName: $selectedCommandName,
-                selectedSkillName: $selectedSkillName,
-                selectedMcpName: selectedMcpName,
-                selectedMemoryId: $selectedMemoryId,
-                selectedLintResultId: $selectedLintResultId,
-                hiddenLintSeverities: $hiddenLintSeverities,
-                selectedHealthItem: selectedHealthItem,
-                selectedProjectId: selectedProjectId,
-                selectedSettingsSection: $selectedSettingsSection,
-                onNavigateToSession: { projectId, sessionId, subagentFileName in
-                    pendingSubagentFileName = subagentFileName
-                    pendingNavigation = (projectId, sessionId)
-                    selectedRail = .sessions
+                    MainPanelView(
+                        rail: selectedRail,
+                        selectedPlanFilename: $selectedPlanFilename,
+                        selectedHookEventId: selectedHookEventId,
+                        selectedCommandName: $selectedCommandName,
+                        selectedSkillName: $selectedSkillName,
+                        selectedMcpName: selectedMcpName,
+                        selectedMemoryId: $selectedMemoryId,
+                        selectedLintResultId: $selectedLintResultId,
+                        hiddenLintSeverities: $hiddenLintSeverities,
+                        selectedHealthItem: selectedHealthItem,
+                        selectedProjectId: selectedProjectId,
+                        selectedSettingsSection: $selectedSettingsSection,
+                        onNavigateToSession: { projectId, sessionId, subagentFileName in
+                            pendingSubagentFileName = subagentFileName
+                            pendingNavigation = (projectId, sessionId)
+                            selectedRail = .sessions
+                        }
+                    )
                 }
-            )
+
+                if store.isLoading {
+                    WorkspaceLoadingOverlay(workspaceName: profileManager.activeProfile.name)
+                }
+            }
         }
     }
 
@@ -180,6 +189,38 @@ struct FullWindowView: View {
                 break
             }
         }
+    }
+}
+
+// MARK: - Workspace Loading Overlay
+
+private struct WorkspaceLoadingOverlay: View {
+    let workspaceName: String
+    @State private var isAnimating = false
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.2)
+
+                VStack(spacing: 4) {
+                    Text("Loading workspace")
+                        .font(.system(size: 13, weight: .medium))
+                    Text(workspaceName)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(28)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.15), radius: 20, y: 4)
+        }
+        .transition(.opacity.animation(.easeInOut(duration: 0.15)))
     }
 }
 
