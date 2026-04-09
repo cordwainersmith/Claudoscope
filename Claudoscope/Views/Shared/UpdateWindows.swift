@@ -14,7 +14,8 @@ struct UpdateAvailableWindowContent: View {
                 onDismiss: { dismissWindow(id: "update-available") },
                 onSkip: {
                     updateService.skipVersion(update.version)
-                    dismissWindow(id: "update-available")
+                    // Setting updateAvailable = nil (done in the button) triggers
+                    // the else branch which calls dismissWindow automatically.
                 }
             )
         } else {
@@ -116,7 +117,6 @@ struct UpdateAvailableView: View {
             VStack(spacing: 8) {
                 HStack {
                     Button("Later") {
-                        updateService.updateAvailable = nil
                         onDismiss()
                     }
 

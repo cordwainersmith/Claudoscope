@@ -153,12 +153,13 @@ final class UpdateService {
                 downloadURL: downloadURL,
                 releaseNotes: releaseNotes
             )
-            updateAvailable = info
 
             if remoteVersion == skippedVersion {
-                // Skipped version: set updateAvailable (for badge/settings) but no popup
+                // Skipped version: don't set updateAvailable (hides badge and settings indicator)
+                updateAvailable = nil
             } else {
                 // New version (or newer than skipped): clear any old skip and show popup
+                updateAvailable = info
                 if skippedVersion != nil {
                     clearSkippedVersion()
                 }
@@ -184,91 +185,130 @@ final class UpdateService {
         }
     }
 
+    private static let successfulLaunchCountKey = "successfulLaunchCount"
+
     @MainActor
     private func _performDownloadAndInstall(update: UpdateInfo) async {
+        var mountPoint: URL?
+        var tempDir: URL?
+
         do {
             // Download DMG to temp directory
-            let tempDir = FileManager.default.temporaryDirectory
+            let tmpDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ClaudoscopeUpdate-\(UUID().uuidString)")
-            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+            tempDir = tmpDir
 
-            let dmgPath = tempDir.appendingPathComponent("Claudoscope.dmg")
+            let dmgPath = tmpDir.appendingPathComponent("Claudoscope.dmg")
             logger.info("Downloading update from \(update.downloadURL.absoluteString)")
             try await downloadFile(from: update.downloadURL, to: dmgPath)
 
             // Mount DMG
-            let mountPoint = tempDir.appendingPathComponent("mount")
-            try FileManager.default.createDirectory(at: mountPoint, withIntermediateDirectories: true)
+            let mntPoint = tmpDir.appendingPathComponent("mount")
+            try FileManager.default.createDirectory(at: mntPoint, withIntermediateDirectories: true)
+            mountPoint = mntPoint
 
-            let mountResult = try runProcess(
+            let mountResult = try await runProcessAsync(
                 "/usr/bin/hdiutil",
-                arguments: ["attach", dmgPath.path, "-nobrowse", "-readonly", "-mountpoint", mountPoint.path]
+                arguments: ["attach", dmgPath.path, "-nobrowse", "-readonly", "-mountpoint", mntPoint.path]
             )
             guard mountResult.exitCode == 0 else {
                 logger.error("DMG mount failed: \(mountResult.output)")
                 throw UpdateError.mountFailed(mountResult.output)
             }
-            logger.info("DMG mounted at \(mountPoint.path)")
+            logger.info("DMG mounted at \(mntPoint.path)")
 
-            defer {
-                // Always try to unmount
-                _ = try? runProcess("/usr/bin/hdiutil", arguments: ["detach", mountPoint.path, "-force"])
-                // Clean up temp directory
-                try? FileManager.default.removeItem(at: tempDir)
-            }
+            // Perform IO-heavy work off the main actor
+            let currentAppURL: URL = try await Task.detached { [logger = self.logger] in
+                let fm = FileManager.default
 
-            // Find .app in mounted volume
-            let contents = try FileManager.default.contentsOfDirectory(at: mountPoint, includingPropertiesForKeys: nil)
-            guard let newAppURL = contents.first(where: { $0.pathExtension == "app" }) else {
-                throw UpdateError.noAppInDMG
-            }
+                // Find .app in mounted volume
+                let contents = try fm.contentsOfDirectory(at: mntPoint, includingPropertiesForKeys: nil)
+                guard let newAppURL = contents.first(where: { $0.pathExtension == "app" }) else {
+                    throw UpdateError.noAppInDMG
+                }
 
-            // Verify code signature
-            try verifyCodeSignature(at: newAppURL)
-            logger.info("Code signature verified for \(newAppURL.lastPathComponent)")
+                try Task.checkCancellation()
 
-            // Replace current app
-            guard let currentAppURL = Bundle.main.bundleURL as URL? else {
-                throw UpdateError.cannotLocateCurrentApp
-            }
+                // Verify code signature
+                try self.verifyCodeSignature(at: newAppURL)
+                logger.info("Code signature verified for \(newAppURL.lastPathComponent)")
 
-            let appParent = currentAppURL.deletingLastPathComponent()
-            let appName = currentAppURL.lastPathComponent
-            let backupURL = appParent.appendingPathComponent(appName + ".bak")
+                try Task.checkCancellation()
 
-            // Remove old backup if it exists
-            if FileManager.default.fileExists(atPath: backupURL.path) {
-                try FileManager.default.removeItem(at: backupURL)
-            }
+                // Replace current app
+                guard let currentAppURL = Bundle.main.bundleURL as URL? else {
+                    throw UpdateError.cannotLocateCurrentApp
+                }
 
-            // Move current app to backup
-            try FileManager.default.moveItem(at: currentAppURL, to: backupURL)
+                let appParent = currentAppURL.deletingLastPathComponent()
+                let appName = currentAppURL.lastPathComponent
+                let backupURL = appParent.appendingPathComponent(appName + ".bak")
 
-            do {
-                // Copy new app
-                try FileManager.default.copyItem(at: newAppURL, to: currentAppURL)
-            } catch {
-                // Restore from backup on failure
-                try? FileManager.default.moveItem(at: backupURL, to: currentAppURL)
-                throw UpdateError.replaceFailed(error.localizedDescription)
-            }
+                // Remove old backup if it exists
+                if fm.fileExists(atPath: backupURL.path) {
+                    try fm.removeItem(at: backupURL)
+                }
 
-            // Remove backup
-            try? FileManager.default.removeItem(at: backupURL)
+                // Final cancellation gate -- point of no return
+                try Task.checkCancellation()
+
+                // Move current app to backup
+                try fm.moveItem(at: currentAppURL, to: backupURL)
+
+                do {
+                    // Copy new app
+                    try fm.copyItem(at: newAppURL, to: currentAppURL)
+                } catch {
+                    // Restore from backup on failure
+                    try? fm.moveItem(at: backupURL, to: currentAppURL)
+                    throw UpdateError.replaceFailed(error.localizedDescription)
+                }
+
+                // Do NOT delete .bak -- keep it for rollback safety.
+                // It will be cleaned up after 2 successful launches of the new version.
+
+                return currentAppURL
+            }.value
+
+            // Clean up mount before relaunch
+            await cleanupMount(mountPoint: mntPoint, tempDir: tmpDir)
+            mountPoint = nil
+            tempDir = nil
 
             // Store version for the "What's New" popup after relaunch
             // (notes come from bundled CHANGELOG.md, no need to persist them)
             UserDefaults.standard.set(update.version, forKey: Self.justUpdatedVersionKey)
+            // Reset launch counter so the new version must survive 2 launches before .bak is deleted
+            UserDefaults.standard.set(0, forKey: Self.successfulLaunchCountKey)
             UserDefaults.standard.synchronize()
 
             // Relaunch
             logger.info("App replaced successfully, relaunching to v\(update.version)")
+            isDownloading = false
             relaunch(at: currentAppURL)
         } catch {
-            logger.error("Download/install failed: \(error.localizedDescription)")
-            self.error = error.localizedDescription
+            // Clean up mount and temp dir on any failure
+            if let mnt = mountPoint, let tmp = tempDir {
+                await cleanupMount(mountPoint: mnt, tempDir: tmp)
+            } else if let tmp = tempDir {
+                try? FileManager.default.removeItem(at: tmp)
+            }
+
+            if error is CancellationError {
+                logger.info("Update cancelled by user")
+                self.error = "Update cancelled"
+            } else {
+                logger.error("Download/install failed: \(error.localizedDescription)")
+                self.error = error.localizedDescription
+            }
             isDownloading = false
         }
+    }
+
+    private func cleanupMount(mountPoint: URL, tempDir: URL) async {
+        _ = try? await runProcessAsync("/usr/bin/hdiutil", arguments: ["detach", mountPoint.path, "-force"])
+        try? FileManager.default.removeItem(at: tempDir)
     }
 
     struct JustUpdatedInfo {
@@ -337,22 +377,28 @@ final class UpdateService {
         }
     }
 
-    private func runProcess(_ path: String, arguments: [String]) throws -> (exitCode: Int32, output: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
+    private func runProcessAsync(_ path: String, arguments: [String]) async throws -> (exitCode: Int32, output: String) {
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: path)
+            process.arguments = arguments
 
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
 
-        try process.run()
-        process.waitUntilExit()
+            process.terminationHandler = { _ in
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+                continuation.resume(returning: (process.terminationStatus, output))
+            }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
-
-        return (process.terminationStatus, output)
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
     }
 
     private func relaunch(at appURL: URL) {

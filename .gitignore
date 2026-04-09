@@ -24,3 +24,12 @@ node_modules/
 
 # Claude Code config
 CLAUDE.md
+
+# plans 
+plans/
+
+# cleanup v999999
+cleanup-v999999.sh
+
+# claude
+.claude/

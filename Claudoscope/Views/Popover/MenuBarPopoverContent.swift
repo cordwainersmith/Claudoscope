@@ -216,6 +216,7 @@ struct PopoverMenuButton: View {
 
 struct UpdateMenuButton: View {
     @Environment(UpdateService.self) private var updateService
+    @Environment(\.openWindow) private var openWindow
     @Binding var showUpToDate: Bool
     @State private var isHovered = false
 
@@ -225,7 +226,9 @@ struct UpdateMenuButton: View {
                 showUpToDate = false
                 updateService.clearSkippedVersion()
                 await updateService.checkForUpdates()
-                if updateService.updateAvailable == nil, updateService.error == nil {
+                if updateService.updateAvailable != nil, updateService.error == nil {
+                    openWindow(id: "update-available")
+                } else if updateService.updateAvailable == nil, updateService.error == nil {
                     showUpToDate = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                         showUpToDate = false

@@ -878,7 +878,10 @@ struct UpdatesSectionContent: View {
                         .font(Typography.body)
 
                         Button {
-                            Task { await updateService.checkForUpdates() }
+                            Task {
+                                updateService.clearSkippedVersion()
+                                await updateService.checkForUpdates()
+                            }
                         } label: {
                             HStack(spacing: 4) {
                                 if updateService.isChecking {

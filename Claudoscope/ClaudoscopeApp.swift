@@ -78,6 +78,21 @@ private struct UpdateTriggerView: View {
         Color.clear
             .frame(width: 0, height: 0)
             .task {
+                // Rollback safety: track successful launches and clean up .bak after 2
+                let bakURL = Bundle.main.bundleURL
+                    .deletingLastPathComponent()
+                    .appendingPathComponent(Bundle.main.bundleURL.lastPathComponent + ".bak")
+                if FileManager.default.fileExists(atPath: bakURL.path) {
+                    let launchCountKey = "successfulLaunchCount"
+                    let count = UserDefaults.standard.integer(forKey: launchCountKey) + 1
+                    if count >= 2 {
+                        try? FileManager.default.removeItem(at: bakURL)
+                        UserDefaults.standard.set(0, forKey: launchCountKey)
+                    } else {
+                        UserDefaults.standard.set(count, forKey: launchCountKey)
+                    }
+                }
+
                 // Show "What's New" if we just updated (runs once)
                 if let info = updateService.consumeJustUpdatedInfo() {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
