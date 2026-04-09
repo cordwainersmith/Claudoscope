@@ -119,12 +119,79 @@ extension ConfigLinterService {
         return String(trimmed.prefix(200)) + "..."
     }
 
+    /// Extract readable text snippet from a JSONL line, centered on the secret value.
+    /// Returns a tuple of (role label, text snippet) or nil if parsing fails.
+    static func extractReadableContext(from line: String, secret: String) -> (role: String, snippet: String)? {
+        guard let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let type = json["type"] as? String ?? "unknown"
+
+        // Collect all text from the record
+        var texts: [String] = []
+
+        if let message = json["message"] as? [String: Any] {
+            if let content = message["content"] {
+                if let str = content as? String {
+                    texts.append(str)
+                } else if let blocks = content as? [[String: Any]] {
+                    for block in blocks {
+                        if let text = block["text"] as? String { texts.append(text) }
+                        if let text = block["thinking"] as? String { texts.append(text) }
+                        // tool_result blocks embedded in user messages
+                        if let inner = block["content"] as? String { texts.append(inner) }
+                        if let innerBlocks = block["content"] as? [[String: Any]] {
+                            for ib in innerBlocks {
+                                if let t = ib["text"] as? String { texts.append(t) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // tool_result records
+        if let toolResult = json["toolUseResult"] as? [String: Any],
+           let content = toolResult["content"] as? String {
+            texts.append(content)
+        }
+
+        // system records with inline content
+        if let content = json["content"] as? String {
+            texts.append(content)
+        }
+
+        // Find the text block containing the secret and extract a snippet
+        for text in texts {
+            guard let range = text.range(of: secret) else { continue }
+            let windowSize = 80
+            let start = text.index(range.lowerBound, offsetBy: -windowSize, limitedBy: text.startIndex) ?? text.startIndex
+            let end = text.index(range.upperBound, offsetBy: windowSize, limitedBy: text.endIndex) ?? text.endIndex
+            var snippet = String(text[start..<end])
+            if start != text.startIndex { snippet = "..." + snippet }
+            if end != text.endIndex { snippet = snippet + "..." }
+            // Collapse internal newlines for single-line display
+            snippet = snippet.replacingOccurrences(of: "\n", with: " ")
+            return (role: type, snippet: snippet)
+        }
+
+        return nil
+    }
+
     struct SecretFinding: Sendable {
         let checkId: LintCheckId
         let patternName: String
         let matchedText: String
         let lineIndex: Int?
+        let timestamp: String?
     }
+
+    private static let timestampRegex = try! NSRegularExpression(
+        pattern: "\"timestamp\"\\s*:\\s*\"([^\"]+)\"",
+        options: []
+    )
 
     func scanLinesForSecrets(_ lines: [String]) -> [SecretFinding] {
         var findings: [SecretFinding] = []
@@ -186,11 +253,19 @@ extension ConfigLinterService {
                     }
                 }
 
+                // Extract timestamp from JSONL line if present
+                var timestamp: String?
+                if let tsMatch = Self.timestampRegex.firstMatch(in: line, options: [], range: range),
+                   tsMatch.range(at: 1).location != NSNotFound {
+                    timestamp = nsLine.substring(with: tsMatch.range(at: 1))
+                }
+
                 findings.append(SecretFinding(
                     checkId: pattern.checkId,
                     patternName: pattern.name,
                     matchedText: matchedText,
-                    lineIndex: lineIndex
+                    lineIndex: lineIndex,
+                    timestamp: timestamp
                 ))
             }
         }
@@ -263,14 +338,17 @@ extension ConfigLinterService {
                     patternCounts[finding.checkId] = count + 1
                     let masked = Self.maskSecret(finding.matchedText)
 
-                    // Capture context: the line before and the line containing the secret
+                    // Extract readable context from the JSONL line
                     var context: [String] = []
                     if let idx = finding.lineIndex {
-                        if idx > 0 {
-                            context.append(Self.sanitizeContextLine(lines[idx - 1]))
+                        if let readable = Self.extractReadableContext(from: lines[idx], secret: finding.matchedText) {
+                            context.append("[\(readable.role)] \(readable.snippet)")
+                        } else {
+                            context.append(Self.sanitizeContextLine(lines[idx]))
                         }
-                        context.append(Self.sanitizeContextLine(lines[idx]))
                     }
+
+                    let detectedAt: Date? = finding.timestamp.flatMap { parseDate($0) }
 
                     results.append(LintResult(
                         severity: Self.secretPatterns.first(where: { $0.checkId == finding.checkId })?.severity ?? .warning,
@@ -281,7 +359,8 @@ extension ConfigLinterService {
                         displayPath: displayTitle,
                         contextLines: context.isEmpty ? nil : context,
                         unmaskedSecret: finding.matchedText,
-                        subagentFileName: isSubagent ? fileURL.lastPathComponent : nil
+                        subagentFileName: isSubagent ? fileURL.lastPathComponent : nil,
+                        detectedAt: detectedAt
                     ))
                 }
             }

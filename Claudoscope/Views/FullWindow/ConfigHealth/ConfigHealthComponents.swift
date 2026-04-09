@@ -166,6 +166,12 @@ struct CategoryIssueRow: View {
 
                                 Spacer()
 
+                                if let detectedAt = result.detectedAt {
+                                    Text(detectedAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.tertiary)
+                                }
+
                                 SessionBadgeView(result: result)
 
                                 Image(systemName: "chevron.right")
@@ -262,6 +268,12 @@ struct RuleGroupRow: View {
                                     .lineLimit(1)
 
                                 Spacer()
+
+                                if let detectedAt = result.detectedAt {
+                                    Text(detectedAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.tertiary)
+                                }
 
                                 SessionBadgeView(result: result)
 

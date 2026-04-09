@@ -81,6 +81,17 @@ struct HealthResultDetailView: View {
                             }
                         }
 
+                        if let detectedAt = result.detectedAt {
+                            HStack(spacing: 6) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                Text(detectedAt.formatted(date: .abbreviated, time: .shortened))
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
                         if let subagentFile = result.subagentFileName {
                             HStack(spacing: 6) {
                                 Image(systemName: "arrow.triangle.branch")

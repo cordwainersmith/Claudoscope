@@ -85,8 +85,9 @@ struct LintResult: Identifiable, Sendable {
     let contextLines: [String]?
     let unmaskedSecret: String?
     let subagentFileName: String?
+    let detectedAt: Date?
 
-    init(severity: LintSeverity, checkId: LintCheckId, filePath: String, line: Int? = nil, message: String, fix: String? = nil, displayPath: String? = nil, contextLines: [String]? = nil, unmaskedSecret: String? = nil, subagentFileName: String? = nil) {
+    init(severity: LintSeverity, checkId: LintCheckId, filePath: String, line: Int? = nil, message: String, fix: String? = nil, displayPath: String? = nil, contextLines: [String]? = nil, unmaskedSecret: String? = nil, subagentFileName: String? = nil, detectedAt: Date? = nil) {
         self.id = "\(checkId.rawValue)-\(filePath)-\(subagentFileName ?? "")-\(line ?? 0)-\(message.hash)"
         self.severity = severity
         self.checkId = checkId
@@ -98,6 +99,7 @@ struct LintResult: Identifiable, Sendable {
         self.contextLines = contextLines
         self.unmaskedSecret = unmaskedSecret
         self.subagentFileName = subagentFileName
+        self.detectedAt = detectedAt
     }
 }
 

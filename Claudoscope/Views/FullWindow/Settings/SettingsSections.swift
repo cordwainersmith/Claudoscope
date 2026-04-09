@@ -268,6 +268,12 @@ extension SettingsMainPanelView {
                     Text("Scan active sessions for leaked secrets and show alerts.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
+
+                    Button("Reset dismissed alerts") {
+                        store.clearAlertedSecrets()
+                    }
+                    .font(.system(size: 11))
+                    .padding(.top, 2)
                 }
                 .padding(.horizontal, 12)
             }

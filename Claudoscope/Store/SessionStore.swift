@@ -70,7 +70,20 @@ final class SessionStore {
     // Real-time secret alert
     var activeSecretAlert: SecretAlert?
     var onSecretAlert: ((SecretAlert) -> Void)?
-    private var alertedSecrets: Set<String> = []
+    private var alertedSecrets: Set<String> = [] {
+        didSet { Self.persistAlertedSecrets(alertedSecrets) }
+    }
+
+    private static let alertedSecretsKey = "alertedSecretValues"
+
+    private static func loadAlertedSecrets() -> Set<String> {
+        let array = UserDefaults.standard.stringArray(forKey: alertedSecretsKey) ?? []
+        return Set(array)
+    }
+
+    private static func persistAlertedSecrets(_ secrets: Set<String>) {
+        UserDefaults.standard.set(Array(secrets), forKey: alertedSecretsKey)
+    }
 
     // Lint caching
     private var lintResultsValid: Bool = false
@@ -148,6 +161,10 @@ final class SessionStore {
         todaySessions.reduce(0.0) { $0 + $1.estimatedCost }
     }
 
+    func clearAlertedSecrets() {
+        alertedSecrets.removeAll()
+    }
+
     init() {
         let home = FileManager.default.homeDirectoryForCurrentUser
         self.claudeDir = home.appendingPathComponent(".claude")
@@ -155,6 +172,7 @@ final class SessionStore {
         self.plansService = PlansService(claudeDir: claudeDir)
         self.timelineService = TimelineService(claudeDir: claudeDir)
         self.configService = ConfigService(claudeDir: claudeDir)
+        self.alertedSecrets = Self.loadAlertedSecrets()
 
         if UserDefaults.standard.object(forKey: "realtimeSecretScanEnabled") == nil {
             UserDefaults.standard.set(true, forKey: "realtimeSecretScanEnabled")
@@ -286,11 +304,10 @@ final class SessionStore {
         guard let finding = findings.first else { return }
 
         let masked = ConfigLinterService.maskSecret(finding.matchedText)
-        let dedupKey = "\(sessionId):\(masked)"
 
         await MainActor.run {
-            guard !alertedSecrets.contains(dedupKey) else { return }
-            alertedSecrets.insert(dedupKey)
+            guard !alertedSecrets.contains(masked) else { return }
+            alertedSecrets.insert(masked)
 
             // Derive a session title
             let title = sessionsByProject[projectId]?
