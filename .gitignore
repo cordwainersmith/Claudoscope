@@ -36,3 +36,6 @@ cleanup-v999999.sh
 
 # Tests (contains fake tokens that trigger GitHub push protection)
 ClaudoscopeTests/
+
+# Security allowlist
+.security-allowlist.json
