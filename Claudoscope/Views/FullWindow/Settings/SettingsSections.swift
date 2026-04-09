@@ -820,8 +820,20 @@ struct UpdatesSectionContent: View {
                 Toggle("Check for updates automatically", isOn: $service.autoCheckEnabled)
                     .font(Typography.body)
                     .toggleStyle(.checkbox)
+                    .disabled(updateService.isAutoCheckManaged)
             }
             .padding(.horizontal, 12)
+
+            if updateService.isAutoCheckManaged {
+                HStack(spacing: 4) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 11))
+                    Text("Managed by your organization")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 12)
+            }
 
             Divider()
 

@@ -34,6 +34,10 @@ final class UpdateService {
         let releaseNotes: String?
     }
 
+    var isAutoCheckManaged: Bool {
+        UserDefaults.standard.objectIsForced(forKey: Self.autoCheckKey)
+    }
+
     var autoCheckEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: Self.autoCheckKey) }
         set {
