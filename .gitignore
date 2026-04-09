@@ -33,3 +33,6 @@ cleanup-v999999.sh
 
 # claude
 .claude/
+
+# Tests (contains fake tokens that trigger GitHub push protection)
+ClaudoscopeTests/

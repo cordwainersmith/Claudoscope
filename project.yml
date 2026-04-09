@@ -57,3 +57,28 @@ targets:
       configs:
         Release:
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: false
+
+  ClaudoscopeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: ClaudoscopeTests
+    dependencies:
+      - target: Claudoscope
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        GENERATE_INFOPLIST_FILE: true
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: false
+
+schemes:
+  Claudoscope:
+    build:
+      targets:
+        Claudoscope: all
+        ClaudoscopeTests: [test]
+    test:
+      targets:
+        - ClaudoscopeTests

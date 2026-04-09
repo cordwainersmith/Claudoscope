@@ -72,7 +72,7 @@ extension ConfigLinterService {
         ),
         SecretPattern(
             checkId: .SEC007, name: "Platform Token",
-            pattern: "(ghp_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[bps]-[A-Za-z0-9./-]{20,}|npm_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{35})",
+            pattern: "(ghp_[A-Za-z0-9_]{36}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[bps]-[A-Za-z0-9./-]{20,}|npm_[A-Za-z0-9]{36}|sk_live_[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{35}|sk-ant-[A-Za-z0-9_-]{20,}|hf_[A-Za-z0-9]{34,}|AccountKey=[A-Za-z0-9+/=]{86,90}|hvs\\.[A-Za-z0-9_-]{24,}|dckr_pat_[A-Za-z0-9_-]+)",
             severity: .warning
         ),
     ]

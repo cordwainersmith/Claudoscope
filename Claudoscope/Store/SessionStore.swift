@@ -296,35 +296,63 @@ final class SessionStore {
         return offset > 0 ? Array(lines.dropFirst().suffix(50)) : Array(lines.suffix(50))
     }
 
+    private var lastScannedOffset: [URL: UInt64] = [:]
+
+    private func readDelta(of url: URL) -> [String]? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+
+        let fileSize = handle.seekToEndOfFile()
+        let previousOffset = lastScannedOffset[url] ?? 0
+
+        if previousOffset == 0 || previousOffset > fileSize {
+            lastScannedOffset[url] = fileSize
+            return Self.readTail(of: url)
+        }
+
+        guard fileSize > previousOffset else { return nil }
+
+        handle.seek(toFileOffset: previousOffset)
+        guard let data = try? handle.readToEnd(),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+
+        lastScannedOffset[url] = fileSize
+
+        let lines = text.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return lines.isEmpty ? nil : lines
+    }
+
     private func scanForRealtimeSecrets(url: URL, sessionId: String, projectId: String) async {
         guard realtimeSecretScanEnabled else { return }
-        guard let lines = Self.readTail(of: url) else { return }
+        guard let lines = readDelta(of: url) else { return }
 
         let findings = await linterService.scanLinesForSecrets(lines)
-        guard let finding = findings.first else { return }
-
-        let masked = ConfigLinterService.maskSecret(finding.matchedText)
+        guard !findings.isEmpty else { return }
 
         await MainActor.run {
-            guard !alertedSecrets.contains(masked) else { return }
-            alertedSecrets.insert(masked)
+            for finding in findings {
+                let masked = ConfigLinterService.maskSecret(finding.matchedText)
+                guard !alertedSecrets.contains(masked) else { continue }
+                alertedSecrets.insert(masked)
 
-            // Derive a session title
-            let title = sessionsByProject[projectId]?
-                .first(where: { $0.id == sessionId })?.title ?? sessionId
+                let title = sessionsByProject[projectId]?
+                    .first(where: { $0.id == sessionId })?.title ?? sessionId
 
-            let isSubagent = url.pathComponents.contains("subagents")
-            let alert = SecretAlert(
-                checkId: finding.checkId,
-                patternName: finding.patternName,
-                maskedValue: masked,
-                sessionTitle: title,
-                projectId: projectId,
-                sessionId: sessionId,
-                isSubagent: isSubagent
-            )
-            activeSecretAlert = alert
-            onSecretAlert?(alert)
+                let isSubagent = url.pathComponents.contains("subagents")
+                let alert = SecretAlert(
+                    checkId: finding.checkId,
+                    patternName: finding.patternName,
+                    maskedValue: masked,
+                    sessionTitle: title,
+                    projectId: projectId,
+                    sessionId: sessionId,
+                    isSubagent: isSubagent
+                )
+                activeSecretAlert = alert
+                onSecretAlert?(alert)
+                break
+            }
         }
     }
 
