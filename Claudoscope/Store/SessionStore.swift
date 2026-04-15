@@ -37,6 +37,8 @@ final class SessionStore {
     var analyticsCustomFrom: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
     var analyticsCustomTo: Date = Date()
     var isLoading: Bool = true
+    var scanSessionsProcessed: Int = 0
+    var scanSessionsTotal: Int = 0
     var selectedSession: ParsedSession?
 
     // Plans data
@@ -225,7 +227,10 @@ final class SessionStore {
                 parser: parser,
                 pricingTable: pricingTable
             )
-            let (scannedProjects, scannedSessions) = await scanner.scan()
+            let (scannedProjects, scannedSessions) = await scanner.scan { [weak self] processed, total in
+                self?.scanSessionsProcessed = processed
+                self?.scanSessionsTotal = total
+            }
 
             self.projects = scannedProjects
             self.sessionsByProject = scannedSessions

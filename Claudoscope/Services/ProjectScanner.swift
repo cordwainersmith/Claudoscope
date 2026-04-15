@@ -12,8 +12,10 @@ struct ProjectScanner {
     /// unbounded concurrency pegs the CPU and starves the UI run loop.
     private static let maxConcurrentParses = 8
 
-    /// Scan all projects and collect session metadata
-    func scan() async -> (projects: [Project], sessionsByProject: [String: [SessionSummary]]) {
+    /// Scan all projects and collect session metadata.
+    /// The optional `onProgress` callback fires on MainActor with (processed, total) counts.
+    func scan(onProgress: (@MainActor (Int, Int) -> Void)? = nil) async -> (projects: [Project], sessionsByProject: [String: [SessionSummary]]) {
+
         let projectsDir = claudeDir.appendingPathComponent("projects")
         var projects: [Project] = []
         var sessionsByProject: [String: [SessionSummary]] = [:]
@@ -65,6 +67,11 @@ struct ProjectScanner {
         // Parse with bounded concurrency to avoid CPU saturation
         var resultsByProject: [String: [SessionSummary]] = [:]
         let projectDirSet = Set(projectDirs)
+        let totalEntries = allEntries.count
+        var processed = 0
+
+        // Report total count immediately
+        await onProgress?(0, totalEntries)
 
         await withTaskGroup(of: (String, SessionSummary)?.self) { group in
             var inflight = 0
@@ -74,6 +81,11 @@ struct ProjectScanner {
                     if let result = await group.next() {
                         if let (dirName, summary) = result {
                             resultsByProject[dirName, default: []].append(summary)
+                        }
+                        processed += 1
+                        // Report progress every 50 files to avoid UI churn
+                        if processed % 50 == 0 {
+                            await onProgress?(processed, totalEntries)
                         }
                     }
                     inflight -= 1
@@ -101,8 +113,14 @@ struct ProjectScanner {
                 if let (dirName, summary) = result {
                     resultsByProject[dirName, default: []].append(summary)
                 }
+                processed += 1
+                if processed % 50 == 0 {
+                    await onProgress?(processed, totalEntries)
+                }
             }
         }
+
+        await onProgress?(totalEntries, totalEntries)
 
         for dirName in projectDirSet {
             var sessions = resultsByProject[dirName] ?? []
