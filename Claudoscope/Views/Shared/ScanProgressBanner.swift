@@ -2,9 +2,6 @@ import SwiftUI
 
 /// A thin native-style banner shown at the top of the window during initial session scan.
 struct ScanProgressBanner: View {
-    let scannedCount: Int
-    let projectCount: Int
-
     @Environment(SessionStore.self) private var store
 
     var body: some View {

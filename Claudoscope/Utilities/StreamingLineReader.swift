@@ -2,7 +2,10 @@ import Foundation
 
 /// Reads lines from a FileHandle without loading the entire file into memory.
 /// Yields one line at a time, stripping the newline delimiter.
-struct StreamingLineReader: Sequence, IteratorProtocol {
+///
+/// Implemented as a class to avoid copy-hazard: the mutable buffer and FileHandle
+/// seek position must not diverge across independent copies.
+final class StreamingLineReader: Sequence, IteratorProtocol {
     private let fileHandle: FileHandle
     private let chunkSize: Int
     private var buffer = Data()
@@ -13,7 +16,7 @@ struct StreamingLineReader: Sequence, IteratorProtocol {
         self.chunkSize = chunkSize
     }
 
-    mutating func next() -> String? {
+    func next() -> String? {
         while true {
             // Check if buffer contains a newline
             if let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {

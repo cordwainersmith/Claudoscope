@@ -14,7 +14,7 @@ struct ProjectScanner {
 
     /// Scan all projects and collect session metadata.
     /// The optional `onProgress` callback fires on MainActor with (processed, total) counts.
-    func scan(onProgress: (@MainActor (Int, Int) -> Void)? = nil) async -> (projects: [Project], sessionsByProject: [String: [SessionSummary]]) {
+    func scan(onProgress: (@Sendable @MainActor (Int, Int) -> Void)? = nil) async -> (projects: [Project], sessionsByProject: [String: [SessionSummary]]) {
 
         let projectsDir = claudeDir.appendingPathComponent("projects")
         var projects: [Project] = []
@@ -58,11 +58,13 @@ struct ProjectScanner {
 
         // Sort entries by file modification date (newest first) so the UI populates
         // with recent sessions quickly while older ones load in the background.
-        allEntries.sort { a, b in
-            let dateA = (try? fm.attributesOfItem(atPath: a.url.path)[.modificationDate] as? Date) ?? .distantPast
-            let dateB = (try? fm.attributesOfItem(atPath: b.url.path)[.modificationDate] as? Date) ?? .distantPast
-            return dateA > dateB
+        // Pre-fetch dates to avoid O(n log n) filesystem calls inside the comparator.
+        var datedEntries = allEntries.map { entry in
+            let date = (try? fm.attributesOfItem(atPath: entry.url.path)[.modificationDate] as? Date) ?? .distantPast
+            return (entry: entry, modDate: date)
         }
+        datedEntries.sort { $0.modDate > $1.modDate }
+        allEntries = datedEntries.map(\.entry)
 
         // Parse with bounded concurrency to avoid CPU saturation
         var resultsByProject: [String: [SessionSummary]] = [:]

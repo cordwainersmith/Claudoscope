@@ -47,10 +47,7 @@ struct FullWindowView: View {
         }
         .overlay(alignment: .top) {
             if store.isLoading {
-                ScanProgressBanner(
-                    scannedCount: store.projects.reduce(0) { $0 + ($1.sessionCount) },
-                    projectCount: store.projects.count
-                )
+                ScanProgressBanner()
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .animation(.easeInOut(duration: 0.3), value: store.isLoading)
             }
