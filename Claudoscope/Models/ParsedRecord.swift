@@ -13,6 +13,77 @@ enum RecordType: String, Codable, Sendable {
     case progress
 }
 
+// MARK: - Lightweight record for metadata-only scanning
+
+/// Minimal decoder for initial scan — skips message content (thinking blocks,
+/// tool inputs, text) which dominates file size. Only extracts fields needed
+/// for sidebar metadata: type, timestamp, slug, uuid, model, usage, stop_reason.
+struct MetadataOnlyRecord: Decodable, Sendable {
+    let type: RecordType?
+    let uuid: String?
+    let timestamp: String?
+    let slug: String?
+    let message: MetadataOnlyMessage?
+    let subtype: String?
+    let toolUseResult: MetadataOnlyToolResult?
+    let isCompactSummary: Bool?
+    let isVisibleInTranscriptOnly: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case type, uuid, timestamp, slug, message, subtype
+        case toolUseResult, isCompactSummary, isVisibleInTranscriptOnly
+    }
+}
+
+/// Minimal message decoder — skips content blocks entirely.
+struct MetadataOnlyMessage: Decodable, Sendable {
+    let role: String?
+    let model: String?
+    let stopReason: String?
+    let usage: TokenUsageRaw?
+    let content: MetadataOnlyContent?
+
+    enum CodingKeys: String, CodingKey {
+        case role, model, content, usage
+        case stopReason = "stop_reason"
+    }
+}
+
+/// Only extracts enough content to count tool_use blocks. Skips text/thinking.
+enum MetadataOnlyContent: Decodable, Sendable {
+    case string(String)
+    case blocks([MetadataOnlyBlock])
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let _ = try? container.decode(String.self) {
+            self = .string("")  // Don't store the text, just note it's a string
+        } else if let blocks = try? container.decode([MetadataOnlyBlock].self) {
+            self = .blocks(blocks)
+        } else {
+            self = .string("")
+        }
+    }
+}
+
+/// Minimal block — only decodes type and name, skips text/thinking content.
+struct MetadataOnlyBlock: Decodable, Sendable {
+    let type: String?
+    let name: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, name
+    }
+}
+
+struct MetadataOnlyToolResult: Decodable, Sendable {
+    let isError: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case isError = "is_error"
+    }
+}
+
 // MARK: - Raw JSONL Record (lenient Decodable)
 
 /// Represents a single line from a Claude Code JSONL session file.

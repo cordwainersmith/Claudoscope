@@ -380,7 +380,20 @@ final class SessionStore {
             from: from,
             to: to
         )
+
+        // Also recompute sidebar analytics (all projects, 30d)
+        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date())
+        sidebarAnalyticsData = AnalyticsEngine.compute(
+            sessions: allSessionsWithProjects,
+            pricingTable: pricingTable,
+            from: thirtyDaysAgo,
+            to: nil
+        )
     }
+
+    /// Cached analytics for the sidebar (always all projects, 30d, for cost ranking).
+    /// Recomputed only when recomputeAnalytics() is called, not on every view access.
+    var sidebarAnalyticsData: AnalyticsData = .empty
 
     func loadSession(id: String, projectId: String, subagentFileName: String? = nil) async {
         let cacheKey = if let subagentFileName {

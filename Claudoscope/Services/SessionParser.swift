@@ -7,10 +7,10 @@ actor SessionParser {
 
     /// Full parse of a JSONL session file into a ParsedSession
     func parse(url: URL, sessionId: String) throws -> ParsedSession {
-        let data = try Data(contentsOf: url)
-        guard let content = String(data: data, encoding: .utf8) else {
-            throw SessionParserError.invalidEncoding
+        guard let fileHandle = FileHandle(forReadingAtPath: url.path) else {
+            throw SessionParserError.fileNotFound
         }
+        defer { fileHandle.closeFile() }
 
         var records: [ParsedRecordRaw] = []
         var toolResultMap: [String: ToolResultEntry] = [:]
@@ -31,9 +31,7 @@ actor SessionParser {
         var isFirstRecord = true
         var projectId = ""
 
-        let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
-
-        for line in lines {
+        for line in StreamingLineReader(fileHandle: fileHandle) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
 
@@ -178,10 +176,13 @@ actor SessionParser {
 
     /// Quick metadata extraction for sidebar listing
     func parseMetadata(url: URL, sessionId: String, pricingTable: [String: ModelPricing]) throws -> SessionSummary {
-        let data = try Data(contentsOf: url)
-        guard let content = String(data: data, encoding: .utf8) else {
-            throw SessionParserError.invalidEncoding
+        // Stream-parse line by line to avoid loading entire file into memory.
+        // Large session directories (thousands of files, 1GB+) caused the app to
+        // peg the CPU at 100% when every file was fully loaded during initial scan.
+        guard let fileHandle = FileHandle(forReadingAtPath: url.path) else {
+            throw SessionParserError.fileNotFound
         }
+        defer { fileHandle.closeFile() }
 
         // Bug fix: use local dedup set instead of actor-level seenUUIDs
         // to avoid cross-session dedup that causes costs to drop to $0 over time
@@ -225,16 +226,14 @@ actor SessionParser {
         var hadCompactionSinceLast = false
         var turnsSinceLastCompaction = 0
         var hasWorktreeTool = false
-        var recordTimestamps: [String] = []
+        var allRecords: [MetadataOnlyRecord] = []
 
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let isoFormatterNoFrac = ISO8601DateFormatter()
         isoFormatterNoFrac.formatOptions = [.withInternetDateTime]
 
-        let lines = content.split(separator: "\n", omittingEmptySubsequences: true)
-
-        for line in lines {
+        for line in StreamingLineReader(fileHandle: fileHandle) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
             lineCount += 1
@@ -246,7 +245,7 @@ actor SessionParser {
             guard let lineData = trimmed.data(using: .utf8) else { continue }
 
             do {
-                let raw = try decoder.decode(ParsedRecordRaw.self, from: lineData)
+                let raw = try decoder.decode(MetadataOnlyRecord.self, from: lineData)
 
                 if raw.isCompactSummary == true || raw.type == .progress || raw.isVisibleInTranscriptOnly == true {
                     continue
@@ -369,15 +368,9 @@ actor SessionParser {
                             model: raw.message?.model
                         ))
 
-                        // Observability: classify effort from thinking blocks
-                        var thinkingChars = 0
-                        if case .blocks(let blocks) = raw.message?.content {
-                            for block in blocks {
-                                if block.type == "thinking", let thinking = block.thinking {
-                                    thinkingChars += thinking.count
-                                }
-                            }
-                        }
+                        // Observability: classify effort (approximate — thinking text
+                        // is not decoded in lightweight mode to save memory)
+                        let thinkingChars = 0
                         let effort = ObservabilityAnalyzer.classifyEffort(
                             thinkingChars: thinkingChars,
                             outputTokens: msgOutput,
@@ -403,16 +396,15 @@ actor SessionParser {
 
                 if raw.type == .result, raw.message?.stopReason == "error" {
                     hasError = true
-                    let errorText = raw.message?.content?.textContent ?? ""
                     let classification = ObservabilityAnalyzer.classifyError(
-                        contentText: errorText,
+                        contentText: "",
                         stopReason: raw.message?.stopReason
                     )
                     errorDetails.append(SessionErrorDetail(
                         classification: classification,
                         turnIndex: turnIndex,
                         timestamp: raw.timestamp,
-                        message: String(errorText.prefix(200))
+                        message: "error"
                     ))
                 }
 
@@ -422,7 +414,7 @@ actor SessionParser {
                         classification: .toolError,
                         turnIndex: turnIndex,
                         timestamp: raw.timestamp,
-                        message: String((raw.toolUseResult?.content ?? "").prefix(200))
+                        message: "tool error"
                     ))
                 }
 
@@ -431,14 +423,14 @@ actor SessionParser {
                     compactionEvents.append(CompactionEvent(
                         index: compactionCount,
                         timestamp: raw.timestamp,
-                        preTokens: raw.compactMetadata?.preTokens,
+                        preTokens: nil,
                         turnsSinceLastCompaction: turnsSinceLastCompaction
                     ))
                     hadCompactionSinceLast = true
                     turnsSinceLastCompaction = 0
                 }
 
-                if let ts = raw.timestamp { recordTimestamps.append(ts) }
+                allRecords.append(raw)
             } catch {
                 continue
             }
@@ -460,8 +452,8 @@ actor SessionParser {
             )
         }.sorted { $0.estimatedCost > $1.estimatedCost }
 
-        // Compute idle gap detection
-        let idleGapResult = ObservabilityAnalyzer.detectIdleGaps(timestamps: recordTimestamps)
+        // Compute idle gap detection from collected timestamps
+        let idleGapResult = ObservabilityAnalyzer.detectIdleGaps(timestamps: allRecords.compactMap(\.timestamp))
 
         // Compute session observability
         let observability = ObservabilityAnalyzer.computeObservability(
