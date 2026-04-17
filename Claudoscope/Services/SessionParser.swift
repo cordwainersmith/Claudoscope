@@ -174,6 +174,19 @@ actor SessionParser {
         )
     }
 
+    /// Extract the concatenated text content from a lightweight content value.
+    /// Used to surface real error messages to the error classifier and sidebar.
+    private func extractText(from content: MetadataOnlyContent?) -> String {
+        switch content {
+        case .string(let s):
+            return s
+        case .blocks(let blocks):
+            return blocks.compactMap { $0.text }.joined(separator: " ")
+        case .none:
+            return ""
+        }
+    }
+
     /// Quick metadata extraction for sidebar listing
     func parseMetadata(url: URL, sessionId: String, pricingTable: [String: ModelPricing]) throws -> SessionSummary {
         // Stream-parse line by line to avoid loading entire file into memory.
@@ -280,14 +293,18 @@ actor SessionParser {
                 }
 
                 if raw.type == .assistant {
-                    // Count tool_use blocks for tool call count
+                    // Count tool_use blocks for tool call count, and sum thinking chars
                     var turnToolNames: [String] = []
+                    var turnThinkingChars = 0
                     if case .blocks(let blocks) = raw.message?.content {
                         let toolUseBlocks = blocks.filter { $0.type == "tool_use" }
                         toolCallCount += toolUseBlocks.count
                         turnToolNames = toolUseBlocks.compactMap(\.name)
                         if !hasWorktreeTool && turnToolNames.contains(where: { $0 == "EnterWorktree" || $0 == "ExitWorktree" }) {
                             hasWorktreeTool = true
+                        }
+                        for block in blocks where block.type == "thinking" {
+                            turnThinkingChars += block.thinking?.count ?? 0
                         }
                     }
 
@@ -368,11 +385,8 @@ actor SessionParser {
                             model: raw.message?.model
                         ))
 
-                        // Observability: classify effort (approximate — thinking text
-                        // is not decoded in lightweight mode to save memory)
-                        let thinkingChars = 0
                         let effort = ObservabilityAnalyzer.classifyEffort(
-                            thinkingChars: thinkingChars,
+                            thinkingChars: turnThinkingChars,
                             outputTokens: msgOutput,
                             stopReason: raw.message?.stopReason
                         )
@@ -396,25 +410,27 @@ actor SessionParser {
 
                 if raw.type == .result, raw.message?.stopReason == "error" {
                     hasError = true
+                    let contentText = extractText(from: raw.message?.content)
                     let classification = ObservabilityAnalyzer.classifyError(
-                        contentText: "",
+                        contentText: contentText,
                         stopReason: raw.message?.stopReason
                     )
                     errorDetails.append(SessionErrorDetail(
                         classification: classification,
                         turnIndex: turnIndex,
                         timestamp: raw.timestamp,
-                        message: "error"
+                        message: contentText.isEmpty ? "error" : contentText
                     ))
                 }
 
                 if raw.type == .toolResult, raw.toolUseResult?.isError == true {
                     hasError = true
+                    let contentText = raw.toolUseResult?.content ?? ""
                     errorDetails.append(SessionErrorDetail(
                         classification: .toolError,
                         turnIndex: turnIndex,
                         timestamp: raw.timestamp,
-                        message: "tool error"
+                        message: contentText.isEmpty ? "tool error" : contentText
                     ))
                 }
 

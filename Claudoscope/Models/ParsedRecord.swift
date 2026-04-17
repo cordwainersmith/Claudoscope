@@ -56,8 +56,8 @@ enum MetadataOnlyContent: Decodable, Sendable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
-        if let _ = try? container.decode(String.self) {
-            self = .string("")  // Don't store the text, just note it's a string
+        if let str = try? container.decode(String.self) {
+            self = .string(str)
         } else if let blocks = try? container.decode([MetadataOnlyBlock].self) {
             self = .blocks(blocks)
         } else {
@@ -66,21 +66,26 @@ enum MetadataOnlyContent: Decodable, Sendable {
     }
 }
 
-/// Minimal block — only decodes type and name, skips text/thinking content.
+/// Minimal block — decodes type, name, plus thinking/text content needed
+/// for effort classification and error details. Skips heavy tool input payloads.
 struct MetadataOnlyBlock: Decodable, Sendable {
     let type: String?
     let name: String?
+    let thinking: String?
+    let text: String?
 
     enum CodingKeys: String, CodingKey {
-        case type, name
+        case type, name, thinking, text
     }
 }
 
 struct MetadataOnlyToolResult: Decodable, Sendable {
     let isError: Bool?
+    let content: String?
 
     enum CodingKeys: String, CodingKey {
         case isError = "is_error"
+        case content
     }
 }
 
