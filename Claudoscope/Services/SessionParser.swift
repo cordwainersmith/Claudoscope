@@ -410,7 +410,8 @@ actor SessionParser {
 
                 if raw.type == .result, raw.message?.stopReason == "error" {
                     hasError = true
-                    let contentText = extractText(from: raw.message?.content)
+                    let messageText = extractText(from: raw.message?.content)
+                    let contentText = messageText.isEmpty ? (raw.content ?? "") : messageText
                     let classification = ObservabilityAnalyzer.classifyError(
                         contentText: contentText,
                         stopReason: raw.message?.stopReason

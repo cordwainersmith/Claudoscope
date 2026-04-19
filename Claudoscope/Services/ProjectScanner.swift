@@ -79,6 +79,7 @@ struct ProjectScanner {
             var inflight = 0
 
             for entry in allEntries {
+                if Task.isCancelled { break }
                 if inflight >= Self.maxConcurrentParses {
                     if let result = await group.next() {
                         if let (dirName, summary) = result {
