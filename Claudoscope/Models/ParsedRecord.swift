@@ -29,13 +29,14 @@ struct MetadataOnlyRecord: Decodable, Sendable {
     let message: MetadataOnlyMessage?
     let subtype: String?
     let content: String?
+    let compactMetadata: CompactMetadataRaw?
     let toolUseResult: MetadataOnlyToolResult?
     let isCompactSummary: Bool?
     let isVisibleInTranscriptOnly: Bool?
 
     enum CodingKeys: String, CodingKey {
         case type, uuid, timestamp, slug, sessionId, customTitle, agentName
-        case message, subtype, content
+        case message, subtype, content, compactMetadata
         case toolUseResult, isCompactSummary, isVisibleInTranscriptOnly
     }
 }

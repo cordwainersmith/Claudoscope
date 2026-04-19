@@ -239,7 +239,7 @@ actor SessionParser {
         var hadCompactionSinceLast = false
         var turnsSinceLastCompaction = 0
         var hasWorktreeTool = false
-        var allRecords: [MetadataOnlyRecord] = []
+        var recordTimestamps: [String] = []
 
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -247,6 +247,7 @@ actor SessionParser {
         isoFormatterNoFrac.formatOptions = [.withInternetDateTime]
 
         for line in StreamingLineReader(fileHandle: fileHandle) {
+            try Task.checkCancellation()
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty { continue }
             lineCount += 1
@@ -440,14 +441,14 @@ actor SessionParser {
                     compactionEvents.append(CompactionEvent(
                         index: compactionCount,
                         timestamp: raw.timestamp,
-                        preTokens: nil,
+                        preTokens: raw.compactMetadata?.preTokens,
                         turnsSinceLastCompaction: turnsSinceLastCompaction
                     ))
                     hadCompactionSinceLast = true
                     turnsSinceLastCompaction = 0
                 }
 
-                allRecords.append(raw)
+                if let ts = raw.timestamp { recordTimestamps.append(ts) }
             } catch {
                 continue
             }
@@ -470,7 +471,7 @@ actor SessionParser {
         }.sorted { $0.estimatedCost > $1.estimatedCost }
 
         // Compute idle gap detection from collected timestamps
-        let idleGapResult = ObservabilityAnalyzer.detectIdleGaps(timestamps: allRecords.compactMap(\.timestamp))
+        let idleGapResult = ObservabilityAnalyzer.detectIdleGaps(timestamps: recordTimestamps)
 
         // Compute session observability
         let observability = ObservabilityAnalyzer.computeObservability(
