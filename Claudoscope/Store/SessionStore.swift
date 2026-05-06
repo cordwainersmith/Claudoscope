@@ -70,6 +70,21 @@ final class SessionStore {
     var lintLoading: Bool = false
     var secretScanLoading: Bool = false
 
+    /// Set to true while HardeningInstaller is mid-install/revert/uninstall.
+    /// ClaudeFileWatcher's lint-trigger pipelines short-circuit when this is set
+    /// to avoid linting against a partially-written settings.json or CLAUDE.md.
+    /// Use `setInstallInProgress(_:)` to flip; it also informs the file watcher
+    /// so config events are dropped at the source.
+    private(set) var installInProgress: Bool = false
+
+    /// Toggle the install-in-progress flag. MainActor-isolated; also pushes the
+    /// state into ClaudeFileWatcher so its FSEvents callback skips configChanged
+    /// emissions while the installer is mid-mutation.
+    func setInstallInProgress(_ value: Bool) {
+        installInProgress = value
+        watcher.setInstallInProgress(value)
+    }
+
     // Real-time secret alert
     var activeSecretAlert: SecretAlert?
     var onSecretAlert: ((SecretAlert) -> Void)?

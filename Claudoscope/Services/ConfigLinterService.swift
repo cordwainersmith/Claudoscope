@@ -85,6 +85,9 @@ actor ConfigLinterService {
         let projectRootURL = projectRoot.map { URL(fileURLWithPath: $0) }
         results.append(contentsOf: lintConfig(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))
 
+        // Hardening baseline checks (HRD001-HRD011)
+        results.append(contentsOf: lintHardening(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))
+
         // Sort by severity (errors first)
         results.sort { $0.severity < $1.severity }
         return results

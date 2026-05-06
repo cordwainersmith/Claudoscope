@@ -106,6 +106,17 @@ struct MainPanelView: View {
                     },
                     onNavigateToSession: onNavigateToSession
                 )
+            case .hardening:
+                HardeningMainPanelView(
+                    lintResults: store.lintResults,
+                    isLoading: store.lintLoading,
+                    selectedResultId: $selectedLintResultId,
+                    onRescan: {
+                        Task {
+                            await store.runConfigLint(projectId: selectedProjectId)
+                        }
+                    }
+                )
             case .settings:
                 SettingsMainPanelView(selectedSection: $selectedSettingsSection)
             }

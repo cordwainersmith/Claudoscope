@@ -63,6 +63,19 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG006  // CLAUDE_CODE_SUBPROCESS_ENV_SCRUB not set
     case CFG007  // disableSkillShellExecution not set
 
+    // Hardening baseline checks
+    case HRD001  // sandbox.enabled missing or false
+    case HRD002  // permissions.deny missing baseline entries
+    case HRD003  // expected hardening hook not registered
+    case HRD004  // registered hook command file missing on disk
+    case HRD005  // hook command file not executable
+    case HRD006  // hook script SHA mismatch vs sidecar
+    case HRD007  // hook command file world-writable
+    case HRD008  // autoMode key missing in settings.json
+    case HRD009  // overly permissive host/network entry
+    case HRD010  // governance block missing or drifted in CLAUDE.md
+    case HRD011  // security awareness skill missing or drifted
+
     // Secret detection checks
     case SEC001  // private key
     case SEC002  // AWS access key

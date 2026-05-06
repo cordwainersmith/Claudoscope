@@ -1,0 +1,41 @@
+{
+  "_comment": "Claudoscope Hardening Baseline — Layer 1 Sandbox. Filesystem deny lists scope what tools can read or write at all. The network allowedHosts list is intentionally empty: the user populates it via the Trusted Sources sheet in Claudoscope. Claude Code merges allowedHosts with its built-in defaults at runtime.",
+  "sandbox": {
+    "enabled": true,
+    "filesystem": {
+      "denyRead": [
+        "~/.ssh/",
+        "~/.gnupg/",
+        "~/.netrc",
+        "~/.aws/",
+        "~/.azure/",
+        "~/.config/gh/",
+        "~/.git-credentials",
+        "~/.docker/config.json",
+        "~/.kube/",
+        "~/.pypirc",
+        "~/.gem/credentials",
+        "~/Library/Keychains/",
+        "~/Library/Application Support/**/metamask*",
+        "~/Library/Application Support/**/electrum*",
+        "~/Library/Application Support/**/exodus*",
+        "~/Library/Application Support/**/phantom*",
+        "~/Library/Application Support/**/solflare*"
+      ],
+      "denyWrite": [
+        "~/.bashrc",
+        "~/.zshrc",
+        "~/.bash_profile",
+        "~/.zprofile",
+        "~/.profile",
+        "~/.claude/settings.json",
+        "~/.claude/settings.local.json",
+        "~/.ssh/",
+        "~/.gnupg/"
+      ]
+    },
+    "network": {
+      "allowedHosts": []
+    }
+  }
+}

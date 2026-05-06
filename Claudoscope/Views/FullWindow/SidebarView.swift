@@ -123,6 +123,13 @@ struct SidebarView: View {
                         selectedItem: $selectedHealthItem,
                         hiddenSeverities: $hiddenLintSeverities
                     )
+                case .hardening:
+                    HardeningSidebarContent(
+                        filterText: filterText,
+                        lintResults: store.lintResults,
+                        isLoading: store.lintLoading,
+                        selectedLintResultId: $selectedLintResultId
+                    )
                 case .settings:
                     SettingsSidebarContent(
                         filterText: filterText,

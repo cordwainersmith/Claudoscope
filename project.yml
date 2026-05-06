@@ -19,6 +19,10 @@ targets:
       - path: Claudoscope
         excludes:
           - Info.plist
+          - Resources/HardeningBaseline
+      - path: Claudoscope/Resources/HardeningBaseline
+        type: folder
+        buildPhase: resources
       - path: CHANGELOG.md
         type: file
         buildPhase: resources

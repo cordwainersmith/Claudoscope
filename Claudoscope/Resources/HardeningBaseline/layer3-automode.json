@@ -1,0 +1,16 @@
+{
+  "_comment": "Claudoscope Hardening Baseline - Layer 3 Auto Mode Intent Alignment. The 'environment' list is intentionally minimal: the user populates trusted hosts, registries, and repositories through the Claudoscope Trusted Sources sheet. The 'soft_deny' rules require explicit user intent before the agent can perform high-risk operations.",
+  "autoMode": {
+    "environment": [
+      "$defaults"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Force-pushing is only permitted when the user explicitly names the target branch and uses the phrase 'force-push'. A vague instruction like 'push the changes' or 'update the branch' does not satisfy explicit intent.",
+      "Do not commit changes automatically. All mutations remain staged and visible until the user issues an explicit commit command. Completing a task does not imply committing.",
+      "'git reset --hard' requires explicit intent. The user must say 'git reset --hard <ref>' with a specific target (branch, SHA, HEAD~N, tag, etc.). Phrases like 'clean up', 'undo', or 'reset the branch' are not sufficient.",
+      "Before initiating any external API connection to a host not listed in the 'environment' allow list above, request explicit human-in-the-loop (HITL) approval. The user must approve the specific endpoint by URL.",
+      "'curl' and 'wget' invocations require HITL approval with three elements in the user's message: (1) the exact URL to fetch, (2) the purpose of the request, and (3) explicit confirmation to proceed. A vague instruction like 'download this' or 'run curl' does not satisfy this requirement. There is no bypass."
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "_comment": "Claudoscope Hardening Baseline — Layer 2 Hooks registration. The placeholder __HOOKS_DIR__ is replaced with an absolute path by the installer at install time. Hook scripts are content-addressed (see layer2-hooks.sha256) so any tampering is detected before activation.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__HOOKS_DIR__/claudoscope-protect-file.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__HOOKS_DIR__/claudoscope-validate-commands.sh"
+          },
+          {
+            "type": "command",
+            "command": "__HOOKS_DIR__/claudoscope-check-public-repo.sh"
+          },
+          {
+            "type": "command",
+            "command": "__HOOKS_DIR__/claudoscope-flag-proprietary-files.sh"
+          },
+          {
+            "type": "command",
+            "command": "__HOOKS_DIR__/claudoscope-check-package-age.sh",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "__HOOKS_DIR__/claudoscope-check-git-reset-hard.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__HOOKS_DIR__/claudoscope-scan-for-credentials.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

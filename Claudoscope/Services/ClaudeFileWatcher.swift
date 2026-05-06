@@ -17,6 +17,24 @@ final class ClaudeFileWatcher: @unchecked Sendable {
     private var debounceTimers: [String: DispatchWorkItem] = [:]
     private let queue = DispatchQueue(label: "com.claudoscope.filewatcher")
 
+    /// Install gate. When true, configChanged events are suppressed at the
+    /// source so subscribers (lint, config reload) don't fire against a
+    /// partially-written settings.json or CLAUDE.md while HardeningInstaller
+    /// is mid-mutation. Lock-protected because the FSEvents callback runs off
+    /// the main thread.
+    private let gateLock = NSLock()
+    private var _installInProgress: Bool = false
+    func setInstallInProgress(_ value: Bool) {
+        gateLock.lock()
+        _installInProgress = value
+        gateLock.unlock()
+    }
+    private var installInProgressLocked: Bool {
+        gateLock.lock()
+        defer { gateLock.unlock() }
+        return _installInProgress
+    }
+
     /// Weak-reference box passed to FSEvents callback to avoid use-after-free.
     /// The stored property keeps it alive; the callback checks watcher != nil.
     private final class StreamBox {
@@ -150,6 +168,10 @@ final class ClaudeFileWatcher: @unchecked Sendable {
                   path.contains("/skills/") ||
                   path.contains("/themes/") {
             guard isCreated || isModified else { return }
+            // Skip config events while HardeningInstaller is mid-write.
+            // Otherwise the debounced lint pipeline races a half-written
+            // settings.json or CLAUDE.md and produces spurious results.
+            if installInProgressLocked { return }
             debounceEmit(key: path) {
                 return .configChanged(url)
             }

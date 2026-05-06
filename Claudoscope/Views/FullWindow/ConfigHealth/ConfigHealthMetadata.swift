@@ -220,7 +220,26 @@ func categoryFor(_ checkId: LintCheckId) -> CategoryDef {
 
 // MARK: - Auto-Fix Support
 
-let autoFixableRules: Set<LintCheckId> = [.CFG006]
+let autoFixableRules: Set<LintCheckId> = [.CFG006, .HRD001, .HRD002, .HRD005, .HRD007]
+
+/// Hardcoded inline copy of the layer1 critical deny entries. Mirrors
+/// `Claudoscope/Resources/HardeningBaseline/layer1-permissions.json` so the
+/// HRD002 fix works even if the bundle resource is missing.
+let hardeningCriticalDenyEntries: [String] = [
+    "Bash(rm -rf /)",
+    "Bash(rm -rf ~)",
+    "Bash(rm -rf $HOME)",
+    "Bash(curl * | sh)",
+    "Bash(curl * | bash)",
+    "Bash(wget * | sh)",
+    "Bash(wget * | bash)",
+    "Bash(sudo *)",
+    "Bash(chmod 777 *)",
+    "Bash(git push --force *)",
+    "Bash(git push -f *)",
+    "Bash(git reset --hard *)",
+    "Bash(eval *)"
+]
 
 struct ConfigAutoFixer {
     static func canFix(_ checkId: LintCheckId) -> Bool {
@@ -231,6 +250,14 @@ struct ConfigAutoFixer {
         switch checkId {
         case .CFG006:
             return addEnvVar(key: "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB", value: "1", settingsPath: settingsPath)
+        case .HRD001:
+            return enableSandbox(settingsPath: settingsPath)
+        case .HRD002:
+            return appendMissingDenyEntries(settingsPath: settingsPath)
+        case .HRD005:
+            return makeExecutable(filePath: settingsPath)
+        case .HRD007:
+            return removeWorldWritable(filePath: settingsPath)
         default:
             return false
         }
@@ -252,6 +279,81 @@ struct ConfigAutoFixer {
         ) else { return false }
 
         return (try? outputData.write(to: url)) != nil
+    }
+
+    private static func enableSandbox(settingsPath: String) -> Bool {
+        let url = URL(fileURLWithPath: settingsPath)
+        guard let data = try? Data(contentsOf: url),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+
+        var sandbox = json["sandbox"] as? [String: Any] ?? [:]
+        sandbox["enabled"] = true
+        json["sandbox"] = sandbox
+
+        return atomicWriteJSON(json, to: url)
+    }
+
+    private static func appendMissingDenyEntries(settingsPath: String) -> Bool {
+        let url = URL(fileURLWithPath: settingsPath)
+        guard let data = try? Data(contentsOf: url),
+              var json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+
+        var permissions = json["permissions"] as? [String: Any] ?? [:]
+        var deny = permissions["deny"] as? [String] ?? []
+        let existing = Set(deny)
+        for entry in hardeningCriticalDenyEntries where !existing.contains(entry) {
+            deny.append(entry)
+        }
+        permissions["deny"] = deny
+        json["permissions"] = permissions
+
+        return atomicWriteJSON(json, to: url)
+    }
+
+    private static func makeExecutable(filePath: String) -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: filePath) else { return false }
+        do {
+            let attrs = try fm.attributesOfItem(atPath: filePath)
+            let current = (attrs[.posixPermissions] as? NSNumber)?.uint16Value ?? 0o644
+            let next = current | 0o755
+            try fm.setAttributes([.posixPermissions: NSNumber(value: next)], ofItemAtPath: filePath)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func removeWorldWritable(filePath: String) -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: filePath) else { return false }
+        do {
+            let attrs = try fm.attributesOfItem(atPath: filePath)
+            let current = (attrs[.posixPermissions] as? NSNumber)?.uint16Value ?? 0o644
+            let next = current & ~UInt16(0o002)
+            try fm.setAttributes([.posixPermissions: NSNumber(value: next)], ofItemAtPath: filePath)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func atomicWriteJSON(_ json: [String: Any], to url: URL) -> Bool {
+        guard let outputData = try? JSONSerialization.data(
+            withJSONObject: json,
+            options: [.prettyPrinted, .sortedKeys]
+        ) else { return false }
+        let tmp = url.deletingLastPathComponent()
+            .appendingPathComponent(".\(url.lastPathComponent).tmp")
+        do {
+            try outputData.write(to: tmp, options: .atomic)
+            _ = try? FileManager.default.replaceItemAt(url, withItemAt: tmp)
+            return FileManager.default.fileExists(atPath: url.path)
+        } catch {
+            return false
+        }
     }
 }
 

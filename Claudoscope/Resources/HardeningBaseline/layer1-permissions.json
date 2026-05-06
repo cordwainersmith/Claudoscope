@@ -1,0 +1,20 @@
+{
+  "_comment": "Claudoscope Hardening Baseline — Layer 1 Permissions. Hard-deny rules for high-risk reads, writes, and shell invocations. Merge into Claude Code settings to make these baseline restrictions enforceable. Users may extend the deny list; they cannot remove these defaults from within the app without going through the Trusted Sources sheet.",
+  "permissions": {
+    "deny": [
+      "Read(secrets/**)",
+      "Write(secrets/**)",
+      "Read(.netrc)",
+      "Write(.netrc)",
+      "Read(.npmrc)",
+      "Write(.npmrc)",
+      "Read(.cargo/credentials.toml)",
+      "Write(.cargo/credentials.toml)",
+      "Read(.ssh/**)",
+      "Write(.ssh/**)",
+      "Write(.claude/settings.json)",
+      "Write(.claude/settings.local.json)",
+      "Bash(sudo:*)"
+    ]
+  }
+}

@@ -18,7 +18,13 @@ let package = Package(
             path: "Claudoscope",
             exclude: ["Info.plist", "Claudoscope.entitlements"],
             resources: [
-                .process("Resources"),
+                .copy("Resources/HardeningBaseline"),
+                .process("Resources/app-icon-rounded.png"),
+                .process("Resources/app-icon.png"),
+                .process("Resources/AppIcon.icns"),
+                .process("Resources/claude-avatar.png"),
+                .process("Resources/logo-c-t.png"),
+                .process("Resources/menu-bar-icon.png"),
             ]
         ),
         .testTarget(
