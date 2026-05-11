@@ -36,6 +36,9 @@ struct FullWindowView: View {
     // Settings state
     @State private var selectedSettingsSection: String?
 
+    // Cowork state
+    @State private var selectedCoworkSessionId: String?
+
     // Sidebar resize
     @AppStorage("sidebarWidth") private var sidebarWidth: Double = 240
     @State private var dragStartWidth: CGFloat?
@@ -106,7 +109,7 @@ struct FullWindowView: View {
 
     private var threeColumnLayout: some View {
         HStack(spacing: 0) {
-            RailView(selected: $selectedRail)
+            RailView(selected: $selectedRail, coworkVisible: store.coworkAvailability.isReady)
 
             Divider()
 
@@ -126,7 +129,8 @@ struct FullWindowView: View {
                 selectedLintResultId: $selectedLintResultId,
                 hiddenLintSeverities: $hiddenLintSeverities,
                 selectedHealthItem: $selectedHealthItem,
-                selectedTimelineDay: $selectedTimelineDay
+                selectedTimelineDay: $selectedTimelineDay,
+                selectedCoworkSessionId: $selectedCoworkSessionId
             )
 
             SidebarResizeHandle(sidebarWidth: $sidebarWidth, dragStartWidth: $dragStartWidth)
@@ -144,6 +148,7 @@ struct FullWindowView: View {
                 selectedHealthItem: selectedHealthItem,
                 selectedProjectId: selectedProjectId,
                 selectedSettingsSection: $selectedSettingsSection,
+                selectedCoworkSessionId: $selectedCoworkSessionId,
                 onNavigateToSession: { projectId, sessionId, subagentFileName in
                     pendingSubagentFileName = subagentFileName
                     pendingNavigation = (projectId, sessionId)
@@ -160,7 +165,8 @@ struct FullWindowView: View {
                 isPresented: $showCommandPalette,
                 selectedRail: $selectedRail,
                 selectedProjectId: $selectedProjectId,
-                selectedSessionId: $selectedSessionId
+                selectedSessionId: $selectedSessionId,
+                coworkVisible: store.coworkAvailability.isReady
             )
         }
     }
@@ -179,6 +185,8 @@ struct FullWindowView: View {
                 await store.runConfigLintIfNeeded(projectId: selectedProjectId)
             case .hooks, .commands, .mcps, .skills, .settings:
                 await store.loadConfig(projectId: selectedProjectId)
+            case .cowork:
+                await store.loadCowork()
             case .analytics, .sessions, .tools:
                 break
             }

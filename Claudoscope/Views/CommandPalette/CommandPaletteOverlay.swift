@@ -105,6 +105,7 @@ struct CommandPaletteOverlay: View {
     @Binding var selectedRail: RailItem
     @Binding var selectedProjectId: String?
     @Binding var selectedSessionId: String?
+    let coworkVisible: Bool
 
     @State private var query: String = ""
     @State private var selectedIndex: Int = 0
@@ -116,7 +117,7 @@ struct CommandPaletteOverlay: View {
     private var commands: [CommandItem] {
         var items: [CommandItem] = []
 
-        for rail in RailItem.allCases {
+        for rail in RailItem.allCases where !rail.requiresCoworkAvailability || coworkVisible {
             items.append(CommandItem(
                 id: "nav-\(rail.rawValue)",
                 title: "Go to \(rail.label)",
