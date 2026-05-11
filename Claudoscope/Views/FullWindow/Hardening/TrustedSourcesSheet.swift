@@ -46,11 +46,15 @@ struct TrustedSourcesSheet: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("Both lists are merged with the bundled hardening baseline. Reinstalling the baseline preserves every entry you add here.")
+                Text("Two lists that control how the AI uses the internet. The first decides what it doesn't need to ask permission for. The second decides what it can reach at all. Reinstalling the security setup keeps every entry you add here.")
                     .font(Typography.body)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                section(title: "Trusted environment (autoMode.environment)") {
+                section(
+                    title: "Trusted environment (autoMode.environment)",
+                    description: "Sites the AI can use without stopping to ask you. If a site isn't here, it will pause and request your permission first."
+                ) {
                     listEditor(
                         entries: $environmentEntries,
                         newEntry: $newEnvironmentEntry,
@@ -58,7 +62,10 @@ struct TrustedSourcesSheet: View {
                     )
                 }
 
-                section(title: "Allowed network hosts (sandbox.network.allowedHosts)") {
+                section(
+                    title: "Allowed network hosts (sandbox.network.allowedHosts)",
+                    description: "Sites your Mac will let the AI connect to. If a site isn't here, the connection is blocked, no matter what it tries to do."
+                ) {
                     listEditor(
                         entries: $allowedHosts,
                         newEntry: $newHost,
@@ -238,11 +245,21 @@ struct TrustedSourcesSheet: View {
     }
 
     @ViewBuilder
-    private func section<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(
+        title: String,
+        description: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.tertiary)
+            if let description {
+                Text(description)
+                    .font(Typography.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             content()
         }
     }
