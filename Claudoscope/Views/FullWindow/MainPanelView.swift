@@ -24,6 +24,9 @@ struct MainPanelView: View {
     // Settings
     @Binding var selectedSettingsSection: String?
 
+    // Cowork
+    @Binding var selectedCoworkSessionId: String?
+
     // Session navigation from config health (projectId, sessionId, subagentFileName?)
     var onNavigateToSession: ((String, String, String?) -> Void)?
 
@@ -64,6 +67,13 @@ struct MainPanelView: View {
                     entries: store.timelineEntries,
                     isLoading: store.timelineLoading,
                     onNavigateToSession: onNavigateToSession
+                )
+            case .cowork:
+                CoworkMainPanelView(
+                    sessions: store.coworkSessions,
+                    parsedSessionsByID: store.coworkParsedSessionsByID,
+                    pricingTable: store.pricingTable,
+                    selectedSessionId: $selectedCoworkSessionId
                 )
             case .hooks:
                 HooksMainPanelView(
