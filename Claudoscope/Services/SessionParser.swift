@@ -240,6 +240,24 @@ actor SessionParser {
         )
     }
 
+    /// Parse a JSONL transcript that does not live under ~/.claude/projects/.
+    /// Used by the Cowork rail, which reads from ~/Library/Application Support/Claude/
+    /// where the path-based projectId derivation in `parse(url:sessionId:)`
+    /// would yield "". Caller passes an explicit projectId.
+    func parseTranscript(url: URL, sessionId: String, projectId: String) throws -> ParsedSession {
+        let parsed = try parse(url: url, sessionId: sessionId)
+        return ParsedSession(
+            id: parsed.id,
+            projectId: projectId,
+            slug: parsed.slug,
+            records: parsed.records,
+            toolResultMap: parsed.toolResultMap,
+            metadata: parsed.metadata,
+            parentSessionId: parsed.parentSessionId,
+            isSubagent: parsed.isSubagent
+        )
+    }
+
     /// Quick metadata extraction for sidebar listing
     func parseMetadata(url: URL, sessionId: String, pricingTable: [String: ModelPricing]) throws -> SessionSummary {
         // Single disk pass: stream-decode the file once into a buffered list of

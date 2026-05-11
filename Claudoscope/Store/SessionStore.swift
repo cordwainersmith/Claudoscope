@@ -60,6 +60,12 @@ final class SessionStore {
     var themes: [ThemeFile] = []
     var configLoading: Bool = false
 
+    // Cowork data (Claude desktop app's agentic mode, separate from Claude Code)
+    var coworkAvailability: CoworkAvailability = .unknown
+    var coworkSessions: [CoworkSession] = []
+    var coworkParsedSessionsByID: [String: ParsedSession] = [:]
+    var coworkLoading: Bool = false
+
     // Observability data
     var subagentTree: SubagentNode? = nil
     var sessionBadges: [String: SessionBadgeData] = [:]
@@ -119,6 +125,8 @@ final class SessionStore {
     private let timelineService: TimelineService
     private let configService: ConfigService
     private let linterService = ConfigLinterService()
+    private let coworkService = CoworkService()
+    private let coworkWatcher = CoworkFileWatcher(supportDir: CoworkService.defaultSupportDir)
     private var cancellables = Set<AnyCancellable>()
 
     /// All sessions flattened with their project
@@ -188,7 +196,9 @@ final class SessionStore {
         }
 
         setupWatcher()
+        setupCoworkWatcher()
         performInitialScan()
+        Task { await loadCowork() }
     }
 
     private func setupWatcher() {
@@ -221,6 +231,56 @@ final class SessionStore {
         if !watcher.start() {
             NSLog("[Claudoscope] File watcher failed to start. File changes will not be detected.")
         }
+    }
+
+    private func setupCoworkWatcher() {
+        coworkWatcher.changes
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { await self.loadCowork() }
+            }
+            .store(in: &cancellables)
+
+        if !coworkWatcher.start() {
+            // Cowork directory may not exist (Claude desktop app not installed).
+            // Not an error; the rail will simply remain hidden.
+        }
+    }
+
+    /// Reload Cowork availability + sessions + parsed transcripts. Concurrency
+    /// cap of 8 mirrors ProjectScanner. Map replacement is atomic at the end so
+    /// the UI never sees a half-populated state.
+    func loadCowork() async {
+        coworkLoading = true
+        let (availability, sessions) = await coworkService.loadSessions()
+
+        var parsedMap: [String: ParsedSession] = [:]
+        await withTaskGroup(of: (String, ParsedSession?).self) { group in
+            var inFlight = 0
+            var iterator = sessions.makeIterator()
+            while let session = iterator.next() {
+                if inFlight >= 8 {
+                    if let result = await group.next(), let parsed = result.1 {
+                        parsedMap[result.0] = parsed
+                    }
+                    inFlight -= 1
+                }
+                group.addTask { [coworkService] in
+                    let parsed = await coworkService.loadParsedSession(for: session)
+                    return (session.id, parsed)
+                }
+                inFlight += 1
+            }
+            for await (id, parsed) in group {
+                if let parsed { parsedMap[id] = parsed }
+            }
+        }
+
+        self.coworkAvailability = availability
+        self.coworkSessions = sessions
+        self.coworkParsedSessionsByID = parsedMap
+        self.coworkLoading = false
     }
 
     private func performInitialScan() {

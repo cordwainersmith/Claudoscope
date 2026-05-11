@@ -2,11 +2,14 @@ import SwiftUI
 
 struct RailView: View {
     @Binding var selected: RailItem
+    let coworkVisible: Bool
 
     var body: some View {
         VStack(spacing: 4) {
-            // Primary items
-            ForEach(RailItem.primaryItems, id: \.self) { item in
+            // Primary items. Conditional rails (currently just .cowork) are
+            // filtered out when their data source is not present, so the user
+            // never sees a rail with nothing to click into.
+            ForEach(RailItem.primaryItems.filter { !$0.requiresCoworkAvailability || coworkVisible }, id: \.self) { item in
                 RailButton(item: item, isSelected: selected == item) {
                     selected = item
                 }

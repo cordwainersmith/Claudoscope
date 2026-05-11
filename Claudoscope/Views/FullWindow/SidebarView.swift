@@ -18,6 +18,7 @@ struct SidebarView: View {
     @Binding var hiddenLintSeverities: Set<LintSeverity>
     @Binding var selectedHealthItem: String?
     @Binding var selectedTimelineDay: String?
+    @Binding var selectedCoworkSessionId: String?
     @State private var filterText = ""
 
     var body: some View {
@@ -81,6 +82,14 @@ struct SidebarView: View {
                         filterText: filterText,
                         entries: store.timelineEntries,
                         selectedDay: $selectedTimelineDay
+                    )
+                case .cowork:
+                    CoworkSidebarContent(
+                        filterText: filterText,
+                        sessions: store.coworkSessions,
+                        parsedSessionsByID: store.coworkParsedSessionsByID,
+                        pricingTable: store.pricingTable,
+                        selectedSessionId: $selectedCoworkSessionId
                     )
                 case .hooks:
                     HooksSidebarContent(
