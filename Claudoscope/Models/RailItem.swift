@@ -28,7 +28,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .tools:     return "wrench.and.screwdriver"
         case .plans:     return "doc.text"
         case .timeline:  return "clock.arrow.circlepath"
-        case .cowork:    return "sparkles"
+        case .cowork:    return "checklist"
         case .hooks:     return "arrow.triangle.turn.up.right.diamond"
         case .commands:  return "terminal"
         case .mcps:      return "point.3.connected.trianglepath.dotted"
