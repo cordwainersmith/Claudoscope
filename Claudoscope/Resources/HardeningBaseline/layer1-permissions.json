@@ -1,5 +1,5 @@
 {
-  "_comment": "Claudoscope Hardening Baseline — Layer 1 Permissions. Hard-deny rules for high-risk reads, writes, and shell invocations. Merge into Claude Code settings to make these baseline restrictions enforceable. Users may extend the deny list; they cannot remove these defaults from within the app without going through the Trusted Sources sheet.",
+  "_comment": "Claudoscope Hardening Baseline — Layer 1 Permissions. Hard-deny rules for high-risk reads, writes, and shell invocations. Merge into Claude Code settings to make these baseline restrictions enforceable. Users may extend the deny list; they cannot remove these defaults from within the app without going through the Trusted Sources sheet. The Bash(...) entries below are the canonical hardening baseline checked by HRD002 in ConfigLinterService+Hardening.swift; keep both lists in sync.",
   "permissions": {
     "deny": [
       "Read(secrets/**)",
@@ -14,7 +14,20 @@
       "Write(.ssh/**)",
       "Write(.claude/settings.json)",
       "Write(.claude/settings.local.json)",
-      "Bash(sudo:*)"
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf $HOME)",
+      "Bash(curl * | sh)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | sh)",
+      "Bash(wget * | bash)",
+      "Bash(sudo *)",
+      "Bash(sudo:*)",
+      "Bash(chmod 777 *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard *)",
+      "Bash(eval *)"
     ]
   }
 }

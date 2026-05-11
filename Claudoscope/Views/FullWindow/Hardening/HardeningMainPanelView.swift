@@ -108,6 +108,7 @@ struct HardeningMainPanelView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 titleBar
+                aboutCard
                 statusBanner
                 scoreStrip
                 primaryCTACard
@@ -117,6 +118,40 @@ struct HardeningMainPanelView: View {
             }
             .padding(.vertical, 24)
         }
+    }
+
+    // MARK: About card
+
+    private var aboutCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.accentColor)
+                Text("About Hardening")
+                    .font(Typography.bodyMedium)
+                Spacer()
+            }
+
+            Text("Claudoscope's hardening rail installs a vendor-neutral security baseline into ~/.claude across five layers shown below: Layer 1 enforces deny rules and sandbox isolation, Layer 2 wires PreToolUse and PostToolUse shell hooks for credential scans and command vetting, Layer 3 adds autoMode soft-deny rules, Layer 4 appends a marker-wrapped governance block to CLAUDE.md, and the Skill layer deploys a security-awareness skill agents can consult on demand.")
+                .font(Typography.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("After install, the HRD001-HRD011 lint checks below verify each layer stays in place. Click any failing check for an explanation and remediation. Reinstall refreshes files from the bundle, Revert restores the pre-install state from this install's auto-backup, and Uninstall surgically removes every Claudoscope artifact.")
+                .font(Typography.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Spacing.lg)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.lg))
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.lg)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
     }
 
     // MARK: Title bar
@@ -482,9 +517,10 @@ private struct DriftFixRow: View {
                 .padding(.vertical, 1)
                 .background(colorForSeverity(result.severity).opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 3))
-            Text(displayNameFor(result.checkId))
+            Text(displayLabel(for: result))
                 .font(Typography.body)
                 .lineLimit(1)
+                .truncationMode(.middle)
             Spacer()
             if fixApplied {
                 HStack(spacing: 4) {

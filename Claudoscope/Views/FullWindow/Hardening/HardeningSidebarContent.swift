@@ -208,9 +208,10 @@ private struct HardeningIssueRow: View {
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 3))
 
-                Text(displayNameFor(result.checkId))
+                Text(displayLabel(for: result))
                     .font(Typography.body)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .foregroundStyle(isSelected ? .white : .primary)
 
                 Spacer()

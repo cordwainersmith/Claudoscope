@@ -1,4 +1,3 @@
-<!-- BEGIN: claudoscope-hardening -->
 # Claudoscope Hardening Baseline - Governance
 
 > **Layer 4 - Advisory Only.** These rules steer agent behavior but are subject to context compaction in long sessions. They MUST NOT be relied on as a primary security control. All hard enforcement lives in Layer 1 (permissions, sandbox) and Layer 2 (hooks).
@@ -69,4 +68,3 @@ These actions always require explicit human approval:
 6. Any modification to CI/CD pipeline files (`.github/workflows/`, `.github/actions/`).
 7. Any database mutation (`DROP`, `TRUNCATE`, `DELETE FROM`).
 8. Any force-push or `git reset --hard`.
-<!-- END: claudoscope-hardening -->

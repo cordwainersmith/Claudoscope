@@ -137,7 +137,7 @@ struct HealthResultDetailView: View {
                 .padding(.horizontal, 24)
 
                 // Remediation hint card
-                if let hint = hintFor(result.checkId) {
+                if let hint = hintFor(result) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("REMEDIATION")
                             .font(.system(size: 12, weight: .medium))
@@ -277,7 +277,7 @@ struct HealthResultDetailView: View {
                 .padding(.horizontal, 24)
 
                 // Legacy fix suggestion (if present and different from hint)
-                if let fix = result.fix, fix != hintFor(result.checkId) {
+                if let fix = result.fix, fix != hintFor(result) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("SUGGESTED FIX")
                             .font(.system(size: 12, weight: .medium))

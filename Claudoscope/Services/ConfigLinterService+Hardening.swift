@@ -222,9 +222,15 @@ extension ConfigLinterService {
                     fix: "Install the hardening baseline to add the governance block",
                     displayPath: "CLAUDE.md"
                 ))
-            } else if let extracted = extractGovernanceBlock(from: claudeMd),
-                      let bundledHash = loadBundledFileHash(name: "layer4-governance", ext: "md") {
-                let actualHash = sha256Hex(of: extracted)
+            } else if let extractedBody = extractGovernanceBlock(from: claudeMd),
+                      let bundledURL = Bundle.main.url(
+                          forResource: "layer4-governance",
+                          withExtension: "md",
+                          subdirectory: "HardeningBaseline"
+                      ),
+                      let bundledText = try? String(contentsOf: bundledURL, encoding: .utf8) {
+                let bundledHash = sha256Hex(of: bundledText.trimmingCharacters(in: .newlines))
+                let actualHash = sha256Hex(of: extractedBody)
                 if actualHash != bundledHash {
                     results.append(LintResult(
                         severity: .warning,
@@ -352,20 +358,21 @@ extension ConfigLinterService {
 
     /// Returns the SHA-256 hex of a bundled file, computed at runtime so we
     /// don't need a sidecar for single-file resources.
-    private func loadBundledFileHash(name: String, ext: String) -> String? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "HardeningBaseline") else {
+    /// Returns the body between the BEGIN/END governance markers (markers
+    /// excluded), trimmed of surrounding newlines so the byte content is
+    /// directly comparable to the bundled `layer4-governance.md`. Returns nil
+    /// if either marker is missing or out of order.
+    private func extractGovernanceBlock(from text: String) -> String? {
+        guard let beginRange = text.range(of: Self.hardeningGovernanceBeginMarker) else {
             return nil
         }
-        return sha256Hex(of: url)
-    }
-
-    /// Returns the substring between the BEGIN/END governance markers, or nil
-    /// if either marker is missing.
-    private func extractGovernanceBlock(from text: String) -> String? {
-        guard let beginRange = text.range(of: Self.hardeningGovernanceBeginMarker),
-              let endRange = text.range(of: Self.hardeningGovernanceEndMarker),
-              beginRange.upperBound <= endRange.lowerBound
-        else { return nil }
-        return String(text[beginRange.lowerBound..<endRange.upperBound])
+        guard let endRange = text.range(
+            of: Self.hardeningGovernanceEndMarker,
+            range: beginRange.upperBound..<text.endIndex
+        ) else {
+            return nil
+        }
+        let body = String(text[beginRange.upperBound..<endRange.lowerBound])
+        return body.trimmingCharacters(in: .newlines)
     }
 }
