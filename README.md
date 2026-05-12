@@ -22,7 +22,7 @@
 
 ---
 
-Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation, analytics, plan browsing, timeline history, configuration health checks, and [**secret scanning that detects leaked credentials in your session history with real-time alerts**](#secret-scanning), all without sending any data off your machine.
+Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and Claude Cowork sessions from the Claude desktop app, then surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation, analytics, plan browsing, timeline history, configuration health checks, [**a 1-click security hardening baseline that locks down your Claude Code environment**](#hardening), and [**secret scanning that detects leaked credentials in your session history with real-time alerts**](#secret-scanning), all without sending any data off your machine.
 
 ## Table of Contents
 
@@ -30,6 +30,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
 - [Installation](#installation)
 - [How It Works](#how-it-works)
 - [Secret Scanning](#secret-scanning)
+- [Hardening](#hardening)
 - [Menu Bar Widget](#menu-bar-widget)
 - [Dashboard Window](#dashboard-window)
   - [Analytics](#analytics)
@@ -37,6 +38,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
   - [Tools](#tools)
   - [Plans](#plans)
   - [Timeline](#timeline)
+  - [Cowork](#cowork)
   - [Hooks](#hooks)
   - [Commands](#commands)
   - [Skills](#skills)
@@ -110,6 +112,30 @@ A multi-stage false-positive filter (Shannon entropy analysis, capture-group val
 
 All scanning is local. Detected secrets never leave your machine, and Claudoscope never transmits session content over the network.
 
+## Hardening
+
+Claude Code is powerful by design: it reads your filesystem, runs shell commands, and reaches outbound networks. Out of the box, those capabilities ship with very few guardrails. Claudoscope's Hardening rail installs a vendor-neutral security baseline into `~/.claude/` in a single click, then continuously verifies that the baseline stays in place.
+
+The baseline is layered, so weakening any single layer does not unlock the others:
+
+- **Permissions and Sandbox.** Hard-deny rules block reads and writes to credential paths (`~/.ssh/`, `.netrc`, `.npmrc`, `secrets/`), block destructive shell commands (`rm -rf /`, `sudo`, `chmod 777`, `eval`, `git push --force`, `git reset --hard`), and block pipe-to-shell exfiltration (`curl ... | sh`). Sandbox isolation is turned on for tool execution.
+- **Hooks.** Six PreToolUse and PostToolUse shell hooks vet every Bash, Edit, and Write call before it runs: a credential scanner, a command validator, a public-repo push guard, a proprietary-file flag, a package-age check that blocks dependencies less than 14 days old, and an intent guard for `git reset --hard`.
+- **AutoMode.** Soft-deny rules require explicit user intent for high-risk operations. Force-pushes must name a target branch, `git reset --hard` requires a specific ref, and every `curl` or `wget` invocation requires the URL, the purpose, and explicit confirmation in the user's message.
+- **Governance.** A marker-wrapped block is appended to your global `CLAUDE.md` so the agent has the rules in-conversation. This layer is advisory: the hard enforcement lives in the layers above.
+- **Security skill.** A security-awareness skill is deployed that the agent can consult on demand for guidance on secrets, dangerous code patterns, and external connectivity.
+
+**Reversible by design.** Before writing anything, the installer takes a full backup of your existing `~/.claude/` configuration. Three lifecycle actions are always one click away from the rail:
+
+- **Install / Reinstall** refreshes every layer from the bundled baseline.
+- **Revert** restores the pre-install state from the auto-backup.
+- **Uninstall** surgically removes every Claudoscope-installed artifact, leaving any rules you added by hand intact.
+
+**Drift detection.** Eleven lint checks (HRD001 through HRD011) verify each layer stays in place after install. If a deny rule, hook, or governance block goes missing, the rail flags the drift, explains the impact in plain language, and offers a one-click fix.
+
+**Trusted Sources.** A dedicated sheet lets you curate the hosts, package registries, and repositories the agent is permitted to reach without explicit approval. Anything off the list requires confirmation per request, with plain-language descriptions of what each entry unlocks.
+
+Everything runs locally. The baseline installs into your existing `~/.claude/` directory and is never transmitted off your machine.
+
 ## Menu Bar Widget
 
 At-a-glance Claude Code activity without leaving what you are working on.
@@ -163,6 +189,19 @@ All plan files created by Claude Code's `/plan` command, with title, creation da
 
 Chronological history of Claude Code activity across all projects from the last 7 days. Each entry shows timestamp, project context, and session title.
 
+### Cowork
+
+Cowork is the agentic mode in the Claude desktop app where the agent works on long-running tasks in the background and reports back when complete. Cowork sessions live under `~/Library/Application Support/Claude/` in a different format from Claude Code's session files. The Cowork rail surfaces them inside Claudoscope alongside your Claude Code data, so you have one view of every Claude session you have ever run.
+
+The rail appears automatically once Cowork is configured and at least one session exists on disk. If you do not use Cowork, the rail stays hidden. For each session you get:
+
+- **Sidebar list** with title, project, model, working directory, last activity, and a per-session cost estimate
+- **Full session metadata**: process name, project, model, slash commands run, the initial prompt, and any files Cowork detected as generated
+- **Token and cost stats** computed from the audit transcript using the same pricing engine as the rest of Claudoscope, with per-model breakdowns when the session crossed model boundaries
+- **The complete conversation transcript** rendered with the same chat view used for Claude Code sessions, including tool calls, results, and per-turn cost
+
+Cowork spend is also rolled into the Analytics Est. Cost card so the dashboard reflects your true total Claude bill, not just the CLI portion.
+
 ### Hooks
 
 All registered Claude Code hooks merged from five sources (user, project, project-local, plugin, managed) and grouped by event type, including `PreToolUse`, `PostToolUse`, `PermissionDenied`, `SessionStart`, `SessionEnd`, `Stop`, `UserPromptSubmit`, `Notification`, `PreCompact`, `PostToolUseFailure`, `FileChanged`, and any new event types as they appear. Each entry shows matcher pattern, command, timeout, and source label.
@@ -187,7 +226,7 @@ All `CLAUDE.md` and memory files Claude Code uses for persistent context: the gl
 
 ### Config Health
 
-Runs 45 lint rules across your Claude Code configuration, sessions, and security posture, grouped into four categories: Security, Session Performance, Skills & Hooks, and Configuration.
+Runs 44 lint rules across your Claude Code configuration, sessions, and security posture, grouped into four categories: Security, Session Performance, Skills & Hooks, and Configuration. Eleven additional hardening-baseline drift checks (HRD001 through HRD011) live in the dedicated [Hardening](#hardening) rail.
 
 - **Health score**: weighted summary (Excellent / Good / Fair / Poor) from error and warning counts
 - **Severity filters**: click any stat card (Errors, Warnings, Info) to toggle on or off
