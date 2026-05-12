@@ -48,6 +48,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
   - [Settings](#settings)
 - [Command Palette](#command-palette)
 - [Cost Estimation](#cost-estimation)
+- [Acknowledgments](#acknowledgments)
 - [License](#license)
 
 ## Requirements
@@ -286,6 +287,10 @@ For each assistant response, the JSONL parser accumulates four counters from the
 Per-session cost is `(input + output + cache_read + cache_creation) / 1M`, each multiplied by its model rate.
 
 **Caveat**: actual billed amounts depend on factors Claudoscope cannot observe, such as batch vs. real-time pricing tiers, committed-use discounts, or billing adjustments.
+
+## Acknowledgments
+
+Special thanks to [Nitzan Gotlib](https://github.com/nitzango) ([LinkedIn](https://www.linkedin.com/in/nitzang/)) for the security hardening baseline that powers the [Hardening](#hardening) rail.
 
 ## License
 
