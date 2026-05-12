@@ -58,8 +58,7 @@ struct AnalyticsDetailView: View {
                                 value: formatTokens(data.totalTokens),
                                 subtitle: data.totalCacheTokens > 0 ? "+ \(formatTokens(data.totalCacheTokens)) cache" : nil
                             )
-                            StatCard(title: "Est. Cost", value: formatCost(data.totalCost), isHighlighted: true)
-                                .help("Estimated from token usage")
+                            costStatCard
                         }
                         .padding(.horizontal, 24)
 
@@ -92,6 +91,37 @@ struct AnalyticsDetailView: View {
                 EffortAnalyticsView(data: data.effortAnalytics)
             }
         }
+    }
+
+    /// Cost StatCard with optional inline Cowork subtitle. Mirrors the Tokens
+    /// "+ X cache" pattern so the card stays the same height as its siblings.
+    /// Headline = Code + Cowork when both are shown; full breakdown lives in
+    /// the help tooltip. Project filter active suppresses Cowork (different
+    /// project namespace) and the card collapses to its original look.
+    @ViewBuilder
+    private var costStatCard: some View {
+        let projectFilterActive = store.selectedAnalyticsProjectId != nil
+        let showsCowork = !projectFilterActive && data.coworkCost > 0
+        let headline = showsCowork ? data.totalCost + data.coworkCost : data.totalCost
+        let subtitle: String? = showsCowork ? "+ \(formatCost(data.coworkCost)) Cowork" : nil
+        let help: String = {
+            if showsCowork {
+                let unknown = data.coworkHasUnknownModel ? " (Cowork excludes models not in the pricing table)" : ""
+                return "Code \(formatCost(data.totalCost)) · Cowork \(formatCost(data.coworkCost)). Estimated from token usage.\(unknown)"
+            }
+            if projectFilterActive && data.coworkCost > 0 {
+                return "Estimated from token usage. Cowork is hidden because a project filter is active."
+            }
+            return "Estimated from token usage"
+        }()
+
+        StatCard(
+            title: "Est. Cost",
+            value: formatCost(headline),
+            subtitle: subtitle,
+            isHighlighted: true
+        )
+        .help(help)
     }
 }
 
@@ -187,6 +217,7 @@ struct StatCard: View {
                         Text(subtitle)
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
+                            .monospacedDigit()
                     }
                 }
             }

@@ -174,8 +174,36 @@ struct AnalyticsEngine {
             dailyModelCost: dailyModelCost,
             latencyAnalytics: latencyAnalytics,
             effortAnalytics: effortAnalytics,
-            parallelToolAnalytics: parallelToolAnalytics
+            parallelToolAnalytics: parallelToolAnalytics,
+            coworkCost: 0,
+            coworkHasUnknownModel: false
         )
+    }
+
+    // MARK: - Cowork Cost
+
+    /// Aggregate Cowork (Claude desktop) spend across the given sessions, scoped
+    /// to `[from, to]` against `effectiveLastActivity`. Returns 0 contribution
+    /// for sessions that haven't been parsed yet (no entry in `parsedByID`) or
+    /// whose model isn't in the pricing table — those flip `hasUnknownModel`.
+    static func computeCoworkCost(
+        sessions: [CoworkSession],
+        parsedByID: [String: ParsedSession],
+        pricingTable: [String: ModelPricing],
+        from: Date? = nil,
+        to: Date? = nil
+    ) -> (cost: Double, hasUnknownModel: Bool) {
+        var totalCost = 0.0
+        var hasUnknown = false
+        for session in sessions {
+            if let from, session.effectiveLastActivity < from { continue }
+            if let to, session.effectiveLastActivity > to { continue }
+            guard let parsed = parsedByID[session.id] else { continue }
+            let totals = CoworkStats.totals(records: parsed.records, pricingTable: pricingTable)
+            totalCost += totals.cost
+            if totals.hasUnknownModel { hasUnknown = true }
+        }
+        return (totalCost, hasUnknown)
     }
 
     // MARK: - Cache Analytics

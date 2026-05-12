@@ -31,6 +31,8 @@ struct AnalyticsData: Sendable {
     let totalMessages: Int
     let totalTokens: Int
     let totalCacheTokens: Int
+    /// CLI (Claude Code) spend only. Cowork spend lives in `coworkCost` to keep
+    /// the project-scoped totals honest (Cowork projects don't share IDs with CLI projects).
     let totalCost: Double
     let dailyUsage: [DailyUsage]
     let projectCosts: [ProjectCost]
@@ -41,13 +43,44 @@ struct AnalyticsData: Sendable {
     let latencyAnalytics: LatencyAnalytics
     let effortAnalytics: EffortAnalytics
     let parallelToolAnalytics: ParallelToolAnalytics
+    /// Aggregated Cowork (Claude desktop) spend for the same time range.
+    /// Always 0 when an analytics project filter is active, since Cowork's
+    /// project namespace doesn't overlap with CLI projects.
+    let coworkCost: Double
+    /// True if any contributing Cowork session referenced a model not in the
+    /// pricing table — `coworkCost` underestimates spend in that case.
+    let coworkHasUnknownModel: Bool
 
     static let empty = AnalyticsData(
         totalSessions: 0, totalMessages: 0, totalTokens: 0, totalCacheTokens: 0, totalCost: 0,
         dailyUsage: [], projectCosts: [], modelUsage: [],
         cacheAnalytics: .empty, modelEfficiency: [], dailyModelCost: [],
-        latencyAnalytics: .empty, effortAnalytics: .empty, parallelToolAnalytics: .empty
+        latencyAnalytics: .empty, effortAnalytics: .empty, parallelToolAnalytics: .empty,
+        coworkCost: 0, coworkHasUnknownModel: false
     )
+
+    /// Returns a copy with Cowork totals filled in. Used by SessionStore so
+    /// AnalyticsEngine can stay CLI-only.
+    func merging(coworkCost: Double, hasUnknownModel: Bool) -> AnalyticsData {
+        AnalyticsData(
+            totalSessions: totalSessions,
+            totalMessages: totalMessages,
+            totalTokens: totalTokens,
+            totalCacheTokens: totalCacheTokens,
+            totalCost: totalCost,
+            dailyUsage: dailyUsage,
+            projectCosts: projectCosts,
+            modelUsage: modelUsage,
+            cacheAnalytics: cacheAnalytics,
+            modelEfficiency: modelEfficiency,
+            dailyModelCost: dailyModelCost,
+            latencyAnalytics: latencyAnalytics,
+            effortAnalytics: effortAnalytics,
+            parallelToolAnalytics: parallelToolAnalytics,
+            coworkCost: coworkCost,
+            coworkHasUnknownModel: hasUnknownModel
+        )
+    }
 }
 
 // MARK: - Cache Analytics

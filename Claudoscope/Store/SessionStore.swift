@@ -296,6 +296,10 @@ final class SessionStore {
         self.coworkSessions = sessions
         self.coworkParsedSessionsByID = parsedMap
         self.coworkLoading = false
+
+        // Cowork totals contribute to the Analytics page's "Est. Cost" card.
+        // Recompute so the breakdown stays in sync when sessions land or change.
+        recomputeAnalytics()
     }
 
     private func performInitialScan() {
@@ -457,12 +461,29 @@ final class SessionStore {
             customTo: analyticsCustomTo
         )
 
-        analyticsData = AnalyticsEngine.compute(
+        let baseData = AnalyticsEngine.compute(
             sessions: sessions,
             pricingTable: pricingTable,
             from: from,
             to: to
         )
+
+        // Cowork cost is only attached when no project filter is active —
+        // Cowork's project namespace doesn't overlap with CLI projects, so
+        // mixing them under a filtered view would imply a relationship that
+        // doesn't exist.
+        if selectedAnalyticsProjectId == nil {
+            let (coworkCost, hasUnknown) = AnalyticsEngine.computeCoworkCost(
+                sessions: coworkSessions,
+                parsedByID: coworkParsedSessionsByID,
+                pricingTable: pricingTable,
+                from: from,
+                to: to
+            )
+            analyticsData = baseData.merging(coworkCost: coworkCost, hasUnknownModel: hasUnknown)
+        } else {
+            analyticsData = baseData
+        }
 
         // Also recompute sidebar analytics (all projects, 30d)
         let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date())
