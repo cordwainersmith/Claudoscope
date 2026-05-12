@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.7.0]
+### New Features
+- **Cowork rail.** New rail that surfaces Claude Cowork sessions (the agentic mode in the Claude desktop app) alongside your Claude Code data. Reads from `~/Library/Application Support/Claude/` and renders session metadata, per-model token and cost stats, generated files, and the full transcript in the same chat view used for Claude Code sessions. The rail appears automatically when Cowork is configured and at least one session exists; stays hidden otherwise.
+- **Cowork spend in Analytics.** The Est. Cost card headline now shows the combined CLI + Cowork total, with an inline "+ $X.XX Cowork" subtitle mirroring the existing "+ X cache" pattern on Tokens. Hidden when an analytics project filter is active because Cowork's project namespace does not overlap with CLI projects.
+- **Hardening rail and 1-click baseline installer.** New rail that installs a vendor-neutral security baseline into `~/.claude/` across five layers: permissions deny rules and sandbox isolation, seven PreToolUse and PostToolUse shell hooks (credential scanner, command validator, public-repo push guard, proprietary-file flag, 14-day package-age check, `git reset --hard` intent guard, post-tool credential scan), AutoMode soft-deny rules requiring explicit user intent for high-risk operations, a marker-wrapped governance block in `CLAUDE.md`, and a security-awareness skill the agent can consult on demand. The installer takes a full backup of `~/.claude/` before writing anything; Install, Reinstall, Revert, and Uninstall are always one click away.
+- **Hardening drift detection.** Eleven HRD lint checks (HRD001 through HRD011) verify each layer stays in place after install, grouped by layer in the rail with one-click fixes for the drift cases that can be auto-repaired. Per-rule REMEDIATION cards show entry-specific rationale for each deny rule and hook script in plain language, so non-security specialists can read why a given block matters.
+- **Trusted Sources sheet.** Curate the hosts, package registries, and repositories the agent can reach without explicit approval. Each entry shows a plain-language description of what it unlocks, so the security implications are clear without reading external docs.
+
+### Improvements
+- Cowork rail icon uses the checklist SF Symbol so it reads as task-tracking at a glance.
+- README rewritten with a top-level Hardening section and a Cowork rail subsection; intro and TOC updated to reflect the two new pillars.
+
 ## [0.6.2]
 ### New Features
 - Settings rail surfaces the new `prUrlTemplate` top-level key from Claude Code 2.1.119, rendered in the Attribution section alongside the commit and PR templates.
