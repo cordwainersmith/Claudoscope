@@ -5,7 +5,7 @@
 <h1 align="center">Claudoscope</h1>
 
 <p align="center">
-  A native macOS menu bar app for exploring, analyzing, and managing your Claude Code sessions.
+  A native macOS menu bar app for exploring, analyzing, and managing your Claude Code and Cowork sessions.
 </p>
 
 <p align="center">
