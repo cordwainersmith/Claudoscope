@@ -27,6 +27,8 @@ struct AnalyticsEngine {
         var totalTokens = 0
         var totalCacheTokens = 0
         var totalCost = 0.0
+        var costByCategory: [ToolCostCategory: Double] = [:]
+        var fastModeTurnCount = 0
 
         var dailyMap: [String: DailyUsage] = [:]
         var projectCostMap: [String: ProjectCost] = [:]

@@ -64,6 +64,11 @@ struct ParsedRecordRaw: Decodable, Sendable {
     let customTitle: String?
     let agentName: String?
 
+    // Session-level display title. Forward-compatible: no current Claude Code
+    // record carries a root `title`, so this decodes to nil today. If a future
+    // CLI version stamps a session title, deriveTitle() prefers it over slug.
+    let title: String?
+
     // Captures the raw `type` string when it doesn't match a known RecordType,
     // so a future telemetry layer can surface unrecognized record types instead
     // of silently dropping them.
@@ -94,6 +99,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         isSidechain = try container.decodeIfPresent(Bool.self, forKey: .isSidechain)
         customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
         agentName = try container.decodeIfPresent(String.self, forKey: .agentName)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
         if mode == .full {
             parentUuid = try container.decodeIfPresent(String.self, forKey: .parentUuid)
             cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
@@ -109,7 +115,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case type, uuid, parentUuid, timestamp, sessionId, cwd, slug
         case message, subtype, content, compactMetadata, logicalParentUuid
         case toolUseResult, isCompactSummary, isVisibleInTranscriptOnly
-        case customTitle, agentName, isSidechain
+        case customTitle, agentName, isSidechain, title
     }
 }
 
@@ -263,6 +269,10 @@ struct TokenUsageRaw: Decodable, Sendable {
     let cacheReadInputTokens: Int?
     let cacheCreationInputTokens: Int?
     let cacheCreation: CacheCreationBreakdown?
+    // Per-assistant-message billing speed, sibling of `service_tier` inside the
+    // usage block (NOT service_tier). Observed values: "standard", null. A
+    // non-standard value signals fast mode and triggers the rate multiplier.
+    let speed: String?
 
     enum CodingKeys: String, CodingKey {
         case inputTokens = "input_tokens"
@@ -270,6 +280,7 @@ struct TokenUsageRaw: Decodable, Sendable {
         case cacheReadInputTokens = "cache_read_input_tokens"
         case cacheCreationInputTokens = "cache_creation_input_tokens"
         case cacheCreation = "cache_creation"
+        case speed
     }
 }
 

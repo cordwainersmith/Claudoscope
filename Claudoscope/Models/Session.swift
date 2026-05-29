@@ -1,5 +1,17 @@
 import Foundation
 
+// MARK: - Tool Cost Category
+
+/// Coarse attribution of estimated spend, derived from reliable record signals
+/// only: sidechain records => subagent, tool_use blocks named `mcp__*` => mcp,
+/// everything else => other. Deliberately no "skill" bucket: skills are
+/// indistinguishable from builtins by tool name.
+enum ToolCostCategory: String, Hashable, Sendable, CaseIterable {
+    case mcp
+    case subagent
+    case other
+}
+
 // MARK: - Parsed Session (full detail)
 
 struct ParsedSession: Sendable {
@@ -77,6 +89,62 @@ struct SessionSummary: Identifiable, Sendable {
     let toolCallCount: Int
     let observability: SessionObservability
     let isSubagent: Bool
+    /// Estimated cost split by coarse category (mcp / subagent / other).
+    /// Defaults to empty so non-parser constructors keep compiling.
+    let costByCategory: [ToolCostCategory: Double]
+    /// Number of billed assistant turns that ran in fast mode (usage.speed
+    /// present and != "standard"). Defaults to 0 for non-parser constructors.
+    let fastModeTurnCount: Int
+
+    init(
+        id: String,
+        projectId: String,
+        slug: String?,
+        title: String,
+        firstTimestamp: String,
+        lastTimestamp: String,
+        messageCount: Int,
+        primaryModel: String?,
+        totalInputTokens: Int,
+        totalOutputTokens: Int,
+        totalCacheReadTokens: Int,
+        totalCacheCreationTokens: Int,
+        totalCacheCreation5mTokens: Int,
+        totalCacheCreation1hTokens: Int,
+        compactionCount: Int,
+        estimatedCost: Double,
+        hasError: Bool,
+        modelBreakdown: [ModelTokenBreakdown],
+        toolCallCount: Int,
+        observability: SessionObservability,
+        isSubagent: Bool,
+        costByCategory: [ToolCostCategory: Double] = [:],
+        fastModeTurnCount: Int = 0
+    ) {
+        self.id = id
+        self.projectId = projectId
+        self.slug = slug
+        self.title = title
+        self.firstTimestamp = firstTimestamp
+        self.lastTimestamp = lastTimestamp
+        self.messageCount = messageCount
+        self.primaryModel = primaryModel
+        self.totalInputTokens = totalInputTokens
+        self.totalOutputTokens = totalOutputTokens
+        self.totalCacheReadTokens = totalCacheReadTokens
+        self.totalCacheCreationTokens = totalCacheCreationTokens
+        self.totalCacheCreation5mTokens = totalCacheCreation5mTokens
+        self.totalCacheCreation1hTokens = totalCacheCreation1hTokens
+        self.compactionCount = compactionCount
+        self.estimatedCost = estimatedCost
+        self.hasError = hasError
+        self.modelBreakdown = modelBreakdown
+        self.toolCallCount = toolCallCount
+        self.observability = observability
+        self.isSubagent = isSubagent
+        self.costByCategory = costByCategory
+        self.fastModeTurnCount = fastModeTurnCount
+    }
 }
 
 struct ModelTokenBreakdown: Sendable {

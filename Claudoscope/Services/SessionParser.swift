@@ -317,6 +317,7 @@ actor SessionParser {
         var hasError = false
         var slug: String?
         var customTitle: String?
+        var recordTitle: String?
         var isFirstRecord = true
         var parentSessionId: String? = nil
         var firstTimestamp = ""
@@ -324,6 +325,11 @@ actor SessionParser {
         var perMessageCost = 0.0
         var compactionCount = 0
         var toolCallCount = 0
+        // Count of billed assistant turns whose usage.speed is non-standard (fast mode).
+        var fastModeTurnCount = 0
+        // Per-category cost attribution. Reliable signals only: sidechain => subagent,
+        // mcp__-prefixed tool_use => mcp, everything else => other. Sums to perMessageCost.
+        var costByCategory: [ToolCostCategory: Double] = [:]
 
         // Per-model breakdown accumulators
         var modelInputTokens: [String: Int] = [:]
@@ -378,6 +384,10 @@ actor SessionParser {
             // these fields; either one is the user's chosen display name. Last wins.
             if let t = raw.customTitle ?? raw.agentName, !t.isEmpty {
                 customTitle = t
+            }
+            // Session-level title (forward-compatible; nil for all current records).
+            if let t = raw.title, !t.isEmpty {
+                recordTitle = t
             }
 
             // Track user timestamps for turn duration computation
@@ -450,6 +460,14 @@ actor SessionParser {
                     totalCacheCreation5mTokens += msgCache5m
                     totalCacheCreation1hTokens += msgCache1h
 
+                    // Fast mode: usage.speed is per assistant message (sibling of
+                    // service_tier inside the usage block), so the multiplier applies
+                    // at the same granularity as this per-message cost.
+                    let speed = usage.speed
+                    let isFastMode = speed != nil && speed != "standard"
+                    let speedMultiplier = isFastMode ? fastModeRateMultiplier : 1.0
+                    if isFastMode { fastModeTurnCount += 1 }
+
                     // Accumulate cost per-message using each message's actual model
                     let msgCost = estimateCostFromTokens(
                         model: raw.message?.model,
@@ -458,9 +476,23 @@ actor SessionParser {
                         cacheReadTokens: msgCacheRead,
                         cacheCreation5mTokens: msgCache5m,
                         cacheCreation1hTokens: msgCache1h,
-                        table: pricingTable
+                        table: pricingTable,
+                        speedMultiplier: speedMultiplier
                     )
                     perMessageCost += msgCost
+
+                    // Attribute this turn's cost to one category. Subagent work wins
+                    // over mcp (a sidechain turn that calls an mcp tool is still
+                    // subagent), then mcp tool-use, then everything else.
+                    let category: ToolCostCategory
+                    if isSidechain {
+                        category = .subagent
+                    } else if turnToolNames.contains(where: { $0.hasPrefix("mcp__") }) {
+                        category = .mcp
+                    } else {
+                        category = .other
+                    }
+                    costByCategory[category, default: 0] += msgCost
 
                     if let model = raw.message?.model {
                         let family = getModelFamily(model)
@@ -556,7 +588,7 @@ actor SessionParser {
             if let ts = raw.timestamp { recordTimestamps.append(ts) }
         }
 
-        let title = deriveTitle(customTitle: customTitle, slug: slug, firstLine: firstLine, sessionId: sessionId)
+        let title = deriveTitle(title: recordTitle, customTitle: customTitle, slug: slug, firstLine: firstLine, sessionId: sessionId)
         let primaryModel = modelOutputTokens.max(by: { $0.value < $1.value })?.key
 
         // Build model breakdown
@@ -607,7 +639,9 @@ actor SessionParser {
             modelBreakdown: modelBreakdown,
             toolCallCount: toolCallCount,
             observability: observability,
-            isSubagent: isSubagentFile
+            isSubagent: isSubagentFile,
+            costByCategory: costByCategory,
+            fastModeTurnCount: fastModeTurnCount
         )
     }
 
@@ -619,9 +653,11 @@ actor SessionParser {
         return "unknown"
     }
 
-    private func deriveTitle(customTitle: String?, slug: String?, firstLine: String, sessionId: String) -> String {
-        // /rename (writes a custom-title record) takes precedence over the slug,
-        // since the slug field is never updated when the user renames a session.
+    private func deriveTitle(title: String?, customTitle: String?, slug: String?, firstLine: String, sessionId: String) -> String {
+        // A session-level `title` (if the CLI ever stamps one) wins outright.
+        // Then /rename (writes a custom-title record) takes precedence over the
+        // slug, since the slug field is never updated when the user renames a session.
+        if let title { return title }
         if let customTitle { return customTitle }
         if let slug { return slug }
 

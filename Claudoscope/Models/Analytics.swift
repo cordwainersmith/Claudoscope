@@ -50,6 +50,51 @@ struct AnalyticsData: Sendable {
     /// True if any contributing Cowork session referenced a model not in the
     /// pricing table — `coworkCost` underestimates spend in that case.
     let coworkHasUnknownModel: Bool
+    /// CLI spend split by coarse category (mcp / subagent / other), summed
+    /// across the in-range sessions. Defaults to empty.
+    let costByCategory: [ToolCostCategory: Double]
+    /// Total billed assistant turns that ran in fast mode across the range.
+    let fastModeTurnCount: Int
+
+    init(
+        totalSessions: Int,
+        totalMessages: Int,
+        totalTokens: Int,
+        totalCacheTokens: Int,
+        totalCost: Double,
+        dailyUsage: [DailyUsage],
+        projectCosts: [ProjectCost],
+        modelUsage: [ModelUsage],
+        cacheAnalytics: CacheAnalytics,
+        modelEfficiency: [ModelEfficiencyRow],
+        dailyModelCost: [DailyModelCost],
+        latencyAnalytics: LatencyAnalytics,
+        effortAnalytics: EffortAnalytics,
+        parallelToolAnalytics: ParallelToolAnalytics,
+        coworkCost: Double,
+        coworkHasUnknownModel: Bool,
+        costByCategory: [ToolCostCategory: Double] = [:],
+        fastModeTurnCount: Int = 0
+    ) {
+        self.totalSessions = totalSessions
+        self.totalMessages = totalMessages
+        self.totalTokens = totalTokens
+        self.totalCacheTokens = totalCacheTokens
+        self.totalCost = totalCost
+        self.dailyUsage = dailyUsage
+        self.projectCosts = projectCosts
+        self.modelUsage = modelUsage
+        self.cacheAnalytics = cacheAnalytics
+        self.modelEfficiency = modelEfficiency
+        self.dailyModelCost = dailyModelCost
+        self.latencyAnalytics = latencyAnalytics
+        self.effortAnalytics = effortAnalytics
+        self.parallelToolAnalytics = parallelToolAnalytics
+        self.coworkCost = coworkCost
+        self.coworkHasUnknownModel = coworkHasUnknownModel
+        self.costByCategory = costByCategory
+        self.fastModeTurnCount = fastModeTurnCount
+    }
 
     static let empty = AnalyticsData(
         totalSessions: 0, totalMessages: 0, totalTokens: 0, totalCacheTokens: 0, totalCost: 0,
@@ -78,7 +123,9 @@ struct AnalyticsData: Sendable {
             effortAnalytics: effortAnalytics,
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: coworkCost,
-            coworkHasUnknownModel: hasUnknownModel
+            coworkHasUnknownModel: hasUnknownModel,
+            costByCategory: costByCategory,
+            fastModeTurnCount: fastModeTurnCount
         )
     }
 }
