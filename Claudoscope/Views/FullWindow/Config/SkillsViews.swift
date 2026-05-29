@@ -161,9 +161,20 @@ struct SkillsMainPanelView: View {
                     )
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
-                        // Metadata card
-                        if !skill.metadata.isEmpty {
-                            SkillMetadataCard(metadata: skill.metadata)
+                        // Tool restrictions banner
+                        if skill.metadata["allowed-tools"] != nil || skill.metadata["disallowed-tools"] != nil {
+                            SkillToolRestrictionsView(
+                                allowedTools: skill.metadata["allowed-tools"],
+                                disallowedTools: skill.metadata["disallowed-tools"]
+                            )
+                        }
+
+                        // Metadata card (filter out tool restriction keys shown above)
+                        let filteredMetadata = skill.metadata.filter {
+                            $0.key != "allowed-tools" && $0.key != "disallowed-tools"
+                        }
+                        if !filteredMetadata.isEmpty {
+                            SkillMetadataCard(metadata: filteredMetadata)
                         }
 
                         if !skill.body.isEmpty {
@@ -177,6 +188,53 @@ struct SkillsMainPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Skill Tool Restrictions View
+
+struct SkillToolRestrictionsView: View {
+    let allowedTools: String?
+    let disallowedTools: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let allowed = allowedTools {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Text("Allowed tools:")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(allowed)
+                        .font(Typography.code)
+                        .foregroundStyle(.primary)
+                }
+            }
+            if let disallowed = disallowedTools {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.slash")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Text("Disallowed tools:")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(disallowed)
+                        .font(Typography.code)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
     }
 }
 

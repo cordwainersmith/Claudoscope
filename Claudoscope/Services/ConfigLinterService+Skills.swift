@@ -179,9 +179,109 @@ extension ConfigLinterService {
                     displayPath: dirName
                 ))
             }
+
+            // SKL013: allowed-tools / disallowed-tools malformed or contradictory
+            results.append(contentsOf: lintSkillToolRestrictions(
+                content: content, filePath: path, displayPath: dirName
+            ))
         }
 
         return (results, descriptions)
+    }
+
+    // MARK: - Tool Restriction Validation
+
+    /// Built-in tools known to Claude Code. Any name starting with "mcp__" is also valid.
+    static let knownTools: Set<String> = [
+        "Bash", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep",
+        "WebFetch", "WebSearch", "Task", "NotebookEdit", "TodoWrite"
+    ]
+
+    func lintSkillToolRestrictions(content: String, filePath: String, displayPath: String) -> [LintResult] {
+        var results: [LintResult] = []
+        let (allowed, disallowed) = parseToolRestrictions(from: content)
+
+        guard allowed != nil || disallowed != nil else { return results }
+
+        let allowedSet = Set(allowed ?? [])
+        let disallowedSet = Set(disallowed ?? [])
+
+        // Check for unknown tool names in both lists
+        for tool in (allowed ?? []) + (disallowed ?? []) {
+            if !tool.hasPrefix("mcp__") && !Self.knownTools.contains(tool) {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .SKL013,
+                    filePath: filePath,
+                    message: "Unknown tool name \"\(tool)\" in skill tool restrictions. Valid names: \(Self.knownTools.sorted().joined(separator: ", ")), or any mcp__* name.",
+                    fix: "Correct the tool name or remove it from allowed-tools / disallowed-tools.",
+                    displayPath: displayPath
+                ))
+            }
+        }
+
+        // Check for tools listed in both allowed and disallowed (contradictory)
+        let contradictions = allowedSet.intersection(disallowedSet)
+        for tool in contradictions.sorted() {
+            results.append(LintResult(
+                severity: .error,
+                checkId: .SKL013,
+                filePath: filePath,
+                message: "Tool \"\(tool)\" appears in both allowed-tools and disallowed-tools, which is contradictory.",
+                fix: "Remove \"\(tool)\" from either allowed-tools or disallowed-tools.",
+                displayPath: displayPath
+            ))
+        }
+
+        return results
+    }
+
+    /// Parse allowed-tools and disallowed-tools from YAML frontmatter (--- ... ---).
+    func parseToolRestrictions(from content: String) -> (allowed: [String]?, disallowed: [String]?) {
+        let lines = content.components(separatedBy: "\n")
+        guard let firstNonEmpty = lines.first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
+              firstNonEmpty.trimmingCharacters(in: .whitespaces) == "---" else {
+            return (nil, nil)
+        }
+
+        var allowed: [String]?
+        var disallowed: [String]?
+        var inFrontmatter = true
+        var seenOpen = false
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !seenOpen {
+                if trimmed == "---" { seenOpen = true }
+                continue
+            }
+            if trimmed == "---" { inFrontmatter = false; break }
+            guard inFrontmatter else { break }
+
+            if trimmed.hasPrefix("allowed-tools:") {
+                let raw = String(trimmed.dropFirst("allowed-tools:".count)).trimmingCharacters(in: .whitespaces)
+                allowed = parseToolListFromValue(raw)
+            } else if trimmed.hasPrefix("disallowed-tools:") {
+                let raw = String(trimmed.dropFirst("disallowed-tools:".count)).trimmingCharacters(in: .whitespaces)
+                disallowed = parseToolListFromValue(raw)
+            }
+        }
+
+        return (allowed, disallowed)
+    }
+
+    private func parseToolListFromValue(_ raw: String) -> [String]? {
+        let stripped = raw.trimmingCharacters(in: .whitespaces)
+        guard !stripped.isEmpty else { return nil }
+
+        if stripped.hasPrefix("[") && stripped.hasSuffix("]") {
+            let inner = String(stripped.dropFirst().dropLast())
+            let tools = inner.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return tools.isEmpty ? nil : tools
+        }
+
+        let tools = stripped.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return tools.isEmpty ? nil : tools
     }
 
     // MARK: - Skill Parsing

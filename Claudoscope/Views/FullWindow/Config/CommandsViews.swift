@@ -101,6 +101,14 @@ struct CommandsMainPanelView: View {
     }
 
     @ViewBuilder
+    private func commandToolRestrictionsIfPresent(_ content: String) -> some View {
+        let (allowed, disallowed) = parseCommandToolRestrictions(content)
+        if allowed != nil || disallowed != nil {
+            CommandToolRestrictionsView(allowedTools: allowed, disallowedTools: disallowed)
+        }
+    }
+
+    @ViewBuilder
     private func commandDetailContent(_ command: CommandEntry) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
@@ -147,12 +155,107 @@ struct CommandsMainPanelView: View {
 
             // Content
             ScrollView {
-                RichMarkdownContentView(content: command.content)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(24)
+                VStack(alignment: .leading, spacing: 16) {
+                    commandToolRestrictionsIfPresent(command.content)
+                    RichMarkdownContentView(content: command.content)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(24)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
+
+// MARK: - Command Tool Restrictions View
+
+struct CommandToolRestrictionsView: View {
+    let allowedTools: String?
+    let disallowedTools: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let allowed = allowedTools {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Text("Allowed tools:")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(allowed)
+                        .font(Typography.code)
+                        .foregroundStyle(.primary)
+                }
+            }
+            if let disallowed = disallowedTools {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.slash")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Text("Disallowed tools:")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Text(disallowed)
+                        .font(Typography.code)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.quaternary, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Helpers
+
+/// Extract allowed-tools and disallowed-tools from a command's YAML frontmatter.
+private func parseCommandToolRestrictions(_ content: String) -> (allowedTools: String?, disallowedTools: String?) {
+    let lines = content.components(separatedBy: "\n")
+    guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else {
+        return (nil, nil)
+    }
+
+    var allowedTools: String?
+    var disallowedTools: String?
+    var seenOpen = false
+
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if !seenOpen {
+            if trimmed == "---" { seenOpen = true }
+            continue
+        }
+        if trimmed == "---" { break }
+
+        if trimmed.hasPrefix("allowed-tools:") {
+            let raw = String(trimmed.dropFirst("allowed-tools:".count)).trimmingCharacters(in: .whitespaces)
+            allowedTools = normalizeCommandToolList(raw)
+        } else if trimmed.hasPrefix("disallowed-tools:") {
+            let raw = String(trimmed.dropFirst("disallowed-tools:".count)).trimmingCharacters(in: .whitespaces)
+            disallowedTools = normalizeCommandToolList(raw)
+        }
+    }
+
+    return (allowedTools, disallowedTools)
+}
+
+private func normalizeCommandToolList(_ raw: String) -> String? {
+    let stripped = raw.trimmingCharacters(in: .whitespaces)
+    guard !stripped.isEmpty else { return nil }
+    if stripped.hasPrefix("[") && stripped.hasSuffix("]") {
+        let inner = String(stripped.dropFirst().dropLast())
+        let tools = inner.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return tools.isEmpty ? nil : tools.joined(separator: ", ")
+    }
+    let tools = stripped.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    return tools.isEmpty ? nil : tools.joined(separator: ", ")
 }

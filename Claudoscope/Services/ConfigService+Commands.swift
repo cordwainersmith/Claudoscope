@@ -73,6 +73,55 @@ extension ConfigService {
         return nil
     }
 
+    /// Extract allowed-tools and disallowed-tools from a command file's YAML frontmatter block.
+    /// Returns (allowedTools, disallowedTools) as comma-joined strings, or nil if not present.
+    /// The frontmatter block is delimited by leading and trailing "---" lines.
+    func extractCommandToolRestrictions(from content: String) -> (allowedTools: String?, disallowedTools: String?) {
+        let lines = content.components(separatedBy: "\n")
+        guard let firstLine = lines.first?.trimmingCharacters(in: .whitespaces),
+              firstLine == "---" else {
+            return (nil, nil)
+        }
+
+        var allowedTools: String?
+        var disallowedTools: String?
+        var inFrontmatter = true
+
+        for line in lines.dropFirst() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == "---" {
+                inFrontmatter = false
+                break
+            }
+            guard inFrontmatter else { break }
+
+            if trimmed.hasPrefix("allowed-tools:") {
+                let value = String(trimmed.dropFirst("allowed-tools:".count)).trimmingCharacters(in: .whitespaces)
+                allowedTools = normalizeToolListString(value)
+            } else if trimmed.hasPrefix("disallowed-tools:") {
+                let value = String(trimmed.dropFirst("disallowed-tools:".count)).trimmingCharacters(in: .whitespaces)
+                disallowedTools = normalizeToolListString(value)
+            }
+        }
+
+        return (allowedTools, disallowedTools)
+    }
+
+    /// Parse a raw tool list value (inline array or comma-list) into a normalized comma-joined string.
+    private func normalizeToolListString(_ raw: String) -> String? {
+        let stripped = raw.trimmingCharacters(in: .whitespaces)
+        guard !stripped.isEmpty else { return nil }
+
+        if stripped.hasPrefix("[") && stripped.hasSuffix("]") {
+            let inner = String(stripped.dropFirst().dropLast())
+            let tools = inner.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return tools.isEmpty ? nil : tools.joined(separator: ", ")
+        }
+
+        let tools = stripped.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        return tools.isEmpty ? nil : tools.joined(separator: ", ")
+    }
+
     /// Resolve latest plugin version directories.
     /// Picks the most recently modified version dir, since version dirnames may be
     /// non-semver (e.g. content-hashes like "7ed523140f50", or "unknown") and

@@ -179,6 +179,71 @@ extension ConfigLinterService {
         return []
     }
 
+    // MARK: - CMD007: Command tool-restriction validation
+
+    /// Scan global and project command files for malformed allowed-tools / disallowed-tools frontmatter.
+    func lintCommandToolRestrictions(globalClaudeDir: URL, projectRoot: String?) -> [LintResult] {
+        var results: [LintResult] = []
+
+        var commandsDirs: [URL] = [globalClaudeDir.appendingPathComponent("commands")]
+        if let root = projectRoot {
+            commandsDirs.append(URL(fileURLWithPath: root).appendingPathComponent(".claude/commands"))
+        }
+
+        for commandsDir in commandsDirs {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: commandsDir.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard let files = try? fm.contentsOfDirectory(at: commandsDir, includingPropertiesForKeys: []) else { continue }
+
+            for file in files where file.pathExtension == "md" {
+                guard let content = try? String(contentsOf: file, encoding: .utf8) else { continue }
+                let displayPath = file.lastPathComponent
+                results.append(contentsOf: lintCommandFileToolRestrictions(
+                    content: content, filePath: file.path, displayPath: displayPath
+                ))
+            }
+        }
+
+        return results
+    }
+
+    func lintCommandFileToolRestrictions(content: String, filePath: String, displayPath: String) -> [LintResult] {
+        var results: [LintResult] = []
+        let (allowed, disallowed) = parseToolRestrictions(from: content)
+
+        guard allowed != nil || disallowed != nil else { return results }
+
+        let allowedSet = Set(allowed ?? [])
+        let disallowedSet = Set(disallowed ?? [])
+
+        for tool in (allowed ?? []) + (disallowed ?? []) {
+            if !tool.hasPrefix("mcp__") && !ConfigLinterService.knownTools.contains(tool) {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .CMD007,
+                    filePath: filePath,
+                    message: "Unknown tool name \"\(tool)\" in command tool restrictions. Valid names: \(ConfigLinterService.knownTools.sorted().joined(separator: ", ")), or any mcp__* name.",
+                    fix: "Correct the tool name or remove it from allowed-tools / disallowed-tools.",
+                    displayPath: displayPath
+                ))
+            }
+        }
+
+        let contradictions = allowedSet.intersection(disallowedSet)
+        for tool in contradictions.sorted() {
+            results.append(LintResult(
+                severity: .error,
+                checkId: .CMD007,
+                filePath: filePath,
+                message: "Tool \"\(tool)\" appears in both allowed-tools and disallowed-tools, which is contradictory.",
+                fix: "Remove \"\(tool)\" from either allowed-tools or disallowed-tools.",
+                displayPath: displayPath
+            ))
+        }
+
+        return results
+    }
+
     // MARK: - @import Chain Depth
 
     func checkImportDepth(projectRoot: String, claudeMdFiles: [URL], homeDir: String) -> [LintResult] {
