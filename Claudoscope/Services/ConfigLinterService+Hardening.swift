@@ -253,6 +253,21 @@ extension ConfigLinterService {
             ))
         }
 
+        // HRD012: autoMode present but hard_deny is missing or empty
+        if let autoModeDict = settingsJSON["autoMode"] as? [String: Any] {
+            let hardDeny = autoModeDict["hard_deny"] as? [String] ?? []
+            if hardDeny.isEmpty {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .HRD012,
+                    filePath: settingsPath,
+                    message: "autoMode is configured but hard_deny is missing or empty. Auto-mode tool blocking is not enforced.",
+                    fix: "Add at least one entry to autoMode.hard_deny in settings.json",
+                    displayPath: "settings.json"
+                ))
+            }
+        }
+
         // HRD011: security awareness skill
         let skillURL = globalClaudeDir
             .appendingPathComponent("skills")

@@ -120,6 +120,18 @@ extension ConfigLinterService {
             ))
         }
 
+        // CFG008: allowAllClaudeAiMcps enabled
+        if let allowAll = json["allowAllClaudeAiMcps"] as? Bool, allowAll {
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .CFG008,
+                filePath: settingsPath,
+                message: "allowAllClaudeAiMcps is enabled. All Claude.ai MCP servers are permitted without an explicit allowlist.",
+                fix: "Remove allowAllClaudeAiMcps or enumerate specific MCP servers in an allowlist",
+                displayPath: "settings.json"
+            ))
+        }
+
         return results
     }
 }

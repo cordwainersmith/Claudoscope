@@ -385,4 +385,73 @@ final class HardeningLintTests: XCTestCase {
     // compares against the bundled sidecar. The "missing skill" path would fire
     // here, but the drift path requires `Bundle.main` access and is verified
     // manually via the plan's Verification section.
+
+    // MARK: - HRD012: autoMode present but hard_deny missing or empty
+
+    func testHRD012FiresWhenAutoModePresentWithoutHardDeny() async throws {
+        try writeFullySatisfyingSettings(extra: [
+            "autoMode": ["environment": ["$defaults"]]
+            // hard_deny key intentionally absent
+        ])
+        let results = await runLint()
+        XCTAssertTrue(contains(results, .HRD012),
+                      "HRD012 should fire when autoMode is present but hard_deny is absent")
+    }
+
+    func testHRD012FiresWhenAutoModePresentWithEmptyHardDeny() async throws {
+        try writeFullySatisfyingSettings(extra: [
+            "autoMode": ["environment": ["$defaults"], "hard_deny": [String]()]
+        ])
+        let results = await runLint()
+        XCTAssertTrue(contains(results, .HRD012),
+                      "HRD012 should fire when autoMode is present but hard_deny is empty")
+    }
+
+    func testHRD012DoesNotFireWhenHardDenyPopulated() async throws {
+        try writeFullySatisfyingSettings(extra: [
+            "autoMode": ["environment": ["$defaults"], "hard_deny": ["Bash(rm *)"]]
+        ])
+        let results = await runLint()
+        XCTAssertFalse(contains(results, .HRD012),
+                       "HRD012 should not fire when hard_deny has at least one entry")
+    }
+
+    func testHRD012DoesNotFireWhenAutoModeAbsent() async throws {
+        // No autoMode block at all — HRD008 fires instead, not HRD012.
+        try writeSettings([
+            "sandbox": ["enabled": true],
+            "permissions": ["deny": ConfigLinterService.hardeningDenyBaseline]
+        ])
+        let results = await runLint()
+        XCTAssertFalse(contains(results, .HRD012),
+                       "HRD012 should not fire when autoMode is not present")
+    }
+
+    // MARK: - CFG008: allowAllClaudeAiMcps enabled
+
+    private func runLintConfig() async -> [LintResult] {
+        let linter = ConfigLinterService()
+        return await linter.lintConfig(globalClaudeDir: tempDir, projectRoot: nil)
+    }
+
+    func testCFG008FiresWhenAllowAllClaudeAiMcpsTrue() async throws {
+        try writeSettings(["allowAllClaudeAiMcps": true])
+        let results = await runLintConfig()
+        XCTAssertTrue(contains(results, .CFG008),
+                      "CFG008 should fire when allowAllClaudeAiMcps is true")
+    }
+
+    func testCFG008DoesNotFireWhenAllowAllClaudeAiMcpsFalse() async throws {
+        try writeSettings(["allowAllClaudeAiMcps": false])
+        let results = await runLintConfig()
+        XCTAssertFalse(contains(results, .CFG008),
+                       "CFG008 should not fire when allowAllClaudeAiMcps is false")
+    }
+
+    func testCFG008DoesNotFireWhenAllowAllClaudeAiMcpsAbsent() async throws {
+        try writeSettings([:])
+        let results = await runLintConfig()
+        XCTAssertFalse(contains(results, .CFG008),
+                       "CFG008 should not fire when allowAllClaudeAiMcps is absent")
+    }
 }

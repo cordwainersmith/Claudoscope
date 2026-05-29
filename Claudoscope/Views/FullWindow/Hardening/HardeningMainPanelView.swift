@@ -630,7 +630,7 @@ private struct LayerCardSpec {
             id: "layer3",
             label: "Layer 3",
             subtitle: "AutoMode",
-            prefixes: ["HRD008", "HRD009"]
+            prefixes: ["HRD008", "HRD009", "HRD012"]
         ),
         LayerCardSpec(
             id: "layer4",

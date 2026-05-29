@@ -96,6 +96,18 @@ extension ConfigService {
 
         let prUrlTemplate = settings["prUrlTemplate"] as? String
 
+        // AutoMode
+        let autoMode: AutoModeConfig?
+        if let autoModeDict = settings["autoMode"] as? [String: Any] {
+            let hardDeny = autoModeDict["hard_deny"] as? [String] ?? []
+            let environment = autoModeDict["environment"] as? [String] ?? []
+            autoMode = AutoModeConfig(hardDeny: hardDeny, environment: environment)
+        } else {
+            autoMode = nil
+        }
+
+        let allowAllClaudeAiMcps = settings["allowAllClaudeAiMcps"] as? Bool
+
         // Plugins
         var plugins: [PluginInfo] = []
         if let enabledDict = settings["enabledPlugins"] as? [String: Any] {
@@ -175,7 +187,9 @@ extension ConfigService {
             prUrlTemplate: prUrlTemplate,
             plugins: plugins,
             marketplaces: marketplaces,
-            profile: profile
+            profile: profile,
+            autoMode: autoMode,
+            allowAllClaudeAiMcps: allowAllClaudeAiMcps
         )
     }
 
@@ -227,3 +241,4 @@ extension ConfigService {
         return resolved
     }
 }
+
