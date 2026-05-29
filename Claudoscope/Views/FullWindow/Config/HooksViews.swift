@@ -215,6 +215,12 @@ struct HooksMainPanelView: View {
                                                     .font(.system(size: 11))
                                                     .foregroundStyle(.tertiary)
                                             }
+
+                                            if let seq = hook.terminalSequence {
+                                                Text("terminalSequence: \(seq)")
+                                                    .font(.system(size: 11, design: .monospaced))
+                                                    .foregroundStyle(.tertiary)
+                                            }
                                         }
                                     }
                                 }

@@ -244,4 +244,44 @@ final class HookLoaderTests: XCTestCase {
         let groups = await service.loadHooks(projectPaths: [])
         XCTAssertTrue(groups.isEmpty)
     }
+
+    // MARK: - Claude Code 2.1.141 terminalSequence + 2.1.152 MessageDisplay
+
+    func testMessageDisplayEventSurfaces() async throws {
+        try writeJSON([
+            "hooks": [
+                "MessageDisplay": [makeRule(matcher: "", command: "echo msg-display")]
+            ]
+        ], to: claudeDir.appendingPathComponent("settings.json"))
+
+        let groups = await service.loadHooks(projectPaths: [])
+        let events = groups.map(\.event)
+        XCTAssertTrue(events.contains("MessageDisplay"), "MessageDisplay event should surface without a hardcoded whitelist")
+        XCTAssertEqual(commandsFor(groups, event: "MessageDisplay"), ["echo msg-display"])
+    }
+
+    func testTerminalSequenceFieldIsExtractedFromJSON() async throws {
+        // ConfigService extracts terminalSequence from the hook dict and stores it on
+        // HookCommand.terminalSequence (CC 2.1.141).
+        try writeJSON([
+            "hooks": [
+                "MessageDisplay": [[
+                    "matcher": "",
+                    "hooks": [[
+                        "type": "command",
+                        "command": "echo seq-hook",
+                        "terminalSequence": "\\033[1mHELLO\\033[0m"
+                    ]]
+                ]]
+            ]
+        ], to: claudeDir.appendingPathComponent("settings.json"))
+
+        let groups = await service.loadHooks(projectPaths: [])
+        guard let group = groups.first(where: { $0.event == "MessageDisplay" }) else {
+            return XCTFail("MessageDisplay group not found")
+        }
+        let hook = try XCTUnwrap(group.rules.first?.hooks.first, "Expected at least one hook command")
+        XCTAssertEqual(hook.command, "echo seq-hook")
+        XCTAssertEqual(hook.terminalSequence, "\\033[1mHELLO\\033[0m")
+    }
 }

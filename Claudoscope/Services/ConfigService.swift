@@ -95,7 +95,8 @@ actor ConfigService {
                     HookCommand(
                         type: hookDict["type"] as? String,
                         command: hookDict["command"] as? String ?? "",
-                        timeout: hookDict["timeout"] as? Int
+                        timeout: hookDict["timeout"] as? Int,
+                        terminalSequence: hookDict["terminalSequence"] as? String
                     )
                 }
 
