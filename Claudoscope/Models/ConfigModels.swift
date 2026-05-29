@@ -24,6 +24,7 @@ struct HookCommand: Sendable {
     let type: String?       // "command"
     let command: String
     let timeout: Int?
+    let terminalSequence: String? = nil   // hook terminalSequence field (CC 2.1.141)
 }
 
 struct HookRule: Identifiable, Sendable {
@@ -59,6 +60,8 @@ struct CommandEntry: Identifiable, Sendable {
     let description: String?
     let content: String
     let sizeBytes: Int
+    let allowedTools: [String]? = nil      // frontmatter allowed-tools (CC 2.1.152)
+    let disallowedTools: [String]? = nil   // frontmatter disallowed-tools (CC 2.1.152)
 }
 
 // MARK: - Skill Models
@@ -71,6 +74,8 @@ struct SkillEntry: Identifiable, Sendable {
     let metadata: [String: String]
     let body: String
     let sizeBytes: Int
+    let allowedTools: [String]? = nil      // frontmatter allowed-tools (CC 2.1.152)
+    let disallowedTools: [String]? = nil   // frontmatter disallowed-tools (CC 2.1.152)
 }
 
 // MARK: - Memory Models
@@ -104,6 +109,8 @@ struct PluginInfo: Identifiable, Sendable {
     let name: String
     let marketplace: String?
     let enabled: Bool
+    let components: [String]? = nil     // commands/skills/hooks contributed (CC 2.1.143/2.1.145)
+    let dependencies: [String]? = nil   // declared plugin dependencies (CC 2.1.143)
 }
 
 struct MarketplaceSource: Identifiable, Sendable {
@@ -125,6 +132,11 @@ struct ClaudeProfile: Sendable {
     let orgRole: String?
 }
 
+struct AutoModeConfig: Sendable {
+    let hardDeny: [String]      // autoMode.hard_deny rules
+    let environment: [String]   // autoMode.environment trusted entries
+}
+
 struct ExtendedConfig: Sendable {
     let sandbox: SandboxConfig?
     let skipDangerousModePermissionPrompt: Bool
@@ -134,6 +146,8 @@ struct ExtendedConfig: Sendable {
     let plugins: [PluginInfo]
     let marketplaces: [MarketplaceSource]
     let profile: ClaudeProfile?
+    let autoMode: AutoModeConfig? = nil       // settings.json autoMode block (CC 2.1.136)
+    let allowAllClaudeAiMcps: Bool? = nil     // managed setting (CC 2.1.149)
 }
 
 // MARK: - Theme Models

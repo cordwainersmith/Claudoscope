@@ -93,6 +93,12 @@ func getModelPricing(_ model: String?, table: [String: ModelPricing]) -> ModelPr
     return table[family] ?? .unknown
 }
 
+/// Fast-mode billing multiplier, sourced from the 2.1.154 changelog
+/// ("2x the standard rate for 2.5x the speed"). Provisional: not yet
+/// validated against a real bill. Applied only when a record's `speed`
+/// field is non-standard (see SessionParser).
+let fastModeRateMultiplier: Double = 2.0
+
 func estimateCostFromTokens(
     model: String?,
     inputTokens: Int,
@@ -100,12 +106,14 @@ func estimateCostFromTokens(
     cacheReadTokens: Int,
     cacheCreation5mTokens: Int,
     cacheCreation1hTokens: Int,
-    table: [String: ModelPricing]
+    table: [String: ModelPricing],
+    speedMultiplier: Double = 1.0
 ) -> Double {
     let p = getModelPricing(model, table: table)
-    return (Double(inputTokens) / 1e6) * p.input
+    let base = (Double(inputTokens) / 1e6) * p.input
          + (Double(outputTokens) / 1e6) * p.output
          + (Double(cacheReadTokens) / 1e6) * p.cacheRead
          + (Double(cacheCreation5mTokens) / 1e6) * p.cacheCreation5m
          + (Double(cacheCreation1hTokens) / 1e6) * p.cacheCreation1h
+    return base * speedMultiplier
 }

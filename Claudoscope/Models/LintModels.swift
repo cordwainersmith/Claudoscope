@@ -17,6 +17,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CMD002  // >100 lines without rules splitting
     case CMD003  // file-type patterns inline
     case CMD006  // invalid markdown (unclosed code blocks)
+    case CMD007  // command frontmatter tool-restriction malformed
     case CMD_IMPORT  // @import chain >5 hops
     case CMD_DEPRECATE  // .claude/commands/ exists
 
@@ -37,6 +38,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SKL008  // XML angle brackets in frontmatter
     case SKL009  // reserved words in name
     case SKL012  // body >500 lines
+    case SKL013  // allowed-tools/disallowed-tools malformed or contradictory
     case SKL_AGG  // aggregate descriptions >16000 chars
 
     // Cross-cutting
@@ -62,6 +64,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG005  // bare mode with hooks/MCP configured
     case CFG006  // CLAUDE_CODE_SUBPROCESS_ENV_SCRUB not set
     case CFG007  // disableSkillShellExecution not set
+    case CFG008  // allowAllClaudeAiMcps enabled (governance risk)
 
     // Hardening baseline checks
     case HRD001  // sandbox.enabled missing or false
@@ -75,6 +78,12 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case HRD009  // overly permissive host/network entry
     case HRD010  // governance block missing or drifted in CLAUDE.md
     case HRD011  // security awareness skill missing or drifted
+    case HRD012  // autoMode present but missing hard_deny baseline
+
+    // Plugin checks
+    case PLG001  // unsatisfied or missing plugin dependency
+    case PLG002  // plugin dependency cycle
+    case PLG003  // plugin declares no components
 
     // Secret detection checks
     case SEC001  // private key

@@ -235,6 +235,34 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Security-awareness skill missing or drifted",
         hint: "Checks that claudoscope-security-awareness.md is present in ~/.claude/skills/ and matches the bundled baseline. Skills are on-demand reference material the agent can consult mid-task — this one encodes the threat model behind the hardening baseline so when the agent hits a borderline situation (a curl invocation, a sudo prompt, a credential request), it has the rationale for refusing without needing the user to re-explain it each time. Reinstall to redeploy."
     ),
+    .SKL013: RuleMetadata(
+        displayName: "Tool restriction malformed",
+        hint: "A skill's allowed-tools / disallowed-tools frontmatter is malformed or self-contradictory (a tool listed as both allowed and disallowed, or an unknown tool name). Fix the frontmatter so the restriction is unambiguous."
+    ),
+    .CMD007: RuleMetadata(
+        displayName: "Command tool restriction malformed",
+        hint: "A command's allowed-tools / disallowed-tools frontmatter is malformed or self-contradictory. Fix the frontmatter so the restriction is unambiguous."
+    ),
+    .CFG008: RuleMetadata(
+        displayName: "All claude.ai MCP servers trusted",
+        hint: "allowAllClaudeAiMcps is enabled, which trusts every claude.ai MCP server without per-server review. Disable it and allow only the MCP servers you intend to use."
+    ),
+    .HRD012: RuleMetadata(
+        displayName: "autoMode missing hard_deny baseline",
+        hint: "settings.json has an autoMode block but no hard_deny baseline. hard_deny rules are the non-bypassable stops for unattended runs; without them the agent can take destructive actions autonomously during long or batch jobs. Add a hard_deny baseline."
+    ),
+    .PLG001: RuleMetadata(
+        displayName: "Unsatisfied plugin dependency",
+        hint: "A plugin declares a dependency that is not installed or enabled. Install or enable the dependency, or remove the requirement."
+    ),
+    .PLG002: RuleMetadata(
+        displayName: "Plugin dependency cycle",
+        hint: "Plugin dependencies form a cycle (A depends on B which depends back on A). Break the cycle so load order is well-defined."
+    ),
+    .PLG003: RuleMetadata(
+        displayName: "Plugin contributes no components",
+        hint: "A plugin contributes no commands, skills, or hooks. It may be misconfigured or an empty install."
+    ),
 ]
 
 struct CategoryDef: Identifiable {
@@ -251,6 +279,7 @@ let healthCategories: [CategoryDef] = [
     CategoryDef(id: "performance", label: "Session performance", icon: "~", color: Color(red: 0.937, green: 0.624, blue: 0.153), prefixes: ["SES"], sortOrder: 2),
     CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS"], sortOrder: 3),
     CategoryDef(id: "config", label: "Configuration", icon: "i", color: Color(red: 0.216, green: 0.541, blue: 0.867), prefixes: ["XCT", "CFG", "CMD", "RUL"], sortOrder: 4),
+    CategoryDef(id: "plugins", label: "Plugins", icon: "P", color: Color(red: 0.357, green: 0.678, blue: 0.518), prefixes: ["PLG"], sortOrder: 5),
 ]
 
 let otherCategory = CategoryDef(id: "other", label: "Other", icon: "?", color: .gray, prefixes: [], sortOrder: 99)
