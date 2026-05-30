@@ -111,6 +111,7 @@ struct PluginInfo: Identifiable, Sendable {
     let enabled: Bool
     var components: [String]? = nil     // commands/skills/hooks contributed (CC 2.1.143/2.1.145)
     var dependencies: [String]? = nil   // declared plugin dependencies (CC 2.1.143)
+    var componentsByKind: [String: [String]]? = nil   // kind ("skills"/"agents"/"commands") -> entry names, for drill-down
 }
 
 struct MarketplaceSource: Identifiable, Sendable {

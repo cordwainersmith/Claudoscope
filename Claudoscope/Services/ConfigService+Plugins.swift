@@ -91,6 +91,7 @@ extension ConfigService {
 
             let dependencies = parseStringList(manifest?["dependencies"])
             let components = pluginComponents(manifest: manifest, versionDir: versionDir)
+            let componentsByKind = pluginComponentNames(versionDir: versionDir)
 
             plugins.append(PluginInfo(
                 fullName: fullName,
@@ -98,7 +99,8 @@ extension ConfigService {
                 marketplace: marketplace,
                 enabled: enabled,
                 components: components,
-                dependencies: dependencies
+                dependencies: dependencies,
+                componentsByKind: componentsByKind
             ))
         }
 
@@ -147,6 +149,29 @@ extension ConfigService {
             options: [.skipsHiddenFiles]
         ) else { return 0 }
         return entries.count
+    }
+
+    /// Entry names a plugin contributes per kind (commands/skills/agents), for
+    /// drill-down. Skills are directories (name = dir name); commands/agents are
+    /// `.md` files (name = filename without extension). Returns nil if none.
+    private func pluginComponentNames(versionDir: URL) -> [String: [String]]? {
+        var byKind: [String: [String]] = [:]
+        for dir in ["commands", "skills", "agents"] {
+            let names = directoryEntryNames(versionDir.appendingPathComponent(dir))
+            if !names.isEmpty { byKind[dir] = names }
+        }
+        return byKind.isEmpty ? nil : byKind
+    }
+
+    private func directoryEntryNames(_ url: URL) -> [String] {
+        guard let entries = try? fm.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        return entries
+            .map { $0.pathExtension == "md" ? $0.deletingPathExtension().lastPathComponent : $0.lastPathComponent }
+            .sorted()
     }
 
     /// Coerce a manifest field into a `[String]`. Accepts a JSON array of strings,

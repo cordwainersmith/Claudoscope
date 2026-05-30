@@ -241,14 +241,45 @@ private struct PluginDetail: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(components, id: \.self) { component in
-                    HStack(spacing: 8) {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 5))
-                            .foregroundStyle(.tertiary)
-                        Text(component)
-                            .font(Typography.code)
-                            .textSelection(.enabled)
-                        Spacer()
+                    let kind = String(component.prefix(while: { $0 != " " }))
+                    if let names = plugin.componentsByKind?[kind], !names.isEmpty {
+                        DisclosureGroup {
+                            VStack(alignment: .leading, spacing: 3) {
+                                ForEach(names, id: \.self) { entryName in
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "circle.fill")
+                                            .font(.system(size: 4))
+                                            .foregroundStyle(.quaternary)
+                                        Text(entryName)
+                                            .font(Typography.code)
+                                            .foregroundStyle(.secondary)
+                                            .textSelection(.enabled)
+                                        Spacer()
+                                    }
+                                    .padding(.leading, 14)
+                                }
+                            }
+                            .padding(.top, 4)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 5))
+                                    .foregroundStyle(.tertiary)
+                                Text(component)
+                                    .font(Typography.code)
+                                Spacer()
+                            }
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            Image(systemName: "circle.fill")
+                                .font(.system(size: 5))
+                                .foregroundStyle(.tertiary)
+                            Text(component)
+                                .font(Typography.code)
+                                .textSelection(.enabled)
+                            Spacer()
+                        }
                     }
                 }
             }
