@@ -90,4 +90,21 @@ final class ToolRestrictionLintTests: XCTestCase {
         )
         XCTAssertTrue(results.isEmpty)
     }
+
+    // MARK: - CMD007 reachable via the directory scanner (regression: orchestrator wiring)
+
+    func testCommandScannerEmitsCMD007() async throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ToolRestrictionScan-\(UUID().uuidString)")
+        let commandsDir = tmp.appendingPathComponent("commands")
+        try FileManager.default.createDirectory(at: commandsDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try frontmatter(allowed: "Bash", disallowed: "Bash")
+            .write(to: commandsDir.appendingPathComponent("bad.md"), atomically: true, encoding: .utf8)
+
+        let linter = ConfigLinterService()
+        let results = await linter.lintCommandToolRestrictions(globalClaudeDir: tmp, projectRoot: nil)
+        XCTAssertTrue(results.contains { $0.checkId == .CMD007 },
+                      "the command-file scanner should surface CMD007 (and be wired into lint())")
+    }
 }
