@@ -58,6 +58,7 @@ final class SessionStore {
     var memoryFiles: [MemoryFile] = []
     var extendedConfig: ExtendedConfig?
     var themes: [ThemeFile] = []
+    var plugins: [PluginInfo] = []
     var configLoading: Bool = false
 
     // Cowork data (Claude desktop app's agentic mode, separate from Claude Code)
@@ -663,6 +664,7 @@ final class SessionStore {
         let memory = await configService.loadMemoryFiles(projectId: projectId)
         let extended = await configService.loadExtendedConfig()
         let loadedThemes = await configService.loadThemes()
+        let loadedPlugins = await configService.loadPlugins()
         self.hookGroups = hooks
         self.commands = cmds
         self.skills = skls
@@ -670,7 +672,14 @@ final class SessionStore {
         self.memoryFiles = memory
         self.extendedConfig = extended
         self.themes = loadedThemes
+        self.plugins = loadedPlugins
         self.configLoading = false
+    }
+
+    /// Load the plugin inventory in isolation, for the Plugins rail's on-demand
+    /// load. Cheaper than a full loadConfig() when only the plugin list is needed.
+    func loadPlugins() async {
+        self.plugins = await configService.loadPlugins()
     }
 
     // MARK: - Subagent Tree

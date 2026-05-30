@@ -39,6 +39,9 @@ struct FullWindowView: View {
     // Cowork state
     @State private var selectedCoworkSessionId: String?
 
+    // Plugins state
+    @State private var selectedPluginId: String?
+
     // Sidebar resize
     @AppStorage("sidebarWidth") private var sidebarWidth: Double = 240
     @State private var dragStartWidth: CGFloat?
@@ -130,7 +133,8 @@ struct FullWindowView: View {
                 hiddenLintSeverities: $hiddenLintSeverities,
                 selectedHealthItem: $selectedHealthItem,
                 selectedTimelineDay: $selectedTimelineDay,
-                selectedCoworkSessionId: $selectedCoworkSessionId
+                selectedCoworkSessionId: $selectedCoworkSessionId,
+                selectedPluginId: $selectedPluginId
             )
 
             SidebarResizeHandle(sidebarWidth: $sidebarWidth, dragStartWidth: $dragStartWidth)
@@ -149,6 +153,7 @@ struct FullWindowView: View {
                 selectedProjectId: selectedProjectId,
                 selectedSettingsSection: $selectedSettingsSection,
                 selectedCoworkSessionId: $selectedCoworkSessionId,
+                selectedPluginId: $selectedPluginId,
                 onNavigateToSession: { projectId, sessionId, subagentFileName in
                     pendingSubagentFileName = subagentFileName
                     pendingNavigation = (projectId, sessionId)
@@ -182,6 +187,10 @@ struct FullWindowView: View {
                 await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
                 await store.loadConfig(projectId: selectedProjectId)
             case .configHealth, .hardening:
+                await store.runConfigLintIfNeeded(projectId: selectedProjectId)
+            case .plugins:
+                await store.loadConfig(projectId: selectedProjectId)
+                // Surface PLG dependency findings in the plugin detail panel.
                 await store.runConfigLintIfNeeded(projectId: selectedProjectId)
             case .hooks, .commands, .mcps, .skills, .settings:
                 await store.loadConfig(projectId: selectedProjectId)

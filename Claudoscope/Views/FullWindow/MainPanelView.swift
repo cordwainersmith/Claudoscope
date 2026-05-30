@@ -27,6 +27,9 @@ struct MainPanelView: View {
     // Cowork
     @Binding var selectedCoworkSessionId: String?
 
+    // Plugins
+    @Binding var selectedPluginId: String?
+
     // Session navigation from config health (projectId, sessionId, subagentFileName?)
     var onNavigateToSession: ((String, String, String?) -> Void)?
 
@@ -89,6 +92,12 @@ struct MainPanelView: View {
                 SkillsMainPanelView(
                     skills: store.skills,
                     selectedSkillName: $selectedSkillName
+                )
+            case .plugins:
+                PluginsMainPanelView(
+                    plugins: store.plugins,
+                    lintResults: store.lintResults,
+                    selectedPluginId: $selectedPluginId
                 )
             case .mcps:
                 McpsMainPanelView(

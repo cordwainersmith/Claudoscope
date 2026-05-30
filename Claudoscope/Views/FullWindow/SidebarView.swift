@@ -19,6 +19,7 @@ struct SidebarView: View {
     @Binding var selectedHealthItem: String?
     @Binding var selectedTimelineDay: String?
     @Binding var selectedCoworkSessionId: String?
+    @Binding var selectedPluginId: String?
     @State private var filterText = ""
 
     var body: some View {
@@ -108,6 +109,12 @@ struct SidebarView: View {
                         filterText: filterText,
                         skills: store.skills,
                         selectedSkillName: $selectedSkillName
+                    )
+                case .plugins:
+                    PluginsSidebarContent(
+                        filterText: filterText,
+                        plugins: store.plugins,
+                        selectedPluginId: $selectedPluginId
                     )
                 case .mcps:
                     McpsSidebarContent(

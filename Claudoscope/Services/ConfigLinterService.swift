@@ -88,6 +88,10 @@ actor ConfigLinterService {
         // Hardening baseline checks (HRD001-HRD011)
         results.append(contentsOf: lintHardening(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))
 
+        // Plugin inventory checks (PLG001-PLG003)
+        let plugins = await ConfigService(claudeDir: globalClaudeDir).loadPlugins()
+        results.append(contentsOf: lintPlugins(plugins: plugins))
+
         // Sort by severity (errors first)
         results.sort { $0.severity < $1.severity }
         return results
