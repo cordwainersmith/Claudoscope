@@ -103,6 +103,14 @@ struct AttributionConfig: Sendable {
     let hasDeprecatedCoAuthoredBy: Bool
 }
 
+/// One drillable component a plugin contributes (a skill, agent, command, or
+/// config file), with the file to display when the user clicks it.
+struct PluginComponentEntry: Identifiable, Hashable, Sendable {
+    var id: String { path }
+    let name: String
+    let path: String
+}
+
 struct PluginInfo: Identifiable, Sendable {
     var id: String { fullName }
     let fullName: String
@@ -111,7 +119,7 @@ struct PluginInfo: Identifiable, Sendable {
     let enabled: Bool
     var components: [String]? = nil     // commands/skills/hooks contributed (CC 2.1.143/2.1.145)
     var dependencies: [String]? = nil   // declared plugin dependencies (CC 2.1.143)
-    var componentsByKind: [String: [String]]? = nil   // kind ("skills"/"agents"/"commands") -> entry names, for drill-down
+    var componentsByKind: [String: [PluginComponentEntry]]? = nil   // kind -> entries (name + file path), for drill-down
 }
 
 struct MarketplaceSource: Identifiable, Sendable {

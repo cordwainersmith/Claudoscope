@@ -91,7 +91,7 @@ extension ConfigService {
 
             let dependencies = parseStringList(manifest?["dependencies"])
             let components = pluginComponents(manifest: manifest, versionDir: versionDir)
-            let componentsByKind = pluginComponentNames(versionDir: versionDir)
+            let componentsByKind = pluginComponentEntries(versionDir: versionDir)
 
             plugins.append(PluginInfo(
                 fullName: fullName,
@@ -151,27 +151,43 @@ extension ConfigService {
         return entries.count
     }
 
-    /// Entry names a plugin contributes per kind (commands/skills/agents), for
-    /// drill-down. Skills are directories (name = dir name); commands/agents are
-    /// `.md` files (name = filename without extension). Returns nil if none.
-    private func pluginComponentNames(versionDir: URL) -> [String: [String]]? {
-        var byKind: [String: [String]] = [:]
+    /// Drillable entries a plugin contributes per kind, each with the file to
+    /// show on click. Skills are directories (show SKILL.md); commands/agents are
+    /// `.md` files; mcp/hooks are single config files. Returns nil if none.
+    private func pluginComponentEntries(versionDir: URL) -> [String: [PluginComponentEntry]]? {
+        var byKind: [String: [PluginComponentEntry]] = [:]
         for dir in ["commands", "skills", "agents"] {
-            let names = directoryEntryNames(versionDir.appendingPathComponent(dir))
-            if !names.isEmpty { byKind[dir] = names }
+            let entries = componentEntries(in: versionDir.appendingPathComponent(dir))
+            if !entries.isEmpty { byKind[dir] = entries }
+        }
+        let mcp = versionDir.appendingPathComponent(".mcp.json")
+        if fm.fileExists(atPath: mcp.path) {
+            byKind["mcp"] = [PluginComponentEntry(name: ".mcp.json", path: mcp.path)]
+        }
+        let hooksJSON = versionDir.appendingPathComponent("hooks").appendingPathComponent("hooks.json")
+        if fm.fileExists(atPath: hooksJSON.path) {
+            byKind["hooks"] = [PluginComponentEntry(name: "hooks.json", path: hooksJSON.path)]
         }
         return byKind.isEmpty ? nil : byKind
     }
 
-    private func directoryEntryNames(_ url: URL) -> [String] {
-        guard let entries = try? fm.contentsOfDirectory(
-            at: url,
-            includingPropertiesForKeys: nil,
+    private func componentEntries(in dir: URL) -> [PluginComponentEntry] {
+        guard let urls = try? fm.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
-        return entries
-            .map { $0.pathExtension == "md" ? $0.deletingPathExtension().lastPathComponent : $0.lastPathComponent }
-            .sorted()
+        return urls.map { url in
+            var isDir: ObjCBool = false
+            fm.fileExists(atPath: url.path, isDirectory: &isDir)
+            if isDir.boolValue {
+                let skillMd = url.appendingPathComponent("SKILL.md")
+                let path = fm.fileExists(atPath: skillMd.path) ? skillMd.path : url.path
+                return PluginComponentEntry(name: url.lastPathComponent, path: path)
+            }
+            let name = url.pathExtension == "md" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
+            return PluginComponentEntry(name: name, path: url.path)
+        }.sorted { $0.name < $1.name }
     }
 
     /// Coerce a manifest field into a `[String]`. Accepts a JSON array of strings,

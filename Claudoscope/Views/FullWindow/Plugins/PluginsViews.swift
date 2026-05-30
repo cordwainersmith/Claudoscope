@@ -142,6 +142,7 @@ struct PluginsMainPanelView: View {
 private struct PluginDetail: View {
     let plugin: PluginInfo
     let findings: [LintResult]
+    @State private var selectedComponent: PluginComponentEntry?
 
     var body: some View {
         ScrollView {
@@ -157,6 +158,9 @@ private struct PluginDetail: View {
             .padding(16)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sheet(item: $selectedComponent) { entry in
+            PluginComponentSheet(entry: entry)
+        }
     }
 
     private var header: some View {
@@ -242,44 +246,25 @@ private struct PluginDetail: View {
             } else {
                 ForEach(components, id: \.self) { component in
                     let kind = String(component.prefix(while: { $0 != " " }))
-                    if let names = plugin.componentsByKind?[kind], !names.isEmpty {
+                    let entries = plugin.componentsByKind?[kind] ?? []
+                    if entries.count > 1 {
                         DisclosureGroup {
-                            VStack(alignment: .leading, spacing: 3) {
-                                ForEach(names, id: \.self) { entryName in
-                                    HStack(spacing: 8) {
-                                        Image(systemName: "circle.fill")
-                                            .font(.system(size: 4))
-                                            .foregroundStyle(.quaternary)
-                                        Text(entryName)
-                                            .font(Typography.code)
-                                            .foregroundStyle(.secondary)
-                                            .textSelection(.enabled)
-                                        Spacer()
-                                    }
-                                    .padding(.leading, 14)
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(entries) { entry in
+                                    componentButton(entry, indented: true)
                                 }
                             }
                             .padding(.top, 4)
                         } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "circle.fill")
-                                    .font(.system(size: 5))
-                                    .foregroundStyle(.tertiary)
-                                Text(component)
-                                    .font(Typography.code)
-                                Spacer()
-                            }
+                            componentLabelRow(component)
                         }
+                    } else if let entry = entries.first {
+                        Button { selectedComponent = entry } label: {
+                            componentLabelRow(component, clickable: true)
+                        }
+                        .buttonStyle(.plain)
                     } else {
-                        HStack(spacing: 8) {
-                            Image(systemName: "circle.fill")
-                                .font(.system(size: 5))
-                                .foregroundStyle(.tertiary)
-                            Text(component)
-                                .font(Typography.code)
-                                .textSelection(.enabled)
-                            Spacer()
-                        }
+                        componentLabelRow(component)
                     }
                 }
             }
@@ -287,6 +272,43 @@ private struct PluginDetail: View {
         .padding(12)
         .background(Color.secondary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func componentLabelRow(_ label: String, clickable: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "circle.fill")
+                .font(.system(size: 5))
+                .foregroundStyle(.tertiary)
+            Text(label)
+                .font(Typography.code)
+            if clickable {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func componentButton(_ entry: PluginComponentEntry, indented: Bool) -> some View {
+        Button { selectedComponent = entry } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 4))
+                    .foregroundStyle(.quaternary)
+                Text(entry.name)
+                    .font(Typography.code)
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
+            .padding(.leading, indented ? 14 : 0)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var dependenciesCard: some View {
@@ -354,5 +376,51 @@ private struct PluginDetail: View {
         case .warning: return .orange
         case .info: return .blue
         }
+    }
+}
+
+// MARK: - Component content sheet
+
+/// Shows the raw content of a plugin component (SKILL.md, an agent/command .md,
+/// or a .mcp.json / hooks.json) when the user clicks it in the detail view.
+private struct PluginComponentSheet: View {
+    let entry: PluginComponentEntry
+    @Environment(\.dismiss) private var dismiss
+
+    private var content: String {
+        (try? String(contentsOfFile: entry.path, encoding: .utf8))
+            ?? "Unable to read file:\n\(entry.path)"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(entry.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(12)
+            Divider()
+            ScrollView {
+                Text(content)
+                    .font(Typography.code)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            Divider()
+            Text(entry.path)
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+        }
+        .frame(width: 640, height: 560)
     }
 }
