@@ -53,6 +53,82 @@ struct CostByProjectView: View {
     }
 }
 
+// MARK: - Cost by Category
+
+struct CostByCategoryView: View {
+    let costByCategory: [ToolCostCategory: Double]
+    let fastModeTurnCount: Int
+
+    private func label(_ c: ToolCostCategory) -> String {
+        switch c {
+        case .mcp: return "MCP tools"
+        case .subagent: return "Subagents"
+        case .other: return "Other"
+        }
+    }
+
+    private func color(_ c: ToolCostCategory) -> Color {
+        switch c {
+        case .mcp: return .purple
+        case .subagent: return .orange
+        case .other: return .blue
+        }
+    }
+
+    private var rows: [(category: ToolCostCategory, cost: Double)] {
+        costByCategory
+            .map { (category: $0.key, cost: $0.value) }
+            .sorted { $0.cost > $1.cost }
+    }
+
+    private var total: Double { costByCategory.values.reduce(0, +) }
+
+    var body: some View {
+        CardView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Cost by Category")
+                        .font(.system(size: 13, weight: .medium))
+                    Spacer()
+                    if fastModeTurnCount > 0 {
+                        Text("\(fastModeTurnCount) fast-mode turn\(fastModeTurnCount == 1 ? "" : "s")")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .help("Billed assistant turns whose usage.speed was non-standard. Fast mode bills at the 2x rate.")
+                    }
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(rows, id: \.category) { row in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(label(row.category))
+                                    .font(Typography.bodyMedium)
+                                Spacer()
+                                Text(formatCost(row.cost))
+                                    .font(Typography.code)
+                                    .foregroundStyle(.secondary)
+                                if total > 0 {
+                                    Text("\(Int((row.cost / total) * 100))%")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.tertiary)
+                                        .frame(width: 30, alignment: .trailing)
+                                }
+                            }
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(color(row.category).opacity(0.6))
+                                    .frame(width: max(4, geo.size.width * (total > 0 ? row.cost / total : 0)))
+                            }
+                            .frame(height: 4)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Model Distribution
 
 struct ModelDistributionView: View {

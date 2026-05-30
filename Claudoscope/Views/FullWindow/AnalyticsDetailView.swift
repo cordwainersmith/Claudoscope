@@ -68,6 +68,15 @@ struct AnalyticsDetailView: View {
                                 .padding(.horizontal, 24)
                         }
 
+                        // Cost by category (mcp / subagent / other) + fast-mode count
+                        if !data.costByCategory.isEmpty {
+                            CostByCategoryView(
+                                costByCategory: data.costByCategory,
+                                fastModeTurnCount: data.fastModeTurnCount
+                            )
+                            .padding(.horizontal, 24)
+                        }
+
                         // Bottom row: Cost by Project + Model Distribution
                         HStack(alignment: .top, spacing: 16) {
                             CostByProjectView(projectCosts: data.projectCosts, totalCost: data.totalCost)

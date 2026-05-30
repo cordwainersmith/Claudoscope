@@ -49,6 +49,11 @@ struct AnalyticsEngine {
             let cost = session.estimatedCost
             totalCost += cost
 
+            for (cat, catCost) in session.costByCategory {
+                costByCategory[cat, default: 0] += catCost
+            }
+            fastModeTurnCount += session.fastModeTurnCount
+
             // Daily usage: SessionSummary doesn't carry per-message timestamps, so for
             // sessions that cross midnight we approximate by splitting totals proportionally
             // by elapsed wall-clock time on each calendar day. Single-day sessions go
@@ -178,7 +183,9 @@ struct AnalyticsEngine {
             effortAnalytics: effortAnalytics,
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: 0,
-            coworkHasUnknownModel: false
+            coworkHasUnknownModel: false,
+            costByCategory: costByCategory,
+            fastModeTurnCount: fastModeTurnCount
         )
     }
 
