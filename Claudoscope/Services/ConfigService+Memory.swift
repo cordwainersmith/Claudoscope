@@ -107,6 +107,7 @@ extension ConfigService {
         }
 
         let allowAllClaudeAiMcps = settings["allowAllClaudeAiMcps"] as? Bool
+        let cleanupPeriodDays = settings["cleanupPeriodDays"] as? Int
 
         // Plugins
         var plugins: [PluginInfo] = []
@@ -189,7 +190,8 @@ extension ConfigService {
             marketplaces: marketplaces,
             profile: profile,
             autoMode: autoMode,
-            allowAllClaudeAiMcps: allowAllClaudeAiMcps
+            allowAllClaudeAiMcps: allowAllClaudeAiMcps,
+            cleanupPeriodDays: cleanupPeriodDays
         )
     }
 

@@ -37,6 +37,13 @@ actor SessionParser {
         return d
     }()
 
+    /// Cache of a parent transcript's billable assistant `message.id`s, keyed by
+    /// the parent file path and validated by mtime. Used to strip parent-replayed
+    /// records out of context-forking subagent files (auto-compact / aside) so
+    /// their copied usage blocks aren't billed twice.
+    private var parentMsgIdCache: [String: (mtime: Date, ids: Set<String>)] = [:]
+    private static let parentMsgIdCacheLimit = 16
+
     /// Collects every `message.id` whose record carries `stop_reason`, used to
     /// distinguish ordinary streaming intermediates (dropped because the
     /// stop_reason record carries cumulative usage) from "orphan" records
@@ -57,6 +64,77 @@ actor SessionParser {
                 ids.insert(id)
             }
         }
+        return ids
+    }
+
+    /// For each orphan msg.id (no stop_reason record anywhere in the file),
+    /// pick the index of the record carrying the LARGEST cumulative usage.
+    /// Aborted streams persist several intermediates sharing one msg.id with
+    /// growing usage; the final, largest record is the one Anthropic billed.
+    /// Records without a msg.id never enter the map, so they stay billed
+    /// individually by the existing per-record path. Ties resolve to the LAST
+    /// occurrence (`>=`), matching the stream's final write.
+    private func selectOrphanBillingIndices(
+        _ records: [ParsedRecordRaw],
+        stopReasonMsgIds: Set<String>
+    ) -> [String: Int] {
+        var chosen: [String: Int] = [:]
+        var bestTotal: [String: Int] = [:]
+        for (idx, raw) in records.enumerated() {
+            guard raw.type == .assistant,
+                  let msg = raw.message,
+                  let id = msg.id,
+                  !stopReasonMsgIds.contains(id),
+                  let usage = msg.usage else { continue }
+            let total = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0)
+                + (usage.cacheReadInputTokens ?? 0) + (usage.cacheCreationInputTokens ?? 0)
+            if let prev = bestTotal[id], total < prev { continue }
+            bestTotal[id] = total
+            chosen[id] = idx
+        }
+        return chosen
+    }
+
+    /// Context-forking subagent transcripts (auto-compact, aside questions)
+    /// replay the parent's history verbatim — same msg.ids, same usage blocks —
+    /// before issuing their one genuinely new API call. Ordinary `agent-<hash>`
+    /// subagents do not, so the prefix gate is deliberately narrow.
+    private static func isContextForkFilename(_ fileName: String) -> Bool {
+        fileName.hasPrefix("agent-acompact-") || fileName.hasPrefix("agent-aside_question-")
+    }
+
+    /// Billable assistant msg.ids of the parent transcript for a subagent file
+    /// at `<project>/<parentUuid>/subagents/<sub>.jsonl`. The parent lives at
+    /// `<project>/<parentUuid>.jsonl`. Synchronous on purpose: the actor's
+    /// reentrancy safety depends on no `await` between the dedup decision and
+    /// the seen-id inserts in the billing loops.
+    private func parentAssistantMessageIds(forSubagentFileAt url: URL) -> Set<String> {
+        let parentURL = url.deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathExtension("jsonl")
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: parentURL.path),
+              let mtime = attrs[.modificationDate] as? Date else {
+            // Parent missing or unreadable: don't cache, so a parent that
+            // appears later (or is rewritten) is picked up on the next parse.
+            return []
+        }
+        if let cached = parentMsgIdCache[parentURL.path], cached.mtime == mtime {
+            return cached.ids
+        }
+        guard let handle = FileHandle(forReadingAtPath: parentURL.path) else { return [] }
+        defer { handle.closeFile() }
+        var ids = Set<String>()
+        for line in StreamingLineReader(fileHandle: handle) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            guard let data = trimmed.data(using: .utf8),
+                  let raw = try? liteDecoder.decode(ParsedRecordRaw.self, from: data) else { continue }
+            if raw.type == .assistant, let msg = raw.message, msg.usage != nil, let id = msg.id {
+                ids.insert(id)
+            }
+        }
+        if parentMsgIdCache.count >= Self.parentMsgIdCacheLimit { parentMsgIdCache.removeAll() }
+        parentMsgIdCache[parentURL.path] = (mtime, ids)
         return ids
     }
 
@@ -105,9 +183,16 @@ actor SessionParser {
 
         // Phase 2: derive stop-reason set from the buffer (was a separate disk pass).
         let stopReasonMsgIds = collectStopReasonMessageIds(bufferedRecords)
+        // Orphan streams (no stop_reason) bill at the max-usage record per msg.id.
+        let orphanChosenIndex = selectOrphanBillingIndices(bufferedRecords, stopReasonMsgIds: stopReasonMsgIds)
+        // Context-forking subagent files replay the parent's billable msg.ids;
+        // exclude those copies from totals (transcript rendering still keeps them).
+        let parentReplayMsgIds: Set<String> =
+            (isSubagentFile && Self.isContextForkFilename(url.lastPathComponent))
+            ? parentAssistantMessageIds(forSubagentFileAt: url) : []
 
         // Phase 3: replay the buffered records using the original accumulation logic.
-        for record in bufferedRecords {
+        for (idx, record) in bufferedRecords.enumerated() {
             try Task.checkCancellation()
 
             // Subagent (sidechain) files carry the parent's sessionId on every record by
@@ -164,7 +249,14 @@ actor SessionParser {
                 if isBillable, let usage = record.message?.usage {
                     // Dedup by message id (see parseMetadata for context).
                     let alreadyCounted = msgId.map { seenMessageIds.contains($0) } ?? false
-                    if !alreadyCounted {
+                    // Orphan with the same msg.id at a non-max index: skip so only
+                    // the max-usage occurrence bills (parse() never `continue`s — the
+                    // record must still reach the transcript array / toolResultMap).
+                    let isNonChosenOrphan = isOrphan
+                        && (msgId.flatMap { orphanChosenIndex[$0] }.map { $0 != idx } ?? false)
+                    // Parent history replayed into a context-forking subagent file.
+                    let isParentReplay = msgId.map { parentReplayMsgIds.contains($0) } ?? false
+                    if !alreadyCounted && !isNonChosenOrphan && !isParentReplay {
                         if let id = msgId { seenMessageIds.insert(id) }
                         totalInputTokens += usage.inputTokens ?? 0
                         totalOutputTokens += usage.outputTokens ?? 0
@@ -330,6 +422,13 @@ actor SessionParser {
         // Phase 2: derive the stop_reason msg.id set from the in-memory buffer
         // (used by the main loop to distinguish intermediates from orphans).
         let stopReasonMsgIds = collectStopReasonMessageIds(bufferedRecords)
+        // Orphan streams (no stop_reason) bill at the max-usage record per msg.id.
+        let orphanChosenIndex = selectOrphanBillingIndices(bufferedRecords, stopReasonMsgIds: stopReasonMsgIds)
+        // Context-forking subagent files replay the parent's billable msg.ids;
+        // exclude those copies from totals.
+        let parentReplayMsgIds: Set<String> =
+            (isSubagentFile && Self.isContextForkFilename(url.lastPathComponent))
+            ? parentAssistantMessageIds(forSubagentFileAt: url) : []
         // Per-day accumulators (LOCAL day key). The lump token/cost totals and the
         // per-family modelBreakdown are derived from these after the loop.
         var dayAccs: [String: DayAcc] = [:]
@@ -381,7 +480,7 @@ actor SessionParser {
         // logic. Identical semantics to the previous streaming version: the
         // only difference is that we already have the full record set in
         // memory, so the orphan-detection set above can be precomputed.
-        for raw in bufferedRecords {
+        for (idx, raw) in bufferedRecords.enumerated() {
             try Task.checkCancellation()
             if let ts = raw.timestamp {
                 if firstTimestamp.isEmpty { firstTimestamp = ts }
@@ -443,6 +542,13 @@ actor SessionParser {
                 let isOrphan = orphanMsgId.map { !stopReasonMsgIds.contains($0) } ?? true
                 let isBillable = raw.message?.stopReason != nil || isOrphan
                 if isBillable, let usage = raw.message?.usage {
+                    // Orphan with the same msg.id at a non-max index: skip so only the
+                    // max-usage occurrence bills. Must run BEFORE the seen-id inserts,
+                    // or the chosen record gets deduped to zero.
+                    if isOrphan, let mid = orphanMsgId, let chosen = orphanChosenIndex[mid], chosen != idx { continue }
+                    // Parent history replayed into a context-forking subagent file:
+                    // the genuinely-new calls have ids not present in the parent.
+                    if let mid = orphanMsgId, parentReplayMsgIds.contains(mid) { continue }
                     // Primary dedup: same Anthropic message id = same billable API call.
                     if let msgId = raw.message?.id {
                         if localSeenMessageIds.contains(msgId) { continue }

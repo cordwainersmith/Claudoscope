@@ -6,9 +6,11 @@ import XCTest
 /// non-stop_reason record on that assumption. But aborted streams (Ctrl+C,
 /// network drops, truncated transcripts) leave behind orphan msg.ids whose
 /// stream never produced a stop_reason record. Anthropic still bills those
-/// calls, so the parser now counts one record per orphan msg.id (first
-/// occurrence; msg.id dedup keeps it to one). Improvement contributed by Igor
-/// during v0.6.2 verification.
+/// calls, so the parser now counts one record per orphan msg.id — the
+/// occurrence carrying the LARGEST cumulative usage (aborted streams persist
+/// growing intermediates, and the last/largest is what Anthropic billed), with
+/// msg.id dedup keeping it to one. Improvement contributed by Igor during v0.6.2
+/// verification; max-usage selection added during the 2026-06 cost pass.
 final class OrphanRecordTests: XCTestCase {
 
     private func writeTempFile(_ lines: [String]) throws -> URL {
@@ -24,6 +26,15 @@ final class OrphanRecordTests: XCTestCase {
         return """
         {"type":"assistant","uuid":"\(uuid)","sessionId":"sess-1","timestamp":"\(timestamp)","message":{"role":"assistant","id":"\(msgId)","model":"claude-opus-4-5-20250120",\(stopReasonField)"usage":{"input_tokens":\(input),"output_tokens":\(output)}}}
         """
+    }
+
+    /// Local-day key for an ISO timestamp, mirroring SessionParser's per-day
+    /// cost attribution so the tie-break assertion is timezone-independent.
+    private func localDayKey(_ iso: String) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.string(from: ISO8601.parse(iso)!)
     }
 
     // MARK: - Orphan billed once
@@ -129,5 +140,69 @@ final class OrphanRecordTests: XCTestCase {
 
         XCTAssertEqual(summary.totalInputTokens, 50)
         XCTAssertEqual(summary.totalOutputTokens, 75)
+    }
+
+    // MARK: - Growing-usage orphan bills the max record
+
+    func testGrowingUsageOrphanBillsMaxViaParseMetadata() async throws {
+        let parser = SessionParser()
+        let pricing = PricingTables.anthropic
+
+        // Aborted stream: three intermediates, one msg.id, no stop_reason, usage
+        // grows (output 10 -> 50 -> 120). The largest cumulative record is what
+        // Anthropic actually billed, so totals must reflect output 120, not 10.
+        let url = try writeTempFile([
+            record(uuid: "u1", msgId: "msg_grow", stopReason: nil, input: 100, output: 10),
+            record(uuid: "u2", msgId: "msg_grow", stopReason: nil, input: 100, output: 50),
+            record(uuid: "u3", msgId: "msg_grow", stopReason: nil, input: 100, output: 120),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let summary = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: pricing)
+
+        XCTAssertEqual(summary.totalInputTokens, 100, "orphan billed once at the max-usage record")
+        XCTAssertEqual(summary.totalOutputTokens, 120, "max cumulative output, not the first intermediate")
+    }
+
+    func testGrowingUsageOrphanBillsMaxViaParse() async throws {
+        let parser = SessionParser()
+
+        let url = try writeTempFile([
+            record(uuid: "u1", msgId: "msg_grow", stopReason: nil, input: 100, output: 10),
+            record(uuid: "u2", msgId: "msg_grow", stopReason: nil, input: 100, output: 50),
+            record(uuid: "u3", msgId: "msg_grow", stopReason: nil, input: 100, output: 120),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let parsed = try await parser.parse(url: url, sessionId: "sess-1")
+
+        XCTAssertEqual(parsed.metadata.totalInputTokens, 100)
+        XCTAssertEqual(parsed.metadata.totalOutputTokens, 120, "parse() must agree with parseMetadata on max-usage billing")
+    }
+
+    // MARK: - Equal-usage tie bills the LAST occurrence
+
+    func testEqualUsageOrphanTiebreakBillsLastOccurrence() async throws {
+        let parser = SessionParser()
+        let pricing = PricingTables.anthropic
+
+        // Two equal-usage orphan copies on different local days. Totals are the
+        // same whichever is chosen, so the only observable signal is the day the
+        // cost lands on: ties resolve to the LAST occurrence (the stream's final
+        // write), so the later day must carry the contribution.
+        let earlier = "2026-04-26T10:00:00.000Z"
+        let later = "2026-04-27T10:00:00.000Z"
+        let url = try writeTempFile([
+            record(uuid: "u1", msgId: "msg_tie", stopReason: nil, input: 100, output: 200, timestamp: earlier),
+            record(uuid: "u2", msgId: "msg_tie", stopReason: nil, input: 100, output: 200, timestamp: later),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let summary = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: pricing)
+
+        XCTAssertEqual(summary.totalOutputTokens, 200, "billed exactly once")
+        XCTAssertEqual(summary.dailyContributions.count, 1, "only the chosen occurrence contributes a day")
+        XCTAssertEqual(summary.dailyContributions.first?.date, localDayKey(later),
+                       "tie resolves to the LAST occurrence's day")
     }
 }

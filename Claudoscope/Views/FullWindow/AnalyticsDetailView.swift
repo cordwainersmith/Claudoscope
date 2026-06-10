@@ -153,11 +153,63 @@ struct AnalyticsHeaderView: View {
                 .clipShape(Capsule())
             }
 
+            if let coverage = store.dataCoverage {
+                DataCoverageBadge(coverage: coverage)
+            }
+
             Spacer()
 
             // Time range picker
             TimeRangePicker()
         }
+    }
+}
+
+/// Compact pill in the Analytics header that states the cost estimate only
+/// covers transcripts present on this Mac. Turns orange when data is known to be
+/// incomplete (deleted transcripts or a retention window of 30 days or less).
+struct DataCoverageBadge: View {
+    let coverage: DataCoverage
+
+    private var color: Color { coverage.isWarning ? .orange : .secondary }
+
+    private var label: String {
+        var parts: [String]
+        if let date = coverage.oldestTranscriptDate {
+            parts = ["Local data since \(date.formatted(date: .abbreviated, time: .omitted))"]
+        } else {
+            parts = ["Local data only"]
+        }
+        if coverage.missingTranscriptCount > 0 {
+            parts.append("\(coverage.missingTranscriptCount) deleted sessions")
+        }
+        parts.append("retention \(coverage.effectiveCleanupDays)d")
+        return parts.joined(separator: " · ")
+    }
+
+    private var tooltip: String {
+        var text = "Cost estimates cover only the session transcripts on this Mac. "
+            + "Sessions removed by Claude Code's cleanupPeriodDays retention (default 30), "
+            + "and usage on other machines, claude.ai/code, or CI, are not included."
+        if coverage.missingTranscriptCount > 0 {
+            text += " \(coverage.missingTranscriptCount) sessions in history.jsonl no longer have transcripts on disk."
+        }
+        return text
+    }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "internaldrive")
+                .font(.system(size: 9))
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(color.opacity(coverage.isWarning ? 0.12 : 0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .help(tooltip)
     }
 }
 

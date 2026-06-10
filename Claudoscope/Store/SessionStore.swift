@@ -32,6 +32,7 @@ final class SessionStore {
     var sessionsByProject: [String: [SessionSummary]] = [:]
     var hasActiveSession: Bool = false
     var analyticsData: AnalyticsData = .empty
+    var dataCoverage: DataCoverage?
     var selectedAnalyticsProjectId: String?  // nil = all projects
     var analyticsTimeRange: AnalyticsTimeRange = .thirtyDays
     var analyticsCustomFrom: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -261,7 +262,10 @@ final class SessionStore {
             .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                Task { await self.loadConfig(projectId: self.selectedAnalyticsProjectId) }
+                Task {
+                    await self.loadConfig(projectId: self.selectedAnalyticsProjectId)
+                    await self.recomputeDataCoverage()   // picks up cleanupPeriodDays edits
+                }
             }
             .store(in: &cancellables)
 
@@ -341,6 +345,7 @@ final class SessionStore {
             self.isLoading = false
             self.checkActiveSession()
             self.recomputeAnalytics()
+            await self.recomputeDataCoverage()
         }
     }
 
@@ -391,6 +396,12 @@ final class SessionStore {
 
                 self.checkActiveSession()
                 self.recomputeAnalytics()
+                // A brand-new transcript can close a coverage gap (a previously
+                // missing history session now has a file); recompute on create
+                // only — plain updates don't change the known-id set.
+                if case .sessionCreated = change {
+                    await self.recomputeDataCoverage()
+                }
             } catch {
                 NSLog("[Claudoscope] Watcher: failed to parse session %@ in project %@: %@",
                       sessionId, projectId, error.localizedDescription)
@@ -467,7 +478,26 @@ final class SessionStore {
             self.projects = scannedProjects
             self.sessionsByProject = scannedSessions
             self.recomputeAnalytics()
+            await self.recomputeDataCoverage()
         }
+    }
+
+    /// Recomputes the local data-coverage summary shown in the Analytics header.
+    /// Kept separate from `recomputeAnalytics()` (which fires on every time-range
+    /// change) because coverage only shifts when the session set or settings.json
+    /// retention change.
+    func recomputeDataCoverage() async {
+        let history = await timelineService.loadEntries(since: nil, limit: nil)
+        let ext = await configService.loadExtendedConfig()
+        let knownIds = Set(sessionsByProject.values.flatMap { $0.map(\.id) })
+        let oldest = sessionsByProject.values.flatMap { $0 }
+            .map(\.firstTimestamp).filter { !$0.isEmpty }.min()
+        dataCoverage = DataCoverage.compute(
+            historyEntries: history,
+            knownSessionIds: knownIds,
+            cleanupPeriodDays: ext.cleanupPeriodDays,
+            oldestFirstTimestamp: oldest
+        )
     }
 
     func recomputeAnalytics() {

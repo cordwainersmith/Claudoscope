@@ -157,6 +157,7 @@ struct ExtendedConfig: Sendable {
     let profile: ClaudeProfile?
     var autoMode: AutoModeConfig? = nil       // settings.json autoMode block (CC 2.1.136)
     var allowAllClaudeAiMcps: Bool? = nil     // managed setting (CC 2.1.149)
+    var cleanupPeriodDays: Int? = nil         // settings.json transcript retention (default 30)
 }
 
 // MARK: - Theme Models

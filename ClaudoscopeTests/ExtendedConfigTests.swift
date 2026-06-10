@@ -136,4 +136,18 @@ final class ExtendedConfigTests: XCTestCase {
         let ext = await service.loadExtendedConfig()
         XCTAssertEqual(ext.allowAllClaudeAiMcps, false)
     }
+
+    // MARK: - cleanupPeriodDays (transcript retention)
+
+    func testCleanupPeriodDaysParsed() async throws {
+        try writeSettings(["cleanupPeriodDays": 90])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.cleanupPeriodDays, 90)
+    }
+
+    func testCleanupPeriodDaysNilWhenUnset() async throws {
+        try writeSettings([:])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertNil(ext.cleanupPeriodDays)
+    }
 }
