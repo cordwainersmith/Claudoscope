@@ -138,6 +138,7 @@ struct AgentTreeView: View {
 
     private func modelColor(_ family: String) -> Color {
         switch family {
+        case "fable": return .pink
         case "opus": return .purple
         case "sonnet": return .blue
         case "haiku": return .green

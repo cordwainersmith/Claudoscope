@@ -50,6 +50,7 @@ private struct DailyModelCostChartView: View {
 
     private func colorForModel(_ model: String) -> Color {
         let lowered = model.lowercased()
+        if lowered.contains("fable") { return .pink.opacity(0.7) }
         if lowered.contains("opus") { return .purple.opacity(0.7) }
         if lowered.contains("sonnet") { return .blue.opacity(0.7) }
         if lowered.contains("haiku") { return .green.opacity(0.7) }
@@ -130,7 +131,7 @@ private struct ModelEfficiencyTableView: View {
 
     private func isHighlightedRow(_ row: ModelEfficiencyRow) -> Bool {
         let lowered = row.model.lowercased()
-        let isExpensive = lowered.contains("opus") || lowered.contains("sonnet")
+        let isExpensive = lowered.contains("opus") || lowered.contains("sonnet") || lowered.contains("fable")
         return row.avgOutputPerTurn < 200 && isExpensive
     }
 

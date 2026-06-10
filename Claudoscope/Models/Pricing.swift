@@ -27,6 +27,7 @@ struct ModelPricing: Sendable {
 
 struct PricingTables {
     static let anthropic: [String: ModelPricing] = [
+        "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20),
         "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10),
         "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30),
         "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6),
@@ -35,6 +36,8 @@ struct PricingTables {
     ]
 
     static let vertexGlobal: [String: ModelPricing] = [
+        // Fable on Vertex is provisional: assumes Anthropic-mirrored rates, not yet bill-validated.
+        "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20),
         "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10),
         "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30),
         "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6),
@@ -43,6 +46,8 @@ struct PricingTables {
     ]
 
     static let vertexRegional: [String: ModelPricing] = [
+        // Fable on Vertex is provisional: assumes Anthropic rate x1.1 regional, not yet bill-validated.
+        "fable":  ModelPricing(input: 11,    output: 55,     cacheRead: 1.10,   cacheCreation5m: 13.75,   cacheCreation1h: 22),
         "opus":   ModelPricing(input: 5.50,  output: 27.50,  cacheRead: 0.55,   cacheCreation5m: 6.875,   cacheCreation1h: 11),
         "opus4":  ModelPricing(input: 16.50, output: 82.50,  cacheRead: 1.65,   cacheCreation5m: 20.625,  cacheCreation1h: 33),
         "sonnet": ModelPricing(input: 3.30,  output: 16.50,  cacheRead: 0.33,   cacheCreation5m: 4.125,   cacheCreation1h: 6.60),
@@ -78,6 +83,7 @@ private func isVersion45OrHigher(_ model: String) -> Bool {
 
 func getModelFamily(_ model: String?) -> String {
     guard let model = model?.lowercased() else { return "unknown" }
+    if model.contains("fable") { return "fable" }
     if model.contains("opus") {
         return isVersion45OrHigher(model) ? "opus" : "opus4"
     }

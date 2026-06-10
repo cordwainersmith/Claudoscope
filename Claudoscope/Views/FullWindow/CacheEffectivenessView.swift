@@ -386,6 +386,7 @@ private struct ModelCacheSavingsView: View {
 
     private func modelColor(_ model: String) -> Color {
         switch model.lowercased() {
+        case "fable": return .pink
         case "opus", "opus4": return .purple
         case "sonnet": return .blue
         case "haiku", "haiku3": return .green
