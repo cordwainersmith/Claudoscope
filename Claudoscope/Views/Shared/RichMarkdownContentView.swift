@@ -5,6 +5,10 @@ import SwiftUI
 struct RichMarkdownContentView: View {
     let content: String
     var fontSize: CGFloat = 13
+    /// Case-insensitive find-in-content term; empty disables highlighting.
+    var highlight: String = ""
+    /// Block offset to emphasize (the current search match); nil for none.
+    var activeBlockIndex: Int? = nil
 
     private var blocks: [MarkdownBlock] {
         parseMarkdown(content)
@@ -12,8 +16,15 @@ struct RichMarkdownContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+            ForEach(Array(blocks.enumerated()), id: \.offset) { offset, block in
                 richBlockView(block)
+                    .id(offset)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(offset == activeBlockIndex ? Color.accentColor.opacity(0.12) : Color.clear)
+                            .padding(.horizontal, -6)
+                            .padding(.vertical, -3)
+                    )
             }
         }
     }
@@ -179,7 +190,7 @@ struct RichMarkdownContentView: View {
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
+                Text(highlightedPlain(code))
                     .font(.system(size: fontSize - 1, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -298,9 +309,34 @@ struct RichMarkdownContentView: View {
     // MARK: - Inline Markdown
 
     private func richInlineMarkdownText(_ text: String) -> Text {
-        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-            return Text(attributed)
+        var attributed: AttributedString
+        if let parsed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            attributed = parsed
+        } else {
+            attributed = AttributedString(text)
         }
-        return Text(text)
+        applyHighlight(to: &attributed)
+        return Text(attributed)
+    }
+
+    // MARK: - Find-in-content highlighting
+
+    /// Tint every case-insensitive occurrence of `highlight` in an attributed run.
+    private func applyHighlight(to attributed: inout AttributedString) {
+        let term = highlight.trimmingCharacters(in: .whitespaces)
+        guard !term.isEmpty else { return }
+        var searchRange = attributed.startIndex..<attributed.endIndex
+        while let found = attributed[searchRange].range(of: term, options: .caseInsensitive) {
+            attributed[found].backgroundColor = .yellow.opacity(0.4)
+            guard found.upperBound < attributed.endIndex else { break }
+            searchRange = found.upperBound..<attributed.endIndex
+        }
+    }
+
+    /// Plain (non-markdown) text with search matches highlighted, for code blocks.
+    private func highlightedPlain(_ s: String) -> AttributedString {
+        var attributed = AttributedString(s)
+        applyHighlight(to: &attributed)
+        return attributed
     }
 }

@@ -1,5 +1,28 @@
 import Foundation
 
+/// Per-day accumulators used while parsing a session's billed messages. Mutable
+/// structs held in a `[localDay: DayAcc]` map; the parser derives the immutable
+/// `DailyContribution`s and the lump totals from them at the end, so there is a
+/// single source of truth and the two can never disagree.
+private struct ModelDayAcc {
+    var inputTokens = 0
+    var outputTokens = 0
+    var cacheReadTokens = 0
+    var estimatedCost = 0.0
+    var turnCount = 0
+}
+
+private struct DayAcc {
+    var inputTokens = 0
+    var outputTokens = 0
+    var cacheReadTokens = 0
+    var cacheCreationTokens = 0
+    var cacheCreation5mTokens = 0
+    var cacheCreation1hTokens = 0
+    var estimatedCost = 0.0
+    var model: [String: ModelDayAcc] = [:]
+}
+
 /// Stream-parses Claude Code JSONL session files.
 /// Port of server/services/session-parser.ts
 actor SessionParser {
@@ -307,12 +330,12 @@ actor SessionParser {
         // Phase 2: derive the stop_reason msg.id set from the in-memory buffer
         // (used by the main loop to distinguish intermediates from orphans).
         let stopReasonMsgIds = collectStopReasonMessageIds(bufferedRecords)
-        var totalInputTokens = 0
-        var totalOutputTokens = 0
-        var totalCacheReadTokens = 0
-        var totalCacheCreationTokens = 0
-        var totalCacheCreation5mTokens = 0
-        var totalCacheCreation1hTokens = 0
+        // Per-day accumulators (LOCAL day key). The lump token/cost totals and the
+        // per-family modelBreakdown are derived from these after the loop.
+        var dayAccs: [String: DayAcc] = [:]
+        var lastSeenDay: String? = nil
+        // Kept keyed by full model id (not family) because primaryModel selection
+        // needs per-model-id granularity.
         var modelOutputTokens: [String: Int] = [:]
         var hasError = false
         var slug: String?
@@ -322,20 +345,8 @@ actor SessionParser {
         var parentSessionId: String? = nil
         var firstTimestamp = ""
         var lastTimestamp = ""
-        var perMessageCost = 0.0
         var compactionCount = 0
         var toolCallCount = 0
-        // Count of billed assistant turns whose usage.speed is non-standard (fast mode).
-        var fastModeTurnCount = 0
-        // Per-category cost attribution. Reliable signals only: sidechain => subagent,
-        // mcp__-prefixed tool_use => mcp, everything else => other. Sums to perMessageCost.
-        var costByCategory: [ToolCostCategory: Double] = [:]
-
-        // Per-model breakdown accumulators
-        var modelInputTokens: [String: Int] = [:]
-        var modelCacheReadTokens: [String: Int] = [:]
-        var modelCost: [String: Double] = [:]
-        var modelTurnCount: [String: Int] = [:]
 
         // Observability tracking
         var turnDurations: [TurnDuration] = []
@@ -355,6 +366,17 @@ actor SessionParser {
         let isoFormatterNoFrac = ISO8601DateFormatter()
         isoFormatterNoFrac.formatOptions = [.withInternetDateTime]
 
+        // LOCAL calendar day (YYYY-MM-DD) for per-day cost attribution. Local (not
+        // UTC) so it matches Calendar.current.startOfDay used by the "today" filter
+        // in SessionStore and AnalyticsTimeRange.
+        let localDayFormatter = DateFormatter()
+        localDayFormatter.dateFormat = "yyyy-MM-dd"
+        localDayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        func localDayKey(_ ts: String) -> String? {
+            guard let date = ISO8601.parse(ts) else { return nil }
+            return localDayFormatter.string(from: date)
+        }
+
         // Phase 3: replay the buffered records using the original accumulation
         // logic. Identical semantics to the previous streaming version: the
         // only difference is that we already have the full record set in
@@ -364,6 +386,7 @@ actor SessionParser {
             if let ts = raw.timestamp {
                 if firstTimestamp.isEmpty { firstTimestamp = ts }
                 lastTimestamp = ts
+                if let dk = localDayKey(ts) { lastSeenDay = dk }
             }
 
             let isSidechain = raw.isSidechain == true || isSubagentFile
@@ -453,22 +476,14 @@ actor SessionParser {
                         msgCache1h = 0
                     }
 
-                    totalInputTokens += msgInput
-                    totalOutputTokens += msgOutput
-                    totalCacheReadTokens += msgCacheRead
-                    totalCacheCreationTokens += msgCacheCreate
-                    totalCacheCreation5mTokens += msgCache5m
-                    totalCacheCreation1hTokens += msgCache1h
-
                     // Fast mode: usage.speed is per assistant message (sibling of
                     // service_tier inside the usage block), so the multiplier applies
                     // at the same granularity as this per-message cost.
                     let speed = usage.speed
                     let isFastMode = speed != nil && speed != "standard"
                     let speedMultiplier = isFastMode ? fastModeRateMultiplier : 1.0
-                    if isFastMode { fastModeTurnCount += 1 }
 
-                    // Accumulate cost per-message using each message's actual model
+                    // Cost per-message using each message's actual model.
                     let msgCost = estimateCostFromTokens(
                         model: raw.message?.model,
                         inputTokens: msgInput,
@@ -479,29 +494,35 @@ actor SessionParser {
                         table: pricingTable,
                         speedMultiplier: speedMultiplier
                     )
-                    perMessageCost += msgCost
 
-                    // Attribute this turn's cost to one category. Subagent work wins
-                    // over mcp (a sidechain turn that calls an mcp tool is still
-                    // subagent), then mcp tool-use, then everything else.
-                    let category: ToolCostCategory
-                    if isSidechain {
-                        category = .subagent
-                    } else if turnToolNames.contains(where: { $0.hasPrefix("mcp__") }) {
-                        category = .mcp
-                    } else {
-                        category = .other
-                    }
-                    costByCategory[category, default: 0] += msgCost
-
+                    // Attribute to the LOCAL day this message landed on. lastSeenDay
+                    // tracks the most recent timestamped record (updated at the top of
+                    // the loop), so a billable record missing its own timestamp falls
+                    // back to that day. The "1970-01-01" sentinel only applies to a file
+                    // with no parseable timestamp anywhere, which keeps the derived
+                    // lump == sum(contributions) invariant intact (that day never
+                    // matches a real date window).
+                    let dayKey = lastSeenDay ?? "1970-01-01"
+                    var day = dayAccs[dayKey] ?? DayAcc()
+                    day.inputTokens += msgInput
+                    day.outputTokens += msgOutput
+                    day.cacheReadTokens += msgCacheRead
+                    day.cacheCreationTokens += msgCacheCreate
+                    day.cacheCreation5mTokens += msgCache5m
+                    day.cacheCreation1hTokens += msgCache1h
+                    day.estimatedCost += msgCost
                     if let model = raw.message?.model {
                         let family = getModelFamily(model)
                         modelOutputTokens[model, default: 0] += msgOutput
-                        modelInputTokens[family, default: 0] += msgInput
-                        modelCacheReadTokens[family, default: 0] += msgCacheRead
-                        modelCost[family, default: 0] += msgCost
-                        modelTurnCount[family, default: 0] += 1
+                        var m = day.model[family] ?? ModelDayAcc()
+                        m.inputTokens += msgInput
+                        m.outputTokens += msgOutput
+                        m.cacheReadTokens += msgCacheRead
+                        m.estimatedCost += msgCost
+                        m.turnCount += 1
+                        day.model[family] = m
                     }
+                    dayAccs[dayKey] = day
 
                     // Observability: compute turn duration
                     var durationMs: Double = 0
@@ -591,16 +612,68 @@ actor SessionParser {
         let title = deriveTitle(title: recordTitle, customTitle: customTitle, slug: slug, firstLine: firstLine, sessionId: sessionId)
         let primaryModel = modelOutputTokens.max(by: { $0.value < $1.value })?.key
 
-        // Build model breakdown
-        let allFamilies = Set(modelTurnCount.keys)
-        let modelBreakdown = allFamilies.map { family in
+        // Derive the lump totals, the per-family modelBreakdown, and the immutable
+        // dailyContributions from the day buckets in a single pass. Everything billed
+        // flows through dayAccs, so these three views are guaranteed to reconcile.
+        var totalInputTokens = 0
+        var totalOutputTokens = 0
+        var totalCacheReadTokens = 0
+        var totalCacheCreationTokens = 0
+        var totalCacheCreation5mTokens = 0
+        var totalCacheCreation1hTokens = 0
+        var perMessageCost = 0.0
+        var familyInput: [String: Int] = [:]
+        var familyOutput: [String: Int] = [:]
+        var familyCacheRead: [String: Int] = [:]
+        var familyCost: [String: Double] = [:]
+        var familyTurns: [String: Int] = [:]
+
+        let dailyContributions: [DailyContribution] = dayAccs.keys.sorted().map { dayKey in
+            let acc = dayAccs[dayKey]!
+            totalInputTokens += acc.inputTokens
+            totalOutputTokens += acc.outputTokens
+            totalCacheReadTokens += acc.cacheReadTokens
+            totalCacheCreationTokens += acc.cacheCreationTokens
+            totalCacheCreation5mTokens += acc.cacheCreation5mTokens
+            totalCacheCreation1hTokens += acc.cacheCreation1hTokens
+            perMessageCost += acc.estimatedCost
+            let models = acc.model.keys.sorted().map { family -> ModelDayCost in
+                let m = acc.model[family]!
+                familyInput[family, default: 0] += m.inputTokens
+                familyOutput[family, default: 0] += m.outputTokens
+                familyCacheRead[family, default: 0] += m.cacheReadTokens
+                familyCost[family, default: 0] += m.estimatedCost
+                familyTurns[family, default: 0] += m.turnCount
+                return ModelDayCost(
+                    model: family,
+                    inputTokens: m.inputTokens,
+                    outputTokens: m.outputTokens,
+                    cacheReadTokens: m.cacheReadTokens,
+                    estimatedCost: m.estimatedCost,
+                    turnCount: m.turnCount
+                )
+            }
+            return DailyContribution(
+                date: dayKey,
+                inputTokens: acc.inputTokens,
+                outputTokens: acc.outputTokens,
+                cacheReadTokens: acc.cacheReadTokens,
+                cacheCreationTokens: acc.cacheCreationTokens,
+                cacheCreation5mTokens: acc.cacheCreation5mTokens,
+                cacheCreation1hTokens: acc.cacheCreation1hTokens,
+                estimatedCost: acc.estimatedCost,
+                modelBreakdown: models
+            )
+        }
+
+        let modelBreakdown = familyTurns.keys.map { family in
             ModelTokenBreakdown(
                 model: family,
-                inputTokens: modelInputTokens[family, default: 0],
-                outputTokens: modelOutputTokens.filter { getModelFamily($0.key) == family }.values.reduce(0, +),
-                cacheReadTokens: modelCacheReadTokens[family, default: 0],
-                estimatedCost: modelCost[family, default: 0],
-                turnCount: modelTurnCount[family, default: 0]
+                inputTokens: familyInput[family, default: 0],
+                outputTokens: familyOutput[family, default: 0],
+                cacheReadTokens: familyCacheRead[family, default: 0],
+                estimatedCost: familyCost[family, default: 0],
+                turnCount: familyTurns[family, default: 0]
             )
         }.sorted { $0.estimatedCost > $1.estimatedCost }
 
@@ -640,8 +713,7 @@ actor SessionParser {
             toolCallCount: toolCallCount,
             observability: observability,
             isSubagent: isSubagentFile,
-            costByCategory: costByCategory,
-            fastModeTurnCount: fastModeTurnCount
+            dailyContributions: dailyContributions
         )
     }
 

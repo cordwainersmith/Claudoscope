@@ -216,3 +216,19 @@ func parseTableRow(_ line: String) -> [String] {
     if trimmed.hasSuffix("|") { trimmed = String(trimmed.dropLast()) }
     return trimmed.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
 }
+
+/// The searchable plain text of a block, used by find-in-content to decide which
+/// blocks contain a query. Joins multi-part blocks (lists, tables) into one string.
+func blockPlainText(_ block: MarkdownBlock) -> String {
+    switch block {
+    case .heading(_, let text): return text
+    case .paragraph(let text): return text
+    case .codeBlock(let language, let code): return [language, code].compactMap { $0 }.joined(separator: " ")
+    case .unorderedList(let items), .orderedList(let items):
+        return items.map(\.text).joined(separator: " ")
+    case .blockquote(let text): return text
+    case .table(let headers, let rows):
+        return (headers + rows.flatMap { $0 }).joined(separator: " ")
+    case .horizontalRule, .empty: return ""
+    }
+}

@@ -1,17 +1,5 @@
 import Foundation
 
-// MARK: - Tool Cost Category
-
-/// Coarse attribution of estimated spend, derived from reliable record signals
-/// only: sidechain records => subagent, tool_use blocks named `mcp__*` => mcp,
-/// everything else => other. Deliberately no "skill" bucket: skills are
-/// indistinguishable from builtins by tool name.
-enum ToolCostCategory: String, Hashable, Sendable, CaseIterable {
-    case mcp
-    case subagent
-    case other
-}
-
 // MARK: - Parsed Session (full detail)
 
 struct ParsedSession: Sendable {
@@ -89,12 +77,11 @@ struct SessionSummary: Identifiable, Sendable {
     let toolCallCount: Int
     let observability: SessionObservability
     let isSubagent: Bool
-    /// Estimated cost split by coarse category (mcp / subagent / other).
-    /// Defaults to empty so non-parser constructors keep compiling.
-    let costByCategory: [ToolCostCategory: Double]
-    /// Number of billed assistant turns that ran in fast mode (usage.speed
-    /// present and != "standard"). Defaults to 0 for non-parser constructors.
-    let fastModeTurnCount: Int
+    /// Per-day breakdown of billed cost/tokens, keyed by the LOCAL calendar day
+    /// each billable message landed on. Summing these reproduces the lump fields
+    /// above; date-windowed analytics sum only the in-range days so a `/resume`d
+    /// session's earlier-day spend is not counted under "today".
+    let dailyContributions: [DailyContribution]
 
     init(
         id: String,
@@ -118,8 +105,7 @@ struct SessionSummary: Identifiable, Sendable {
         toolCallCount: Int,
         observability: SessionObservability,
         isSubagent: Bool,
-        costByCategory: [ToolCostCategory: Double] = [:],
-        fastModeTurnCount: Int = 0
+        dailyContributions: [DailyContribution]
     ) {
         self.id = id
         self.projectId = projectId
@@ -142,8 +128,7 @@ struct SessionSummary: Identifiable, Sendable {
         self.toolCallCount = toolCallCount
         self.observability = observability
         self.isSubagent = isSubagent
-        self.costByCategory = costByCategory
-        self.fastModeTurnCount = fastModeTurnCount
+        self.dailyContributions = dailyContributions
     }
 }
 
@@ -154,4 +139,29 @@ struct ModelTokenBreakdown: Sendable {
     let cacheReadTokens: Int
     let estimatedCost: Double
     let turnCount: Int
+}
+
+/// Per-family cost/tokens billed on a single calendar day. Lives inside a
+/// `DailyContribution`, so the family rollups stay date-accurate under a window.
+struct ModelDayCost: Sendable {
+    let model: String           // model family: "opus", "sonnet", "haiku"
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let estimatedCost: Double
+    let turnCount: Int
+}
+
+/// One calendar day's worth of billed activity for a session. `date` is the
+/// LOCAL day (YYYY-MM-DD) the messages landed on, fixed at parse time.
+struct DailyContribution: Sendable {
+    let date: String
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let cacheCreationTokens: Int
+    let cacheCreation5mTokens: Int
+    let cacheCreation1hTokens: Int
+    let estimatedCost: Double
+    let modelBreakdown: [ModelDayCost]
 }

@@ -181,13 +181,34 @@ final class SessionStore {
         )
     }
 
-    /// Today's stats
+    /// LOCAL calendar day (YYYY-MM-DD) of now, matching the day keys the parser
+    /// stamps on each `DailyContribution`.
+    private static let localDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    /// Today's stats. Only the cost/tokens billed *today* are counted, not the whole
+    /// lifetime of a session that merely happens to be active today: a `/resume` of an
+    /// older session must not pull its earlier-day spend into today's total.
     var todayTokens: Int {
-        todaySessions.reduce(0) { $0 + $1.totalInputTokens + $1.totalOutputTokens }
+        let key = Self.localDayFormatter.string(from: Date())
+        return todaySessions.reduce(0) { sum, session in
+            sum + session.dailyContributions
+                .filter { $0.date == key }
+                .reduce(0) { $0 + $1.inputTokens + $1.outputTokens }
+        }
     }
 
     var todayCost: Double {
-        todaySessions.reduce(0.0) { $0 + $1.estimatedCost }
+        let key = Self.localDayFormatter.string(from: Date())
+        return todaySessions.reduce(0.0) { sum, session in
+            sum + session.dailyContributions
+                .filter { $0.date == key }
+                .reduce(0.0) { $0 + $1.estimatedCost }
+        }
     }
 
     func clearAlertedSecrets() {

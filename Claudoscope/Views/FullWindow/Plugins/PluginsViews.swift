@@ -381,18 +381,201 @@ private struct PluginDetail: View {
 
 // MARK: - Component content sheet
 
-/// Shows the raw content of a plugin component (SKILL.md, an agent/command .md,
-/// or a .mcp.json / hooks.json) when the user clicks it in the detail view.
+/// Shows a plugin component when the user clicks it in the detail view.
+/// Markdown components (skills' SKILL.md, agent/command .md) render as styled
+/// markdown with a frontmatter metadata card and a find-in-content search box,
+/// mirroring the Skills rail. Config files (.mcp.json / hooks.json) stay raw.
 private struct PluginComponentSheet: View {
     let entry: PluginComponentEntry
     @Environment(\.dismiss) private var dismiss
 
-    private var content: String {
-        (try? String(contentsOfFile: entry.path, encoding: .utf8))
-            ?? "Unable to read file:\n\(entry.path)"
+    @State private var loaded: String?
+    @State private var searchText = ""
+    @State private var matchCursor = 0   // index into matchBlocks
+
+    private var rawContent: String { loaded ?? "" }
+
+    private var isMarkdown: Bool { entry.path.lowercased().hasSuffix(".md") }
+
+    private var parsed: (name: String?, description: String?, metadata: [String: String], body: String) {
+        parseFrontmatter(rawContent)
+    }
+
+    /// Offsets of body blocks containing the query; same `parseMarkdown` input as
+    /// the renderer, so offsets line up with `RichMarkdownContentView`'s block ids.
+    private var matchBlocks: [Int] {
+        let q = searchText.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return [] }
+        return parseMarkdown(parsed.body).enumerated()
+            .filter { blockPlainText($0.element).localizedCaseInsensitiveContains(q) }
+            .map(\.offset)
+    }
+
+    private var activeBlock: Int? {
+        guard !matchBlocks.isEmpty else { return nil }
+        return matchBlocks[min(matchCursor, matchBlocks.count - 1)]
+    }
+
+    private var matchLabel: String {
+        matchBlocks.isEmpty
+            ? "No matches"
+            : "\(min(matchCursor, matchBlocks.count - 1) + 1) of \(matchBlocks.count)"
+    }
+
+    private var kindIcon: String {
+        let p = entry.path
+        if p.hasSuffix("SKILL.md") || p.contains("/skills/") { return "star" }
+        if p.contains("/agents/") { return "person" }
+        if p.contains("/commands/") { return "terminal" }
+        return "doc.text"
     }
 
     var body: some View {
+        Group {
+            if isMarkdown {
+                markdownBody
+            } else {
+                rawBody
+            }
+        }
+        .frame(width: 720, height: 640)
+        .task(id: entry.path) {
+            loaded = (try? String(contentsOfFile: entry.path, encoding: .utf8))
+                ?? "Unable to read file:\n\(entry.path)"
+        }
+    }
+
+    // MARK: Markdown rendering + search
+
+    private var markdownBody: some View {
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: kindIcon)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.accentColor)
+                    Text(parsed.name ?? entry.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Done") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
+                }
+                .padding(12)
+
+                searchBar(proxy)
+
+                Divider()
+
+                if let desc = parsed.description, !desc.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "text.alignleft")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                        Text(desc)
+                            .font(Typography.body)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.bar.opacity(0.5))
+                    Divider()
+                }
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        let meta = parsed.metadata
+                        if meta["allowed-tools"] != nil || meta["disallowed-tools"] != nil {
+                            SkillToolRestrictionsView(
+                                allowedTools: meta["allowed-tools"],
+                                disallowedTools: meta["disallowed-tools"]
+                            )
+                        }
+                        let filteredMeta = meta.filter {
+                            $0.key != "allowed-tools" && $0.key != "disallowed-tools"
+                        }
+                        if !filteredMeta.isEmpty {
+                            SkillMetadataCard(metadata: filteredMeta)
+                        }
+                        if parsed.body.isEmpty {
+                            Text("This component has no body content beyond its metadata.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            RichMarkdownContentView(
+                                content: parsed.body,
+                                highlight: searchText,
+                                activeBlockIndex: activeBlock
+                            )
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(16)
+                }
+
+                Divider()
+                pathFooter
+            }
+        }
+    }
+
+    private func searchBar(_ proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            TextField("Find in content", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .onSubmit { gotoNext(proxy) }
+            if !searchText.isEmpty {
+                Text(matchLabel)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                HStack(spacing: 2) {
+                    Button { gotoPrev(proxy) } label: { Image(systemName: "chevron.up") }
+                        .disabled(matchBlocks.isEmpty)
+                    Button { gotoNext(proxy) } label: { Image(systemName: "chevron.down") }
+                        .disabled(matchBlocks.isEmpty)
+                }
+                .buttonStyle(.borderless)
+                Button { searchText = "" } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar.opacity(0.5))
+        .onChange(of: searchText) { _, _ in
+            matchCursor = 0
+            scrollToActive(proxy)
+        }
+    }
+
+    private func gotoNext(_ proxy: ScrollViewProxy) {
+        guard !matchBlocks.isEmpty else { return }
+        matchCursor = (min(matchCursor, matchBlocks.count - 1) + 1) % matchBlocks.count
+        scrollToActive(proxy)
+    }
+
+    private func gotoPrev(_ proxy: ScrollViewProxy) {
+        guard !matchBlocks.isEmpty else { return }
+        let count = matchBlocks.count
+        matchCursor = (min(matchCursor, count - 1) - 1 + count) % count
+        scrollToActive(proxy)
+    }
+
+    private func scrollToActive(_ proxy: ScrollViewProxy) {
+        guard let active = activeBlock else { return }
+        withAnimation { proxy.scrollTo(active, anchor: .top) }
+    }
+
+    // MARK: Raw rendering (config files)
+
+    private var rawBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(entry.name)
@@ -405,22 +588,25 @@ private struct PluginComponentSheet: View {
             .padding(12)
             Divider()
             ScrollView {
-                Text(content)
+                Text(rawContent)
                     .font(Typography.code)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
             }
             Divider()
-            Text(entry.path)
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+            pathFooter
         }
-        .frame(width: 640, height: 560)
+    }
+
+    private var pathFooter: some View {
+        Text(entry.path)
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
     }
 }

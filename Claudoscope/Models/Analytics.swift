@@ -50,11 +50,6 @@ struct AnalyticsData: Sendable {
     /// True if any contributing Cowork session referenced a model not in the
     /// pricing table — `coworkCost` underestimates spend in that case.
     let coworkHasUnknownModel: Bool
-    /// CLI spend split by coarse category (mcp / subagent / other), summed
-    /// across the in-range sessions. Defaults to empty.
-    let costByCategory: [ToolCostCategory: Double]
-    /// Total billed assistant turns that ran in fast mode across the range.
-    let fastModeTurnCount: Int
 
     init(
         totalSessions: Int,
@@ -72,9 +67,7 @@ struct AnalyticsData: Sendable {
         effortAnalytics: EffortAnalytics,
         parallelToolAnalytics: ParallelToolAnalytics,
         coworkCost: Double,
-        coworkHasUnknownModel: Bool,
-        costByCategory: [ToolCostCategory: Double] = [:],
-        fastModeTurnCount: Int = 0
+        coworkHasUnknownModel: Bool
     ) {
         self.totalSessions = totalSessions
         self.totalMessages = totalMessages
@@ -92,8 +85,6 @@ struct AnalyticsData: Sendable {
         self.parallelToolAnalytics = parallelToolAnalytics
         self.coworkCost = coworkCost
         self.coworkHasUnknownModel = coworkHasUnknownModel
-        self.costByCategory = costByCategory
-        self.fastModeTurnCount = fastModeTurnCount
     }
 
     static let empty = AnalyticsData(
@@ -123,9 +114,7 @@ struct AnalyticsData: Sendable {
             effortAnalytics: effortAnalytics,
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: coworkCost,
-            coworkHasUnknownModel: hasUnknownModel,
-            costByCategory: costByCategory,
-            fastModeTurnCount: fastModeTurnCount
+            coworkHasUnknownModel: hasUnknownModel
         )
     }
 }

@@ -4,22 +4,52 @@ import Foundation
 /// Port of server/services/analytics-engine.ts
 struct AnalyticsEngine {
 
+    /// A session projected onto a date window: only the in-range billed days, with
+    /// their token/cost/per-family totals pre-summed. Built once in `compute` and
+    /// shared by every aggregator so the windowing pass runs a single time.
+    private struct WindowedSession {
+        let session: SessionSummary
+        let project: Project
+        let cost: Double
+        let inputTokens: Int
+        let outputTokens: Int
+        let cacheReadTokens: Int
+        let cacheCreationTokens: Int
+        let cacheCreation5mTokens: Int
+        let cacheCreation1hTokens: Int
+        let family: [String: ModelDayCost]   // merged per-family across in-range days
+        let days: [DailyContribution]        // in-range days only
+        let firstDay: String                 // earliest in-range day
+    }
+
+    private static let localDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    /// LOCAL calendar day (YYYY-MM-DD) for a window bound. Matches the local day
+    /// keys the parser stamps on each `DailyContribution`.
+    private static func dayKey(_ date: Date) -> String { localDayFormatter.string(from: date) }
+
     static func compute(
         sessions: [(session: SessionSummary, project: Project)],
         pricingTable: [String: ModelPricing],
         from fromDate: Date? = nil,
         to toDate: Date? = nil
     ) -> AnalyticsData {
-        let filtered: [(session: SessionSummary, project: Project)]
-        if fromDate == nil && toDate == nil {
-            filtered = sessions
-        } else {
-            filtered = sessions.filter { pair in
-                guard let date = ISO8601.parse(pair.session.lastTimestamp) else { return false }
-                if let fromDate, date < fromDate { return false }
-                if let toDate, date > toDate { return false }
-                return true
-            }
+        // Window as LOCAL day-string bounds, half-open [fromKey, toKey). Comparing
+        // day strings (not reconstructing instants) keeps attribution stable if the
+        // machine timezone changes between parse and recompute and avoids DST math.
+        // `to` is already an exclusive next-midnight for the custom range, so its day
+        // key is the day after the last included day.
+        let fromKey = fromDate.map { dayKey($0) }
+        let toKey = toDate.map { dayKey($0) }
+        func inRange(_ date: String) -> Bool {
+            if let fromKey, date < fromKey { return false }
+            if let toKey, date >= toKey { return false }
+            return true
         }
 
         var totalSessions = 0
@@ -27,90 +57,83 @@ struct AnalyticsEngine {
         var totalTokens = 0
         var totalCacheTokens = 0
         var totalCost = 0.0
-        var costByCategory: [ToolCostCategory: Double] = [:]
-        var fastModeTurnCount = 0
 
         var dailyMap: [String: DailyUsage] = [:]
         var projectCostMap: [String: ProjectCost] = [:]
         var modelMap: [String: ModelUsage] = [:]
+        var windowed: [WindowedSession] = []
 
-        for (session, project) in filtered {
-            // Subagents contribute tokens/cost but are not standalone "sessions" from
-            // the user's POV — gating sessionCount keeps the dashboard's session counter
-            // honest while still reflecting real spend in totalCost / totalTokens.
-            if !session.isSubagent {
-                totalSessions += 1
-            }
-            totalMessages += session.messageCount
-            let sessionTokens = session.totalInputTokens + session.totalOutputTokens
-            totalTokens += sessionTokens
-            totalCacheTokens += session.totalCacheReadTokens + session.totalCacheCreationTokens
+        for (session, project) in sessions {
+            // Project the session onto the window. A session with no billed day in
+            // range contributes to nothing and is dropped (this replaces the old
+            // whole-session filter by lastTimestamp, which over-counted /resume).
+            let days = session.dailyContributions.filter { inRange($0.date) }
+            guard !days.isEmpty else { continue }
 
-            let cost = session.estimatedCost
-            totalCost += cost
+            var wInput = 0, wOutput = 0, wCacheRead = 0, wCacheCreate = 0
+            var w5m = 0, w1h = 0, wCost = 0.0
+            var wFamily: [String: ModelDayCost] = [:]
+            var firstDay = days[0].date
 
-            for (cat, catCost) in session.costByCategory {
-                costByCategory[cat, default: 0] += catCost
-            }
-            fastModeTurnCount += session.fastModeTurnCount
+            for d in days {
+                wInput += d.inputTokens
+                wOutput += d.outputTokens
+                wCacheRead += d.cacheReadTokens
+                wCacheCreate += d.cacheCreationTokens
+                w5m += d.cacheCreation5mTokens
+                w1h += d.cacheCreation1hTokens
+                wCost += d.estimatedCost
+                if d.date < firstDay { firstDay = d.date }
 
-            // Daily usage: SessionSummary doesn't carry per-message timestamps, so for
-            // sessions that cross midnight we approximate by splitting totals proportionally
-            // by elapsed wall-clock time on each calendar day. Single-day sessions go
-            // entirely to that day. sessionCount is attributed to the first day only so
-            // the per-day session counts still sum to totalSessions.
-            let firstDay = dateKey(session.firstTimestamp)
-            if let firstDay {
-                let splits = daySplits(
-                    firstTimestamp: session.firstTimestamp,
-                    lastTimestamp: session.lastTimestamp,
-                    fallbackDay: firstDay
-                )
-                for (i, slice) in splits.enumerated() {
-                    let isFirst = (i == 0)
-                    let weight = slice.weight
-                    let inputTokens = Int((Double(session.totalInputTokens) * weight).rounded())
-                    let outputTokens = Int((Double(session.totalOutputTokens) * weight).rounded())
-                    let cacheReadTokens = Int((Double(session.totalCacheReadTokens) * weight).rounded())
-                    let cacheCreationTokens = Int((Double(session.totalCacheCreationTokens) * weight).rounded())
-                    let cacheCreation5mTokens = Int((Double(session.totalCacheCreation5mTokens) * weight).rounded())
-                    let cacheCreation1hTokens = Int((Double(session.totalCacheCreation1hTokens) * weight).rounded())
-                    let messageCount = Int((Double(session.messageCount) * weight).rounded())
-                    let sliceCost = cost * weight
-                    let countsAsSession = isFirst && !session.isSubagent
-                    if var existing = dailyMap[slice.day] {
-                        existing.inputTokens += inputTokens
-                        existing.outputTokens += outputTokens
-                        existing.cacheReadTokens += cacheReadTokens
-                        existing.cacheCreationTokens += cacheCreationTokens
-                        existing.cacheCreation5mTokens += cacheCreation5mTokens
-                        existing.cacheCreation1hTokens += cacheCreation1hTokens
-                        if countsAsSession { existing.sessionCount += 1 }
-                        existing.messageCount += messageCount
-                        existing.estimatedCost += sliceCost
-                        dailyMap[slice.day] = existing
-                    } else {
-                        dailyMap[slice.day] = DailyUsage(
-                            date: slice.day,
-                            inputTokens: inputTokens,
-                            outputTokens: outputTokens,
-                            cacheReadTokens: cacheReadTokens,
-                            cacheCreationTokens: cacheCreationTokens,
-                            cacheCreation5mTokens: cacheCreation5mTokens,
-                            cacheCreation1hTokens: cacheCreation1hTokens,
-                            sessionCount: countsAsSession ? 1 : 0,
-                            messageCount: messageCount,
-                            estimatedCost: sliceCost
-                        )
-                    }
+                for m in d.modelBreakdown {
+                    let p = wFamily[m.model]
+                    wFamily[m.model] = ModelDayCost(
+                        model: m.model,
+                        inputTokens: (p?.inputTokens ?? 0) + m.inputTokens,
+                        outputTokens: (p?.outputTokens ?? 0) + m.outputTokens,
+                        cacheReadTokens: (p?.cacheReadTokens ?? 0) + m.cacheReadTokens,
+                        estimatedCost: (p?.estimatedCost ?? 0) + m.estimatedCost,
+                        turnCount: (p?.turnCount ?? 0) + m.turnCount
+                    )
                 }
+
+                // Daily usage: real per-day data, no proportional splitting.
+                var du = dailyMap[d.date] ?? DailyUsage(
+                    date: d.date, inputTokens: 0, outputTokens: 0,
+                    cacheReadTokens: 0, cacheCreationTokens: 0,
+                    cacheCreation5mTokens: 0, cacheCreation1hTokens: 0,
+                    sessionCount: 0, messageCount: 0, estimatedCost: 0
+                )
+                du.inputTokens += d.inputTokens
+                du.outputTokens += d.outputTokens
+                du.cacheReadTokens += d.cacheReadTokens
+                du.cacheCreationTokens += d.cacheCreationTokens
+                du.cacheCreation5mTokens += d.cacheCreation5mTokens
+                du.cacheCreation1hTokens += d.cacheCreation1hTokens
+                du.estimatedCost += d.estimatedCost
+                dailyMap[d.date] = du
             }
 
-            // Project costs
-            let projectSessionDelta = session.isSubagent ? 0 : 1
+            // Counts are session-membership-based (a session active in the window
+            // counts once, on its earliest in-range day) so per-day counts still sum
+            // to the totals. Subagents roll money up but never count as sessions.
+            let countsAsSession = !session.isSubagent
+            if countsAsSession { totalSessions += 1 }
+            totalMessages += session.messageCount
+            totalTokens += wInput + wOutput
+            totalCacheTokens += wCacheRead + wCacheCreate
+            totalCost += wCost
+
+            if var du = dailyMap[firstDay] {
+                if countsAsSession { du.sessionCount += 1 }
+                du.messageCount += session.messageCount
+                dailyMap[firstDay] = du
+            }
+
+            let projectSessionDelta = countsAsSession ? 1 : 0
             if var pc = projectCostMap[project.id] {
-                pc.totalCost += cost
-                pc.totalTokens += sessionTokens
+                pc.totalCost += wCost
+                pc.totalTokens += wInput + wOutput
                 pc.sessionCount += projectSessionDelta
                 pc.messageCount += session.messageCount
                 projectCostMap[project.id] = pc
@@ -118,29 +141,39 @@ struct AnalyticsEngine {
                 projectCostMap[project.id] = ProjectCost(
                     projectId: project.id,
                     projectName: project.name,
-                    totalCost: cost,
-                    totalTokens: sessionTokens,
+                    totalCost: wCost,
+                    totalTokens: wInput + wOutput,
                     sessionCount: projectSessionDelta,
                     messageCount: session.messageCount
                 )
             }
 
-            // Model distribution (skip sessions with no detected model)
-            let family = getModelFamily(session.primaryModel)
-            guard family != "unknown" else { continue }
-            if var mu = modelMap[family] {
-                mu.turnCount += 1
-                mu.totalInputTokens += session.totalInputTokens
-                mu.totalOutputTokens += session.totalOutputTokens
-                modelMap[family] = mu
-            } else {
-                modelMap[family] = ModelUsage(
-                    model: family,
-                    turnCount: 1,
-                    totalInputTokens: session.totalInputTokens,
-                    totalOutputTokens: session.totalOutputTokens
-                )
+            // Model distribution: one count per family the session billed in-range
+            // (preserving turnCount = "sessions using this family"); tokens are the
+            // windowed per-family totals.
+            for (family, fm) in wFamily where family != "unknown" {
+                if var mu = modelMap[family] {
+                    mu.turnCount += 1
+                    mu.totalInputTokens += fm.inputTokens
+                    mu.totalOutputTokens += fm.outputTokens
+                    modelMap[family] = mu
+                } else {
+                    modelMap[family] = ModelUsage(
+                        model: family,
+                        turnCount: 1,
+                        totalInputTokens: fm.inputTokens,
+                        totalOutputTokens: fm.outputTokens
+                    )
+                }
             }
+
+            windowed.append(WindowedSession(
+                session: session, project: project, cost: wCost,
+                inputTokens: wInput, outputTokens: wOutput,
+                cacheReadTokens: wCacheRead, cacheCreationTokens: wCacheCreate,
+                cacheCreation5mTokens: w5m, cacheCreation1hTokens: w1h,
+                family: wFamily, days: days, firstDay: firstDay
+            ))
         }
 
         let dailyUsage = dailyMap.values.sorted { $0.date < $1.date }
@@ -149,23 +182,20 @@ struct AnalyticsEngine {
             ($0.totalInputTokens + $0.totalOutputTokens) > ($1.totalInputTokens + $1.totalOutputTokens)
         }
 
-        // Compute cache analytics
         let cacheAnalytics = computeCacheAnalytics(
-            sessions: filtered.map(\.session),
+            windowed: windowed,
             dailyUsage: dailyUsage,
             pricingTable: pricingTable
         )
 
-        // Compute model efficiency and daily model cost from per-session model breakdowns
         let (modelEfficiency, dailyModelCost) = computeModelAnalytics(
-            sessions: filtered,
+            windowed: windowed,
             totalCost: totalCost
         )
 
-        // Compute observability analytics
-        let latencyAnalytics = computeLatencyAnalytics(sessions: filtered)
-        let effortAnalytics = computeEffortAnalytics(sessions: filtered)
-        let parallelToolAnalytics = computeParallelToolAnalytics(sessions: filtered)
+        let latencyAnalytics = computeLatencyAnalytics(windowed: windowed)
+        let effortAnalytics = computeEffortAnalytics(windowed: windowed)
+        let parallelToolAnalytics = computeParallelToolAnalytics(windowed: windowed)
 
         return AnalyticsData(
             totalSessions: totalSessions,
@@ -183,9 +213,7 @@ struct AnalyticsEngine {
             effortAnalytics: effortAnalytics,
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: 0,
-            coworkHasUnknownModel: false,
-            costByCategory: costByCategory,
-            fastModeTurnCount: fastModeTurnCount
+            coworkHasUnknownModel: false
         )
     }
 
@@ -218,7 +246,7 @@ struct AnalyticsEngine {
     // MARK: - Cache Analytics
 
     private static func computeCacheAnalytics(
-        sessions: [SessionSummary],
+        windowed: [WindowedSession],
         dailyUsage: [DailyUsage],
         pricingTable: [String: ModelPricing]
     ) -> CacheAnalytics {
@@ -231,24 +259,24 @@ struct AnalyticsEngine {
         var tierCost5m = 0.0
         var tierCost1h = 0.0
 
-        for session in sessions {
-            totalCacheRead += session.totalCacheReadTokens
-            totalCacheWrite += session.totalCacheCreationTokens
-            totalCache5m += session.totalCacheCreation5mTokens
-            totalCache1h += session.totalCacheCreation1hTokens
-            actualCost += session.estimatedCost
+        for w in windowed {
+            totalCacheRead += w.cacheReadTokens
+            totalCacheWrite += w.cacheCreationTokens
+            totalCache5m += w.cacheCreation5mTokens
+            totalCache1h += w.cacheCreation1hTokens
+            actualCost += w.cost
 
-            let pricing = getModelPricing(session.primaryModel, table: pricingTable)
+            let pricing = getModelPricing(w.session.primaryModel, table: pricingTable)
             // Hypothetical: if all cache reads were billed at base input price instead
             let cacheReadSavingsPerToken = pricing.input - pricing.cacheRead
-            let savings = Double(session.totalCacheReadTokens) / 1e6 * cacheReadSavingsPerToken
-            hypotheticalUncachedCost += session.estimatedCost + savings
+            let savings = Double(w.cacheReadTokens) / 1e6 * cacheReadSavingsPerToken
+            hypotheticalUncachedCost += w.cost + savings
 
             // Per-session tier cost reconciles with actualCost; unknown-priced sessions
             // contribute zero on both sides.
             if !pricing.isUnknown {
-                tierCost5m += Double(session.totalCacheCreation5mTokens) / 1e6 * pricing.cacheCreation5m
-                tierCost1h += Double(session.totalCacheCreation1hTokens) / 1e6 * pricing.cacheCreation1h
+                tierCost5m += Double(w.cacheCreation5mTokens) / 1e6 * pricing.cacheCreation5m
+                tierCost1h += Double(w.cacheCreation1hTokens) / 1e6 * pricing.cacheCreation1h
             }
         }
 
@@ -266,9 +294,11 @@ struct AnalyticsEngine {
 
         let tierCost = CacheTierCost(cost5m: tierCost5m, cost1h: tierCost1h)
 
-        // Per-session cache efficiency. Skip subagents — their UUID titles would
-        // pollute the leaderboard and they're already accounted for in totals.
-        let sessionEfficiency: [SessionCacheEfficiency] = sessions.compactMap { session in
+        // Per-session cache efficiency leaderboard. Uses each session's lifetime cache
+        // figures (a per-session quality metric, not a windowed total). Subagents are
+        // skipped — their UUID titles would pollute the leaderboard.
+        let sessionEfficiency: [SessionCacheEfficiency] = windowed.compactMap { w in
+            let session = w.session
             guard !session.isSubagent else { return nil }
             let readTokens = session.totalCacheReadTokens
             let writeTokens = session.totalCacheCreationTokens
@@ -289,11 +319,11 @@ struct AnalyticsEngine {
             )
         }.sorted { $0.savingsAmount > $1.savingsAmount }
 
-        // Model-aware cache savings from per-session model breakdowns
+        // Model-aware cache savings from the windowed per-family cache reads.
         var modelCacheReads: [String: Int] = [:]
-        for session in sessions {
-            for breakdown in session.modelBreakdown {
-                modelCacheReads[breakdown.model, default: 0] += breakdown.cacheReadTokens
+        for w in windowed {
+            for (family, fm) in w.family {
+                modelCacheReads[family, default: 0] += fm.cacheReadTokens
             }
         }
         let modelSavings: [ModelCacheSavings] = modelCacheReads.compactMap { (model, readTokens) in
@@ -337,27 +367,27 @@ struct AnalyticsEngine {
     // MARK: - Model Analytics
 
     private static func computeModelAnalytics(
-        sessions: [(session: SessionSummary, project: Project)],
+        windowed: [WindowedSession],
         totalCost: Double
     ) -> ([ModelEfficiencyRow], [DailyModelCost]) {
-        // Aggregate per-model metrics from session breakdowns
+        // Aggregate per-family metrics from the windowed breakdowns
         var modelTurns: [String: Int] = [:]
         var modelOutput: [String: Int] = [:]
         var modelCostMap: [String: Double] = [:]
 
-        // Daily model cost
-        var dailyModelMap: [String: [String: Double]] = [:] // date -> model -> cost
+        // Daily model cost, keyed by the real day each amount was billed (fixes the
+        // old firstTimestamp keying that dropped resumed spend from a window).
+        var dailyModelMap: [String: [String: Double]] = [:] // date -> family -> cost
 
-        for (session, _) in sessions {
-            let day = String(session.firstTimestamp.prefix(10))
-
-            for breakdown in session.modelBreakdown {
-                modelTurns[breakdown.model, default: 0] += breakdown.turnCount
-                modelOutput[breakdown.model, default: 0] += breakdown.outputTokens
-                modelCostMap[breakdown.model, default: 0] += breakdown.estimatedCost
-
-                if day.count == 10 {
-                    dailyModelMap[day, default: [:]][breakdown.model, default: 0] += breakdown.estimatedCost
+        for w in windowed {
+            for (family, fm) in w.family {
+                modelTurns[family, default: 0] += fm.turnCount
+                modelOutput[family, default: 0] += fm.outputTokens
+                modelCostMap[family, default: 0] += fm.estimatedCost
+            }
+            for d in w.days {
+                for m in d.modelBreakdown {
+                    dailyModelMap[d.date, default: [:]][m.model, default: 0] += m.estimatedCost
                 }
             }
         }
@@ -446,9 +476,9 @@ struct AnalyticsEngine {
     // MARK: - Latency Analytics
 
     private static func computeLatencyAnalytics(
-        sessions: [(session: SessionSummary, project: Project)]
+        windowed: [WindowedSession]
     ) -> LatencyAnalytics {
-        let sessionsWithLatency = sessions.filter { $0.session.observability.medianTurnDurationMs != nil }
+        let sessionsWithLatency = windowed.filter { $0.session.observability.medianTurnDurationMs != nil }
         guard !sessionsWithLatency.isEmpty else { return .empty }
 
         let medians = sessionsWithLatency.compactMap { $0.session.observability.medianTurnDurationMs }.sorted()
@@ -535,7 +565,7 @@ struct AnalyticsEngine {
     // MARK: - Effort Analytics
 
     private static func computeEffortAnalytics(
-        sessions: [(session: SessionSummary, project: Project)]
+        windowed: [WindowedSession]
     ) -> EffortAnalytics {
         // Aggregate effort distribution across all sessions
         var totalLow = 0
@@ -543,8 +573,8 @@ struct AnalyticsEngine {
         var totalHigh = 0
         var totalUltrathink = 0
 
-        for (session, _) in sessions {
-            let dist = session.observability.effortDistribution
+        for w in windowed {
+            let dist = w.session.observability.effortDistribution
             totalLow += dist.low
             totalMedium += dist.medium
             totalHigh += dist.high
@@ -560,11 +590,11 @@ struct AnalyticsEngine {
 
         // Cost by effort level: group sessions by dominant effort level
         var effortCostMap: [EffortLevel: (turnCount: Int, totalCost: Double)] = [:]
-        for (session, _) in sessions {
-            guard let level = session.observability.dominantEffortLevel else { continue }
+        for w in windowed {
+            guard let level = w.session.observability.dominantEffortLevel else { continue }
             var entry = effortCostMap[level, default: (turnCount: 0, totalCost: 0)]
-            entry.turnCount += session.messageCount
-            entry.totalCost += session.estimatedCost
+            entry.turnCount += w.session.messageCount
+            entry.totalCost += w.cost
             effortCostMap[level] = entry
         }
 
@@ -580,10 +610,11 @@ struct AnalyticsEngine {
 
         // Effort over time: group by date
         var dailyEffortMap: [String: (low: Int, medium: Int, high: Int, ultrathink: Int)] = [:]
-        for (session, _) in sessions {
-            let day = String(session.firstTimestamp.prefix(10))
-            guard day.count == 10 else { continue }
-            let dist = session.observability.effortDistribution
+        for w in windowed {
+            // Whole-session effort attributed to its earliest in-range (LOCAL) day,
+            // consistent with how sessionCount is attributed.
+            let day = w.firstDay
+            let dist = w.session.observability.effortDistribution
             var entry = dailyEffortMap[day, default: (low: 0, medium: 0, high: 0, ultrathink: 0)]
             entry.low += dist.low
             entry.medium += dist.medium
@@ -615,14 +646,14 @@ struct AnalyticsEngine {
     // MARK: - Parallel Tool Analytics
 
     private static func computeParallelToolAnalytics(
-        sessions: [(session: SessionSummary, project: Project)]
+        windowed: [WindowedSession]
     ) -> ParallelToolAnalytics {
         var totalParallelGroups = 0
         var maxDegree = 0
         var degreeCounts: [Int: Int] = [:] // maxParallelDegree -> session count
 
-        for (session, _) in sessions {
-            let obs = session.observability
+        for w in windowed {
+            let obs = w.session.observability
             totalParallelGroups += obs.parallelToolCallCount
             if obs.maxParallelDegree > maxDegree {
                 maxDegree = obs.maxParallelDegree
@@ -660,58 +691,4 @@ struct AnalyticsEngine {
         return values[lower] + fraction * (values[upper] - values[lower])
     }
 
-    private static func dateKey(_ timestamp: String) -> String? {
-        guard timestamp.count >= 10 else { return nil }
-        let key = String(timestamp.prefix(10))
-        // Validate YYYY-MM-DD format
-        guard key.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil else { return nil }
-        return key
-    }
-
-    struct DaySlice {
-        let day: String
-        let weight: Double
-    }
-
-    // Splits a session's wall-clock span into per-day weights summing to 1.0.
-    // Uses UTC day boundaries so the bucket key matches `dateKey(...)`. Falls back
-    // to a single full-weight slice on the first day if timestamps are missing,
-    // unparseable, or the session ends before it starts.
-    private static func daySplits(firstTimestamp: String, lastTimestamp: String, fallbackDay: String) -> [DaySlice] {
-        guard let start = ISO8601.parse(firstTimestamp),
-              let end = ISO8601.parse(lastTimestamp),
-              end > start else {
-            return [DaySlice(day: fallbackDay, weight: 1.0)]
-        }
-
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
-
-        let totalSeconds = end.timeIntervalSince(start)
-        guard totalSeconds > 0 else { return [DaySlice(day: fallbackDay, weight: 1.0)] }
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(identifier: "UTC") ?? .current
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-
-        var slices: [DaySlice] = []
-        var cursor = start
-        while cursor < end {
-            guard let nextMidnight = calendar.nextDate(
-                after: cursor,
-                matching: DateComponents(hour: 0, minute: 0, second: 0),
-                matchingPolicy: .nextTime
-            ) else { break }
-            let sliceEnd = min(nextMidnight, end)
-            let weight = sliceEnd.timeIntervalSince(cursor) / totalSeconds
-            slices.append(DaySlice(day: formatter.string(from: cursor), weight: weight))
-            cursor = sliceEnd
-        }
-
-        if slices.isEmpty {
-            return [DaySlice(day: fallbackDay, weight: 1.0)]
-        }
-        return slices
-    }
 }
