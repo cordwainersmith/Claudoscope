@@ -24,7 +24,7 @@ struct RecentSessionsList: View {
                                 .lineLimit(1)
                                 .foregroundStyle(.primary)
 
-                            Text(decodeProjectName(session.projectId))
+                            Text(session.isCowork ? "Cowork" : decodeProjectName(session.projectId))
                                 .font(.system(size: 10))
                                 .foregroundStyle(.tertiary)
                                 .lineLimit(1)

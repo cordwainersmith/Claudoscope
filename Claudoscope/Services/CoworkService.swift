@@ -79,10 +79,18 @@ actor CoworkService {
     // MARK: - Transcript parsing
 
     /// Reads `audit.jsonl`, runs each line through CoworkRecordAdapter, then
-    /// hands the result to SessionParser via parseTranscript. Returns nil if
-    /// the session has no transcript on disk. Any parser error is logged and
-    /// nil returned (one bad session must not break the list).
-    func loadParsedSession(for session: CoworkSession) async -> ParsedSession? {
+    /// parses the adapted transcript twice from one temp file: parseTranscript
+    /// for chat rendering and parseMetadata for the billing summary the menu
+    /// bar popover consumes. The summary is rebuilt with Cowork identity
+    /// fields (projectId, metadata title, isCowork) because parseMetadata
+    /// derives those from the temp-file path and transcript content, which
+    /// are meaningless here. Returns nil if the session has no transcript on
+    /// disk. Any parser error is logged and nil returned (one bad session
+    /// must not break the list).
+    func loadSessionData(
+        for session: CoworkSession,
+        pricingTable: [String: ModelPricing]
+    ) async -> (parsed: ParsedSession, summary: SessionSummary)? {
         guard let transcriptURL = session.transcriptURL else { return nil }
         do {
             let raw = try String(contentsOf: transcriptURL, encoding: .utf8)
@@ -99,11 +107,42 @@ actor CoworkService {
             let body = adapted.joined(separator: "\n") + "\n"
             try body.write(to: tempURL, atomically: true, encoding: .utf8)
 
-            return try await parser.parseTranscript(
+            let parsed = try await parser.parseTranscript(
                 url: tempURL,
                 sessionId: session.sessionId,
                 projectId: session.projectId
             )
+            let s = try await parser.parseMetadata(
+                url: tempURL,
+                sessionId: session.sessionId,
+                pricingTable: pricingTable
+            )
+            let summary = SessionSummary(
+                id: session.sessionId,
+                projectId: session.projectId,
+                slug: s.slug,
+                title: session.displayTitle,
+                firstTimestamp: s.firstTimestamp,
+                lastTimestamp: s.lastTimestamp,
+                messageCount: s.messageCount,
+                primaryModel: s.primaryModel,
+                totalInputTokens: s.totalInputTokens,
+                totalOutputTokens: s.totalOutputTokens,
+                totalCacheReadTokens: s.totalCacheReadTokens,
+                totalCacheCreationTokens: s.totalCacheCreationTokens,
+                totalCacheCreation5mTokens: s.totalCacheCreation5mTokens,
+                totalCacheCreation1hTokens: s.totalCacheCreation1hTokens,
+                compactionCount: s.compactionCount,
+                estimatedCost: s.estimatedCost,
+                hasError: s.hasError,
+                modelBreakdown: s.modelBreakdown,
+                toolCallCount: s.toolCallCount,
+                observability: s.observability,
+                isSubagent: false,
+                dailyContributions: s.dailyContributions,
+                isCowork: true
+            )
+            return (parsed, summary)
         } catch {
             NSLog("[CoworkService] transcript parse failed for %@: %@", session.sessionId, error.localizedDescription)
             return nil

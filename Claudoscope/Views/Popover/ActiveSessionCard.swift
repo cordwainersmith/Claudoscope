@@ -59,7 +59,7 @@ private struct ActiveSessionRow: View {
                 .lineLimit(1)
 
             HStack(spacing: 0) {
-                Text(decodeProjectName(session.projectId))
+                Text(session.isCowork ? "Cowork" : decodeProjectName(session.projectId))
                     .lineLimit(1)
                 Spacer(minLength: 8)
                 Text(formatCost(session.estimatedCost))

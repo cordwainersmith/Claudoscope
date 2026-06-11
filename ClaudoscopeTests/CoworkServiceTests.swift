@@ -214,7 +214,10 @@ final class CoworkServiceTests: XCTestCase {
         )
         let (_, sessions) = await service.loadSessions()
         let session = try XCTUnwrap(sessions.first)
-        let parsedOpt = await service.loadParsedSession(for: session)
+        let parsedOpt = await service.loadSessionData(
+            for: session,
+            pricingTable: PricingTables.table(provider: .anthropic, region: .global)
+        )?.parsed
         let parsed = try XCTUnwrap(parsedOpt)
         XCTAssertEqual(parsed.id, "s")
         XCTAssertEqual(parsed.projectId, "p")

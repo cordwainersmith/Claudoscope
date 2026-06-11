@@ -66,6 +66,11 @@ final class SessionStore {
     var coworkAvailability: CoworkAvailability = .unknown
     var coworkSessions: [CoworkSession] = []
     var coworkParsedSessionsByID: [String: ParsedSession] = [:]
+    /// Billing summaries synthesized per Cowork session via parseMetadata.
+    /// Consumed ONLY by the menu bar popover (todaySessions/recentSessions/
+    /// activeSessions). Must never be merged into allSessionsWithProjects,
+    /// sessionsByProject, recomputeAnalytics, or recomputeDataCoverage.
+    var coworkSummaries: [SessionSummary] = []
     var coworkLoading: Bool = false
 
     // Observability data
@@ -159,23 +164,22 @@ final class SessionStore {
         return result
     }
 
-    /// Today's sessions
+    /// Today's sessions (CLI + Cowork; Cowork rows carry isCowork = true)
     var todaySessions: [SessionSummary] {
         let startOfToday = Calendar.current.startOfDay(for: Date())
-        return allSessionsWithProjects
-            .map(\.session)
+        return (allSessionsWithProjects.map(\.session) + coworkSummaries)
             .filter { session in
                 guard let date = ISO8601.parse(session.lastTimestamp) else { return false }
                 return date >= startOfToday
             }
     }
 
-    /// Recent sessions (last 3, any date). Subagents are filtered out — their
-    /// UUID titles would push real top-level sessions out of the popover's list.
+    /// Recent sessions (last 3, any date, CLI + Cowork). Subagents are filtered
+    /// out — their UUID titles would push real top-level sessions out of the
+    /// popover's list.
     var recentSessions: [SessionSummary] {
         Array(
-            allSessionsWithProjects
-                .map(\.session)
+            (allSessionsWithProjects.map(\.session) + coworkSummaries)
                 .filter { !$0.isSubagent }
                 .sorted { $0.lastTimestamp > $1.lastTimestamp }
                 .prefix(3)
@@ -195,21 +199,29 @@ final class SessionStore {
     /// lifetime of a session that merely happens to be active today: a `/resume` of an
     /// older session must not pull its earlier-day spend into today's total.
     var todayTokens: Int {
-        let key = Self.localDayFormatter.string(from: Date())
-        return todaySessions.reduce(0) { sum, session in
-            sum + session.dailyContributions
-                .filter { $0.date == key }
-                .reduce(0) { $0 + $1.inputTokens + $1.outputTokens }
-        }
+        Self.dayTotals(sessions: todaySessions, dayKey: Self.localDayFormatter.string(from: Date())).tokens
     }
 
     var todayCost: Double {
-        let key = Self.localDayFormatter.string(from: Date())
-        return todaySessions.reduce(0.0) { sum, session in
-            sum + session.dailyContributions
-                .filter { $0.date == key }
-                .reduce(0.0) { $0 + $1.estimatedCost }
+        Self.dayTotals(sessions: todaySessions, dayKey: Self.localDayFormatter.string(from: Date())).cost
+    }
+
+    /// Pure fold of one calendar day's billed tokens/cost across a pre-merged
+    /// session list. nonisolated + static so unit tests can call it without
+    /// constructing a SessionStore (whose init spawns watchers and scans).
+    nonisolated static func dayTotals(
+        sessions: [SessionSummary],
+        dayKey: String
+    ) -> (tokens: Int, cost: Double) {
+        var tokens = 0
+        var cost = 0.0
+        for session in sessions {
+            for day in session.dailyContributions where day.date == dayKey {
+                tokens += day.inputTokens + day.outputTokens
+                cost += day.estimatedCost
+            }
         }
+        return (tokens, cost)
     }
 
     func clearAlertedSecrets() {
@@ -289,38 +301,44 @@ final class SessionStore {
         }
     }
 
-    /// Reload Cowork availability + sessions + parsed transcripts. Concurrency
-    /// cap of 8 mirrors ProjectScanner. Map replacement is atomic at the end so
-    /// the UI never sees a half-populated state.
+    /// Reload Cowork availability + sessions + parsed transcripts + popover
+    /// summaries. Concurrency cap of 8 mirrors ProjectScanner. Map replacement
+    /// is atomic at the end so the UI never sees a half-populated state.
     func loadCowork() async {
         coworkLoading = true
         let (availability, sessions) = await coworkService.loadSessions()
+        let table = pricingTable
 
         var parsedMap: [String: ParsedSession] = [:]
-        await withTaskGroup(of: (String, ParsedSession?).self) { group in
+        var summaries: [SessionSummary] = []
+        await withTaskGroup(of: (String, ParsedSession?, SessionSummary?).self) { group in
             var inFlight = 0
             var iterator = sessions.makeIterator()
             while let session = iterator.next() {
                 if inFlight >= 8 {
-                    if let result = await group.next(), let parsed = result.1 {
-                        parsedMap[result.0] = parsed
+                    if let result = await group.next() {
+                        if let parsed = result.1 { parsedMap[result.0] = parsed }
+                        if let summary = result.2 { summaries.append(summary) }
                     }
                     inFlight -= 1
                 }
                 group.addTask { [coworkService] in
-                    let parsed = await coworkService.loadParsedSession(for: session)
-                    return (session.id, parsed)
+                    let data = await coworkService.loadSessionData(for: session, pricingTable: table)
+                    return (session.id, data?.parsed, data?.summary)
                 }
                 inFlight += 1
             }
-            for await (id, parsed) in group {
+            for await (id, parsed, summary) in group {
                 if let parsed { parsedMap[id] = parsed }
+                if let summary { summaries.append(summary) }
             }
         }
+        summaries.sort { $0.lastTimestamp > $1.lastTimestamp }
 
         self.coworkAvailability = availability
         self.coworkSessions = sessions
         self.coworkParsedSessionsByID = parsedMap
+        self.coworkSummaries = summaries
         self.coworkLoading = false
 
         // Cowork totals contribute to the Analytics page's "Est. Cost" card.
@@ -479,6 +497,7 @@ final class SessionStore {
             self.sessionsByProject = scannedSessions
             self.recomputeAnalytics()
             await self.recomputeDataCoverage()
+            await self.loadCowork()
         }
     }
 

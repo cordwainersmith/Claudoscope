@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### New Features
+- **Cowork in the menu bar.** The popover's Today stats (sessions, tokens, cost), Active Sessions card, and Recent list now include Claude Cowork sessions alongside Claude Code, with per-day cost attribution (a Cowork task spanning midnight only contributes today's spend to Today). Cowork rows show "Cowork" in place of a project path; the Projects stat remains CLI-only because Cowork workspaces are not project directories.
+
+### Fixes
+- Cowork cost now applies the fast-mode rate multiplier, matching Claude Code billing. Previously the Cowork rail stats card and the Analytics Cowork line understated fast-mode sessions by 2x.
+
 ## [0.7.0]
 ### New Features
 - **Cowork rail.** New rail that surfaces Claude Cowork sessions (the agentic mode in the Claude desktop app) alongside your Claude Code data. Reads from `~/Library/Application Support/Claude/` and renders session metadata, per-model token and cost stats, generated files, and the full transcript in the same chat view used for Claude Code sessions. The rail appears automatically when Cowork is configured and at least one session exists; stays hidden otherwise.

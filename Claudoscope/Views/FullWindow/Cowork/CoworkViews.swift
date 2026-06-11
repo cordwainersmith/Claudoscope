@@ -475,6 +475,12 @@ enum CoworkStats {
             let isUnknown = pricing.isUnknown
             if isUnknown { t.hasUnknownModel = true }
 
+            // Fast mode: same rule as SessionParser.parseMetadata, so the rail,
+            // Analytics, and the popover summaries all bill identically.
+            let speed = usage.speed
+            let isFastMode = speed != nil && speed != "standard"
+            let speedMultiplier = isFastMode ? fastModeRateMultiplier : 1.0
+
             let msgCost = isUnknown ? 0 : estimateCostFromTokens(
                 model: model,
                 inputTokens: input,
@@ -482,7 +488,8 @@ enum CoworkStats {
                 cacheReadTokens: cacheRead,
                 cacheCreation5mTokens: cache5m,
                 cacheCreation1hTokens: cache1h,
-                table: pricingTable
+                table: pricingTable,
+                speedMultiplier: speedMultiplier
             )
             t.cost += msgCost
 

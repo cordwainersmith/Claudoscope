@@ -77,6 +77,10 @@ struct SessionSummary: Identifiable, Sendable {
     let toolCallCount: Int
     let observability: SessionObservability
     let isSubagent: Bool
+    /// True for summaries synthesized from Cowork (Claude desktop) sessions.
+    /// They feed the menu bar popover only and must never enter the CLI
+    /// project index or Analytics (Cowork cost is added there separately).
+    let isCowork: Bool
     /// Per-day breakdown of billed cost/tokens, keyed by the LOCAL calendar day
     /// each billable message landed on. Summing these reproduces the lump fields
     /// above; date-windowed analytics sum only the in-range days so a `/resume`d
@@ -105,7 +109,8 @@ struct SessionSummary: Identifiable, Sendable {
         toolCallCount: Int,
         observability: SessionObservability,
         isSubagent: Bool,
-        dailyContributions: [DailyContribution]
+        dailyContributions: [DailyContribution],
+        isCowork: Bool = false
     ) {
         self.id = id
         self.projectId = projectId
@@ -129,6 +134,7 @@ struct SessionSummary: Identifiable, Sendable {
         self.observability = observability
         self.isSubagent = isSubagent
         self.dailyContributions = dailyContributions
+        self.isCowork = isCowork
     }
 }
 

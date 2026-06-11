@@ -38,12 +38,15 @@ struct MenuBarPopoverContent: View {
                 Divider()
             } else {
                 // Today's stats. sessionCount excludes subagents to match the
-                // dashboard's session counter; token/cost include them.
+                // dashboard's session counter; token/cost include them. Cowork
+                // sessions count under Sessions/Tokens/Cost, but Projects stays
+                // CLI-only: a Cowork projectId is an opaque workspace UUID, not
+                // a project directory.
                 StatsStrip(
                     sessionCount: store.todaySessions.filter { !$0.isSubagent }.count,
                     tokenCount: store.todayTokens,
                     cost: store.todayCost,
-                    projectCount: Set(store.todaySessions.map(\.projectId)).count
+                    projectCount: Set(store.todaySessions.filter { !$0.isCowork }.map(\.projectId)).count
                 )
 
                 // Sparkline
@@ -127,8 +130,7 @@ struct MenuBarPopoverContent: View {
 
     private var activeSessions: [SessionSummary] {
         let now = Date()
-        return store.allSessionsWithProjects
-            .map(\.session)
+        return (store.allSessionsWithProjects.map(\.session) + store.coworkSummaries)
             .filter { session in
                 // Hide subagents from the active card — UUID titles look broken
                 // here. The badge/icon trigger uses store.hasActiveSession which
