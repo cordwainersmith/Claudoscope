@@ -1,12 +1,24 @@
 # Changelog
 
-## [Unreleased]
-
+## [0.8.0]
 ### New Features
-- **Cowork in the menu bar.** The popover's Today stats (sessions, tokens, cost), Active Sessions card, and Recent list now include Claude Cowork sessions alongside Claude Code, with per-day cost attribution (a Cowork task spanning midnight only contributes today's spend to Today). Cowork rows show "Cowork" in place of a project path; the Projects stat remains CLI-only because Cowork workspaces are not project directories.
+- **Plugins rail.** New rail that inventories installed Claude Code plugins and the components each one contributes (commands, skills, agents, hooks, MCP servers). Expand a plugin to see component names grouped by kind, and click any component to open its source (a skill's `SKILL.md`, a command or agent `.md`, or a hook/MCP config JSON) in a sheet. Three dependency lint rules back the rail: PLG001 (a plugin declares a dependency that is not installed or enabled), PLG002 (plugin dependencies form a cycle), and PLG003 (a plugin contributes no components).
+- **Fable 5 model family.** `claude-fable-5` is now recognized and priced; previously it fell through to the "unknown" family, billing $0 with an "Unknown" badge. Added to all three pricing tables ($10 input / $50 output; Vertex regional $11/$55, marked provisional), rendered in pink across the charts, agent tree, and cache view, listed in the settings pricing table, and flagged as expensive in the efficiency table.
+- **Cowork in the menu bar.** The popover's Today stats (Sessions, Tokens, Cost), Active Sessions card, and Recent list now include Claude Cowork sessions alongside Claude Code, with per-day cost attribution: a Cowork task spanning midnight contributes only today's spend to Today. Cowork rows show "Cowork" in place of a project path; the Projects stat stays CLI-only because a Cowork workspace ID is an opaque UUID, not a project directory.
+- **Data-coverage badge.** The Analytics header now states that the estimate covers only the transcripts still present on disk, flagging deleted sessions (history.jsonl vs on-disk) and the settings.json `cleanupPeriodDays` retention window.
+- **Skill and command tool-restriction linting.** New SKL013 and CMD007 rules flag malformed or self-contradictory `allowed-tools` / `disallowed-tools` frontmatter (a tool listed as both allowed and disallowed, or an unknown tool name) in skills and commands.
+- **AutoMode governance linting.** CFG008 flags `allowAllClaudeAiMcps`, which trusts every claude.ai MCP server without per-server review; HRD012 flags an `autoMode` block that has no `hard_deny` baseline, the non-bypassable stops that keep an unattended run from taking destructive actions on its own.
 
-### Fixes
-- Cowork cost now applies the fast-mode rate multiplier, matching Claude Code billing. Previously the Cowork rail stats card and the Analytics Cowork line understated fast-mode sessions by 2x.
+### Improvements
+- **Session titles.** Sessions now display a human-readable title: a `/rename` custom title wins, then the slug, then the first user message (truncated to 80 characters), falling back to the session ID prefix instead of showing a bare ID.
+- **Fast-mode billing.** Sessions run in Claude Code fast mode are now billed at the correct 2x rate, across both Claude Code and Cowork.
+- **Settings rail.** Surfaces `fallbackModel` (a string or up-to-three-model array) in the Model section, plus friendly labels for `disableBundledSkills` and `disableSkillShellExecution`.
+- **Hooks rail.** Recognizes the `terminalSequence` field (Claude Code 2.1.141) and surfaces the `MessageDisplay` event (2.1.152), and adds icons for the SessionEnd, SubagentStop, PreCompact, PostToolUseFailure, and FileChanged events.
+
+### Bug Fixes
+- Orphan streams (aborted, with no `stop_reason` record anywhere in the file) now bill the maximum cumulative-usage record per `message.id` instead of the first, smallest intermediate, so aborted-stream cost matches what Anthropic charged.
+- Context-forking subagent files (`agent-acompact-*`, `agent-aside_question-*`) replay the parent transcript verbatim; their copied `message.id`s are now excluded from totals, recovering ~$31 of phantom spend on a heavy-subagent machine. Regular `agent-<hash>` subagent files are unaffected.
+- Resumed-session cost is now attributed to the day it was incurred. Each session carries a per-day breakdown keyed by local calendar day, and analytics aggregate only the in-range days, so a `/resume` of an older session no longer adds its earlier-day cost to today's total. Every analytics card and the popover Today stat reconcile under any time range, and a drop in the daily Models chart is fixed.
 
 ## [0.7.0]
 ### New Features

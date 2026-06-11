@@ -43,6 +43,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
   - [Commands](#commands)
   - [Skills](#skills)
   - [MCPs](#mcps)
+  - [Plugins](#plugins)
   - [Memory](#memory)
   - [Config Health](#config-health)
   - [Settings](#settings)
@@ -221,6 +222,12 @@ All installed Claude Code skills, with name and trigger description. Selecting a
 
 All configured MCP (Model Context Protocol) servers from your Claude Code settings, with server name, command, arguments, and environment variables.
 
+### Plugins
+
+Every Claude Code plugin installed on your machine, with the components each one contributes: commands, skills, agents, hooks, and MCP servers. Expand a plugin to see its component names grouped by kind, and click any component to open its source (a skill's `SKILL.md`, a command or agent definition, or a hook/MCP config block) in a sheet.
+
+The rail also runs three dependency checks: a plugin that declares a dependency which is not installed or enabled, a dependency cycle between plugins, and a plugin that contributes no components at all.
+
 ### Memory
 
 All `CLAUDE.md` and memory files Claude Code uses for persistent context: the global `~/.claude/CLAUDE.md`, project-level `CLAUDE.md` files, and auto-memory files. Selecting a file renders its markdown content.
@@ -278,7 +285,7 @@ Press **Cmd+K** to open the command palette for quick navigation between rails a
 
 Claudoscope estimates session costs from raw token counts stored in JSONL session files. These are informational estimates based on published API pricing, not actual billing data.
 
-For each assistant response, the JSONL parser accumulates four counters from the `usage` field: input tokens, output tokens, cache read tokens, and cache creation tokens. The model ID (e.g. `claude-opus-4-6-20250313`) maps to a pricing family, since Opus 4.5+ and Haiku 4.5+ price differently from earlier versions. Three pricing tables are built in (dollars per million tokens):
+For each assistant response, the JSONL parser accumulates four counters from the `usage` field: input tokens, output tokens, cache read tokens, and cache creation tokens. The model ID (e.g. `claude-opus-4-6-20250313`) maps to a pricing family, since Opus 4.5+ and Haiku 4.5+ price differently from earlier versions. Fable 5 is recognized as its own family, so Fable sessions are costed rather than shown as unknown. Three pricing tables are built in (dollars per million tokens):
 
 - **Anthropic API (direct)**: standard published rates including cache creation charges
 - **Vertex AI (Global)**: same input/output rates as Anthropic, cache creation is free
