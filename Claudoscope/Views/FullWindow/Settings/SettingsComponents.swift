@@ -6,6 +6,9 @@ func settingsKeyDisplayName(_ key: String) -> String {
     switch key {
     case "model": return "Model"
     case "smallFastModel": return "Small/Fast Model"
+    case "fallbackModel": return "Fallback Model"
+    case "disableBundledSkills": return "Disable Bundled Skills"
+    case "disableSkillShellExecution": return "Disable Skill Shell Execution"
     case "skipDangerousModePermissionPrompt": return "Skip Dangerous Mode Prompt"
     case "autoMemoryEnabled": return "Auto Memory"
     case "cleanupPeriodDays": return "Cleanup Period (Days)"

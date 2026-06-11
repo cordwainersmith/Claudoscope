@@ -88,6 +88,11 @@ private struct HookEventRow: View {
         case "Stop": return "stop.circle"
         case "UserPromptSubmit": return "paperplane"
         case "Notification": return "bell"
+        case "SessionEnd": return "flag.checkered"
+        case "SubagentStop": return "stop.circle.fill"
+        case "PreCompact": return "arrow.down.right.and.arrow.up.left"
+        case "PostToolUseFailure": return "exclamationmark.triangle"
+        case "FileChanged": return "doc.badge.ellipsis"
         default: return "gearshape"
         }
     }

@@ -101,8 +101,17 @@ extension SettingsMainPanelView {
     func modelSection(_ dict: [String: Any]) -> some View {
         let model = dict["model"] as? String
         let smallModel = dict["smallFastModel"] as? String
+        // fallbackModel (CC 2.1.166) is a string or an ordered list of up to three fallbacks.
+        let fallbackModel: String? = {
+            if let s = dict["fallbackModel"] as? String { return s }
+            if let arr = dict["fallbackModel"] as? [Any] {
+                let strs = arr.compactMap { $0 as? String }
+                return strs.isEmpty ? nil : strs.joined(separator: " → ")
+            }
+            return nil
+        }()
         settingsSection(id: "model", icon: "cpu", title: "Model") {
-            if model != nil || smallModel != nil {
+            if model != nil || smallModel != nil || fallbackModel != nil {
                 VStack(spacing: 0) {
                     if let model = model {
                         SettingsKeyValueRow(key: "model", value: model, mono: true)
@@ -110,6 +119,10 @@ extension SettingsMainPanelView {
                     if let smallModel = smallModel {
                         if model != nil { Divider().padding(.horizontal, 12) }
                         SettingsKeyValueRow(key: "smallFastModel", value: smallModel, mono: true)
+                    }
+                    if let fallbackModel = fallbackModel {
+                        if model != nil || smallModel != nil { Divider().padding(.horizontal, 12) }
+                        SettingsKeyValueRow(key: "fallbackModel", value: fallbackModel, mono: true)
                     }
                 }
             } else {
@@ -323,7 +336,7 @@ extension SettingsMainPanelView {
             "cleanupPeriodDays", "autoMemoryEnabled"
         ]
         let knownTopLevel: Set<String> = [
-            "model", "smallFastModel", "permissions",
+            "model", "smallFastModel", "fallbackModel", "permissions",
             "env", "hooks",
             "sandbox", "skipDangerousModePermissionPrompt", "disableSkillShellExecution",
             "attribution", "includeCoAuthoredBy",
