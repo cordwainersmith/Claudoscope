@@ -1,8 +1,9 @@
 import SwiftUI
+import OrderedCollections
 
 // MARK: - Markdown Block Types
 
-enum MarkdownBlock: Identifiable {
+enum MarkdownBlock: Identifiable, Equatable {
     case heading(level: Int, text: String)
     case paragraph(text: String)
     case codeBlock(language: String?, code: String)
@@ -35,7 +36,47 @@ struct ListItem: Hashable {
 
 // MARK: - Markdown Parser
 
+/// Process-wide memoization for `parseMarkdown`. The parser is regex-heavy and
+/// was re-running on every SwiftUI body evaluation for every visible and
+/// prefetched message, which pegged the main thread on large chat sessions.
+/// Caching by content string makes re-parses O(1). Access is lock-guarded so the
+/// function stays callable from any thread.
+private final class MarkdownBlockCache: @unchecked Sendable {
+    static let shared = MarkdownBlockCache()
+
+    private let lock = NSLock()
+    private var entries = OrderedDictionary<String, [MarkdownBlock]>()
+    private let capacity = 512
+
+    func blocks(for content: String, parse: (String) -> [MarkdownBlock]) -> [MarkdownBlock] {
+        lock.lock()
+        if let hit = entries[content] {
+            entries.removeValue(forKey: content)   // refresh LRU position
+            entries[content] = hit
+            lock.unlock()
+            return hit
+        }
+        lock.unlock()
+
+        // Parse outside the lock so concurrent misses do not serialize.
+        let parsed = parse(content)
+
+        lock.lock()
+        entries[content] = parsed
+        while entries.count > capacity {
+            entries.removeFirst()
+        }
+        lock.unlock()
+        return parsed
+    }
+}
+
+/// Parse markdown into renderable blocks, memoized by content. See `MarkdownBlockCache`.
 func parseMarkdown(_ input: String) -> [MarkdownBlock] {
+    MarkdownBlockCache.shared.blocks(for: input, parse: parseMarkdownUncached)
+}
+
+func parseMarkdownUncached(_ input: String) -> [MarkdownBlock] {
     let lines = input.components(separatedBy: "\n")
     var blocks: [MarkdownBlock] = []
     var i = 0

@@ -40,3 +40,7 @@ ClaudoscopeTests/SecretDetectionTests.swift
 # Security allowlist
 .security-allowlist.json
 .fly/
+
+# User-submitted diagnostics bundles
+claudoscope-diag-*.tar.gz
+claudoscope-diag-*/

@@ -9,9 +9,14 @@ struct RichMarkdownContentView: View {
     var highlight: String = ""
     /// Block offset to emphasize (the current search match); nil for none.
     var activeBlockIndex: Int? = nil
+    private let blocks: [MarkdownBlock]
 
-    private var blocks: [MarkdownBlock] {
-        parseMarkdown(content)
+    init(content: String, fontSize: CGFloat = 13, highlight: String = "", activeBlockIndex: Int? = nil) {
+        self.content = content
+        self.fontSize = fontSize
+        self.highlight = highlight
+        self.activeBlockIndex = activeBlockIndex
+        self.blocks = parseMarkdown(content)
     }
 
     var body: some View {

@@ -1,18 +1,29 @@
 import SwiftUI
 
+/// Remove harness-injected system tags from user message text before rendering.
+/// Returns the trimmed visible prompt, or "" when there is no content.
+func strippedUserText(_ raw: String?) -> String {
+    guard var text = raw else { return "" }
+    let tags = ["system-reminder", "local-command-caveat", "user-prompt-submit-hook"]
+    for tag in tags {
+        text = text.replacingOccurrences(
+            of: "<\(tag)>[\\s\\S]*?</\(tag)>",
+            with: "",
+            options: .regularExpression
+        )
+    }
+    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 // MARK: - User Message
 
 struct UserMessageBubble: View {
     let record: ParsedRecordRaw
+    private let displayText: String
 
-    private var displayText: String {
-        guard let content = record.message?.content else { return "" }
-        var text = content.textContent
-        // Strip system tags
-        text = text.replacingOccurrences(of: #"<system-reminder>[\s\S]*?</system-reminder>"#, with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"<local-command-caveat>[\s\S]*?</local-command-caveat>"#, with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"<user-prompt-submit-hook>[\s\S]*?</user-prompt-submit-hook>"#, with: "", options: .regularExpression)
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    init(record: ParsedRecordRaw) {
+        self.record = record
+        self.displayText = strippedUserText(record.message?.content?.textContent)
     }
 
     var body: some View {

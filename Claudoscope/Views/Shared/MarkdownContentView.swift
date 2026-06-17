@@ -5,9 +5,12 @@ import SwiftUI
 struct MarkdownContentView: View {
     let content: String
     var fontSize: CGFloat = 13
+    private let blocks: [MarkdownBlock]
 
-    private var blocks: [MarkdownBlock] {
-        parseMarkdown(content)
+    init(content: String, fontSize: CGFloat = 13) {
+        self.content = content
+        self.fontSize = fontSize
+        self.blocks = parseMarkdown(content)
     }
 
     var body: some View {
