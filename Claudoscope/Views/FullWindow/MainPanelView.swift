@@ -175,6 +175,7 @@ private struct SessionDetailTabView: View {
             switch selectedTab {
             case .chat:
                 ChatView(session: session)
+                    .id(session.id)
             case .agentTree:
                 AgentTreeView(session: session)
                     .id(session.id)
