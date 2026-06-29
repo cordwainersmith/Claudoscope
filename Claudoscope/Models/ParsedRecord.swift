@@ -52,6 +52,11 @@ struct ParsedRecordRaw: Decodable, Sendable {
     // tool_result records
     let toolUseResult: ToolUseResultRaw?
 
+    // file-history-snapshot records (CC checkpointing / /rewind)
+    let snapshot: FileHistorySnapshotRaw?   // full-only: the tracked-file backup map
+    let isSnapshotUpdate: Bool?             // both modes
+    let messageId: String?                  // top-level messageId (== the assistant turn uuid)
+
     // flags
     let isCompactSummary: Bool?
     let isVisibleInTranscriptOnly: Bool?
@@ -93,6 +98,8 @@ struct ParsedRecordRaw: Decodable, Sendable {
         content = try container.decodeIfPresent(String.self, forKey: .content)
         compactMetadata = try container.decodeIfPresent(CompactMetadataRaw.self, forKey: .compactMetadata)
         toolUseResult = try container.decodeIfPresent(ToolUseResultRaw.self, forKey: .toolUseResult)
+        isSnapshotUpdate = try container.decodeIfPresent(Bool.self, forKey: .isSnapshotUpdate)
+        messageId = try container.decodeIfPresent(String.self, forKey: .messageId)
         isCompactSummary = try container.decodeIfPresent(Bool.self, forKey: .isCompactSummary)
         isVisibleInTranscriptOnly = try container.decodeIfPresent(Bool.self, forKey: .isVisibleInTranscriptOnly)
         // Always-decoded; needed for sidechain (subagent) detection in both modes.
@@ -104,10 +111,12 @@ struct ParsedRecordRaw: Decodable, Sendable {
             parentUuid = try container.decodeIfPresent(String.self, forKey: .parentUuid)
             cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
             logicalParentUuid = try container.decodeIfPresent(String.self, forKey: .logicalParentUuid)
+            snapshot = try container.decodeIfPresent(FileHistorySnapshotRaw.self, forKey: .snapshot)
         } else {
             parentUuid = nil
             cwd = nil
             logicalParentUuid = nil
+            snapshot = nil
         }
     }
 
@@ -116,6 +125,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case message, subtype, content, compactMetadata, logicalParentUuid
         case toolUseResult, isCompactSummary, isVisibleInTranscriptOnly
         case customTitle, agentName, isSidechain, title
+        case snapshot, isSnapshotUpdate, messageId
     }
 }
 
@@ -296,6 +306,23 @@ struct ToolUseResultRaw: Decodable, Sendable {
         case content
         case isError = "is_error"
     }
+}
+
+// MARK: - File History Snapshot (checkpointing / rewind)
+
+/// The `snapshot` object on a `file-history-snapshot` record. `trackedFileBackups`
+/// is keyed by project-relative path; each entry names a backup version under
+/// ~/.claude/file-history/<sessionId>/. Keys are already camelCase in the JSONL.
+struct FileHistorySnapshotRaw: Decodable, Sendable {
+    let messageId: String?
+    let timestamp: String?
+    let trackedFileBackups: [String: FileBackupRaw]?
+}
+
+struct FileBackupRaw: Decodable, Sendable {
+    let backupFileName: String?   // null for the v1 baseline
+    let version: Int?
+    let backupTime: String?
 }
 
 // MARK: - Compact Metadata
