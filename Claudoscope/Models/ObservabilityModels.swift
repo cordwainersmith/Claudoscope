@@ -162,3 +162,33 @@ struct SessionBadgeData: Sendable {
 
     static let none = SessionBadgeData(hasErrors: false, isZombie: false, errorTypes: [])
 }
+
+// MARK: - Blocked / Denied Actions
+
+enum BlockedActionKind: String, Sendable {
+    case destructiveGit
+    case iacDestroy
+    case permissionSetting
+    case userRejected
+    case other
+
+    var label: String {
+        switch self {
+        case .destructiveGit: return "Destructive git"
+        case .iacDestroy: return "Infra destroy"
+        case .permissionSetting: return "Permission denied"
+        case .userRejected: return "User rejected"
+        case .other: return "Blocked"
+        }
+    }
+}
+
+struct BlockedAction: Identifiable, Sendable {
+    let id: String          // originating tool_use id
+    let toolName: String
+    let command: String?    // primary argument (command for Bash)
+    let kind: BlockedActionKind
+    let reason: String      // the denial text
+    let turnIndex: Int
+    let timestamp: String?
+}
