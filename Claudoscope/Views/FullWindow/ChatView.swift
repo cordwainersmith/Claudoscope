@@ -7,6 +7,7 @@ struct ChatView: View {
     @State private var searchText = ""
     @State private var currentMatchIndex = 0
     @State private var fileChangesExpanded = false
+    @State private var blockedActionsExpanded = false
 
     private var turnDurations: [Int: TurnDuration] {
         let durations = ObservabilityAnalyzer.computeTurnDurations(records: session.records)
@@ -137,12 +138,17 @@ struct ChatView: View {
     private var chatScrollView: some View {
         let fileChanges = FileHistoryService.summarize(records: session.records)
         let checkpoints = FileHistoryService.checkpointMessageIds(records: session.records)
+        let blockedActions = ObservabilityAnalyzer.extractBlockedActions(from: extractToolCalls(from: session))
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 Color.clear.frame(height: 0).id("chat-top")
 
                 if session.parentSessionId != nil {
                     ContinuationBanner()
+                }
+
+                if !blockedActions.isEmpty {
+                    blockedActionsSection(blockedActions)
                 }
 
                 if !fileChanges.isEmpty {
@@ -303,6 +309,47 @@ struct ChatView: View {
                     .font(.system(size: 12, weight: .medium))
             }
             .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(.bar)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    @ViewBuilder
+    private func blockedActionsSection(_ actions: [BlockedAction]) -> some View {
+        DisclosureGroup(isExpanded: $blockedActionsExpanded) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(actions) { action in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 8) {
+                            Text(action.kind.label)
+                                .font(.system(size: 10, weight: .medium))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.15))
+                                .foregroundStyle(.orange)
+                                .clipShape(Capsule())
+                            Text(action.command ?? action.toolName)
+                                .font(Typography.code)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Text(action.reason)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.raised")
+                    .font(.system(size: 12))
+                Text("Blocked & denied actions (\(actions.count))")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(.orange)
         }
         .padding(12)
         .background(.bar)

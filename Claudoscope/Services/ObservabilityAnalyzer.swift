@@ -342,6 +342,63 @@ struct ObservabilityAnalyzer {
         return makeNode(parentSession, children: childNodes)
     }
 
+    // MARK: - Blocked / Denied Actions
+
+    /// Canonical tool-rejection strings Claude Code writes into the transcript.
+    /// Auto mode does NOT write a dedicated denial record (verified against real
+    /// 2.1.195 data), so denials ride these `is_error` tool-result messages.
+    /// Kept in one place so wording changes are a single edit.
+    static let denialMarkers: [String] = [
+        "doesn't want to proceed with this tool use",
+        "doesn't want to take this action",
+        "denied by your permission settings"
+    ]
+
+    static func isDenial(resultContent: String?, isError: Bool) -> Bool {
+        guard isError, let content = resultContent else { return false }
+        let lower = content.lowercased()
+        return denialMarkers.contains { lower.contains($0) }
+    }
+
+    /// Best-effort classification. The auto-mode-vs-user distinction is not
+    /// recoverable from the transcript, so command-pattern matches (the 2.1.183
+    /// destructive set) are labeled specifically and everything else falls back
+    /// to a generic user-rejected/blocked kind.
+    static func classifyBlockedAction(toolName: String, command: String?, reason: String) -> BlockedActionKind {
+        if toolName == "Bash", let cmd = command?.lowercased() {
+            if cmd.range(of: "git\\s+reset\\s+--hard", options: .regularExpression) != nil
+                || cmd.range(of: "git\\s+checkout\\s+--\\s+\\.", options: .regularExpression) != nil
+                || cmd.range(of: "git\\s+clean\\s+-[a-z]*f", options: .regularExpression) != nil
+                || cmd.contains("git stash drop")
+                || cmd.range(of: "git\\s+commit\\s+--amend", options: .regularExpression) != nil {
+                return .destructiveGit
+            }
+            if cmd.range(of: "(terraform|pulumi|cdk)\\s+destroy", options: .regularExpression) != nil {
+                return .iacDestroy
+            }
+        }
+        let lowerReason = reason.lowercased()
+        if lowerReason.contains("permission settings") { return .permissionSetting }
+        if lowerReason.contains("doesn't want") { return .userRejected }
+        return .other
+    }
+
+    static func extractBlockedActions(from entries: [ToolCallEntry]) -> [BlockedAction] {
+        entries.compactMap { entry in
+            guard isDenial(resultContent: entry.resultContent, isError: entry.isError) else { return nil }
+            let reason = (entry.resultContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return BlockedAction(
+                id: entry.id,
+                toolName: entry.toolName,
+                command: entry.primaryArg,
+                kind: classifyBlockedAction(toolName: entry.toolName, command: entry.primaryArg, reason: reason),
+                reason: reason,
+                turnIndex: entry.turnIndex,
+                timestamp: entry.timestamp
+            )
+        }
+    }
+
     // MARK: - ISO8601 Parsing Helper
 
     private static func parseISO8601(
