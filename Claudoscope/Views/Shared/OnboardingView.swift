@@ -7,11 +7,12 @@ final class OnboardingWindowController {
 
     private var window: NSWindow?
 
-    func show() {
+    func show(onClosed: (() -> Void)? = nil) {
         guard window == nil else { return }
 
         let contentView = OnboardingView {
             self.dismiss()
+            onClosed?()
         }
 
         let hostingView = NSHostingView(rootView: contentView)

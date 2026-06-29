@@ -4,15 +4,19 @@ import SwiftUI
 struct ClaudoscopeApp: App {
     @State private var store: SessionStore
     @State private var updateService: UpdateService
+    @State private var loginItemService: LoginItemService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     init() {
         let store = SessionStore()
         let updateService = UpdateService()
+        let loginItemService = LoginItemService()
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
+        _loginItemService = State(initialValue: loginItemService)
 
         MainWindowController.shared.setUpdateService(updateService)
+        MainWindowController.shared.setLoginItemService(loginItemService)
 
         store.onSecretAlert = { [weak store] alert in
             guard let store else { return }
@@ -28,9 +32,22 @@ struct ClaudoscopeApp: App {
             )
         }
 
-        if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+        // First-run flow: show onboarding for new users, then (once) ask about launching
+        // at login. Already-onboarded users get the login prompt directly.
+        let onboarded = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
+        let needsLoginPrompt = !UserDefaults.standard.bool(forKey: LaunchAtLoginPrompt.promptedKey)
+
+        if !onboarded {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                OnboardingWindowController.shared.show()
+                OnboardingWindowController.shared.show {
+                    if needsLoginPrompt {
+                        LaunchAtLoginPrompt.presentIfNeeded(service: loginItemService)
+                    }
+                }
+            }
+        } else if needsLoginPrompt {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                LaunchAtLoginPrompt.presentIfNeeded(service: loginItemService)
             }
         }
     }
@@ -41,6 +58,7 @@ struct ClaudoscopeApp: App {
             MenuBarPopoverContent()
                 .environment(store)
                 .environment(updateService)
+                .environment(loginItemService)
                 .background {
                     UpdateTriggerView()
                         .environment(updateService)

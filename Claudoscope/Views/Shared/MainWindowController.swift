@@ -18,9 +18,14 @@ final class PersistentWindow: NSWindow {
     private var window: NSWindow?
 
     private var updateService: UpdateService?
+    private var loginItemService: LoginItemService?
 
     func setUpdateService(_ service: UpdateService) {
         self.updateService = service
+    }
+
+    func setLoginItemService(_ service: LoginItemService) {
+        self.loginItemService = service
     }
 
     func open(store: SessionStore, updateService: UpdateService? = nil) {
@@ -37,9 +42,11 @@ final class PersistentWindow: NSWindow {
         }
 
         precondition(self.updateService != nil, "MainWindowController.open requires setUpdateService first")
+        precondition(self.loginItemService != nil, "MainWindowController.open requires setLoginItemService first")
         let contentView = FullWindowView()
             .environment(store)
             .environment(self.updateService!)
+            .environment(self.loginItemService!)
             .frame(minWidth: 900, minHeight: 600)
 
         let hostingView = NSHostingView(rootView: contentView)

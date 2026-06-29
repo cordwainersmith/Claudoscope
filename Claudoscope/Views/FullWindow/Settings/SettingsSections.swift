@@ -362,6 +362,10 @@ extension SettingsMainPanelView {
 
         settingsSection(id: "general", icon: "gear", title: "General") {
             VStack(alignment: .leading, spacing: 0) {
+                LaunchAtLoginRow()
+
+                Divider().padding(.horizontal, 12)
+
                 // Cleanup period highlight
                 CleanupPeriodRow(
                     currentDays: currentCleanup,
@@ -1038,5 +1042,53 @@ struct UpdatesSectionContent: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Launch at Login Row
+
+struct LaunchAtLoginRow: View {
+    @Environment(LoginItemService.self) private var loginItemService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Open Claudoscope at login", isOn: Binding(
+                get: { loginItemService.isEnabled },
+                set: { loginItemService.setEnabled($0) }
+            ))
+            .toggleStyle(.checkbox)
+            .font(Typography.body)
+            .disabled(loginItemService.isUnavailable)
+
+            Text("Start Claudoscope automatically when you log in to your Mac.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            if loginItemService.requiresApproval {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                    Text("Disabled for Claudoscope in System Settings.")
+                        .font(.system(size: 11))
+                    Button("Open Login Items") {
+                        loginItemService.openSystemLoginItems()
+                    }
+                    .font(.system(size: 11))
+                }
+                .foregroundStyle(.orange)
+            }
+
+            if loginItemService.isUnavailable {
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 11))
+                    Text("Available in the installed app.")
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .onAppear { loginItemService.refresh() }
     }
 }
