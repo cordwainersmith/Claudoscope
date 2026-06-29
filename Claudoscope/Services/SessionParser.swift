@@ -480,6 +480,7 @@ actor SessionParser {
         // logic. Identical semantics to the previous streaming version: the
         // only difference is that we already have the full record set in
         // memory, so the orphan-detection set above can be precomputed.
+        var spawnedAgentIds = Set<String>()
         for (idx, raw) in bufferedRecords.enumerated() {
             try Task.checkCancellation()
             if let ts = raw.timestamp {
@@ -712,6 +713,10 @@ actor SessionParser {
                 turnsSinceLastCompaction = 0
             }
 
+            if let childId = raw.toolUseResult?.childAgentId, !childId.isEmpty {
+                spawnedAgentIds.insert(ObservabilityAnalyzer.normalizeAgentId(childId))
+            }
+
             if let ts = raw.timestamp { recordTimestamps.append(ts) }
         }
 
@@ -819,7 +824,9 @@ actor SessionParser {
             toolCallCount: toolCallCount,
             observability: observability,
             isSubagent: isSubagentFile,
-            dailyContributions: dailyContributions
+            dailyContributions: dailyContributions,
+            agentId: isSubagentFile ? ObservabilityAnalyzer.normalizeAgentId(sessionId) : nil,
+            spawnedAgentIds: Array(spawnedAgentIds)
         )
     }
 

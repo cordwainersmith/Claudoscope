@@ -300,11 +300,17 @@ struct ToolUseResultRaw: Decodable, Sendable {
     let toolUseId: String?
     let content: String?
     let isError: Bool?
+    // Spawn edge: present on the parent's tool-result record when an Agent/Task
+    // tool call spawned a subagent. agentId is the bare hex id of the child.
+    let childAgentId: String?
+    let childAgentType: String?
 
     enum CodingKeys: String, CodingKey {
         case toolUseId = "tool_use_id"
         case content
         case isError = "is_error"
+        case childAgentId = "agentId"
+        case childAgentType = "agentType"
     }
 }
 
