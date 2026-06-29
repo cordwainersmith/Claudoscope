@@ -92,8 +92,18 @@ actor ConfigLinterService {
         results.append(contentsOf: lintHardening(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))
 
         // Plugin inventory checks (PLG001-PLG003)
-        let plugins = await ConfigService(claudeDir: globalClaudeDir).loadPlugins()
+        let configService = ConfigService(claudeDir: globalClaudeDir)
+        let plugins = await configService.loadPlugins()
         results.append(contentsOf: lintPlugins(plugins: plugins))
+
+        // Hook matcher checks (HOOK001-HOOK004)
+        var hookProjectPaths: [(name: String, path: String)] = []
+        if let root = projectRoot {
+            hookProjectPaths.append((name: (root as NSString).lastPathComponent, path: root))
+        }
+        let hookGroups = await configService.loadHooks(projectPaths: hookProjectPaths)
+        let mcpServerNames = Set(await configService.loadMcpServers(projectPath: projectRoot).map { $0.name })
+        results.append(contentsOf: lintHooks(hookGroups: hookGroups, mcpServerNames: mcpServerNames))
 
         // Sort by severity (errors first)
         results.sort { $0.severity < $1.severity }
