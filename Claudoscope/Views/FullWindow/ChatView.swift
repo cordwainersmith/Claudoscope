@@ -6,6 +6,7 @@ struct ChatView: View {
     @State private var isNearBottom = false
     @State private var searchText = ""
     @State private var currentMatchIndex = 0
+    @State private var fileChangesExpanded = false
 
     private var turnDurations: [Int: TurnDuration] {
         let durations = ObservabilityAnalyzer.computeTurnDurations(records: session.records)
@@ -134,7 +135,9 @@ struct ChatView: View {
     }
 
     private var chatScrollView: some View {
-        ScrollView {
+        let fileChanges = FileHistoryService.summarize(records: session.records)
+        let checkpoints = FileHistoryService.checkpointMessageIds(records: session.records)
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 Color.clear.frame(height: 0).id("chat-top")
 
@@ -142,8 +145,12 @@ struct ChatView: View {
                     ContinuationBanner()
                 }
 
+                if !fileChanges.isEmpty {
+                    fileChangesSection(fileChanges)
+                }
+
                 ForEach(Array(session.records.enumerated()), id: \.offset) { index, record in
-                    searchHighlightedRecord(record: record, index: index)
+                    searchHighlightedRecord(record: record, index: index, checkpoints: checkpoints)
                 }
 
                 Color.clear.frame(height: 0).id("chat-bottom")
@@ -176,7 +183,7 @@ struct ChatView: View {
     }
 
     @ViewBuilder
-    private func searchHighlightedRecord(record: ParsedRecordRaw, index: Int) -> some View {
+    private func searchHighlightedRecord(record: ParsedRecordRaw, index: Int, checkpoints: Set<String>) -> some View {
         let isMatch = matchingIndices.contains(index)
         let isCurrentMatch = !matchingIndices.isEmpty
             && matchingIndices.indices.contains(currentMatchIndex)
@@ -185,7 +192,7 @@ struct ChatView: View {
         let borderWidth: CGFloat = isCurrentMatch ? 2 : 1
         let bgColor: Color = isCurrentMatch ? Color.orange.opacity(0.08) : (isMatch ? Color.yellow.opacity(0.05) : .clear)
 
-        recordView(for: record, index: index)
+        recordView(for: record, index: index, checkpoints: checkpoints)
             .id("record-\(index)")
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
@@ -231,19 +238,31 @@ struct ChatView: View {
     }
 
     @ViewBuilder
-    private func recordView(for record: ParsedRecordRaw, index: Int) -> some View {
+    private func recordView(for record: ParsedRecordRaw, index: Int, checkpoints: Set<String>) -> some View {
         switch record.type {
         case .user:
             UserMessageBubble(record: record)
 
         case .assistant:
-            AssistantMessageView(
-                record: record,
-                toolResultMap: session.toolResultMap,
-                searchText: searchText,
-                turnDuration: turnDurations[index],
-                parallelToolCount: parallelToolCounts[index] ?? 0
-            )
+            let isCheckpoint = record.uuid.map { checkpoints.contains($0) } ?? false
+            VStack(alignment: .leading, spacing: 4) {
+                if isCheckpoint {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 10))
+                        Text("Checkpoint")
+                            .font(.system(size: 10, weight: .medium))
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                AssistantMessageView(
+                    record: record,
+                    toolResultMap: session.toolResultMap,
+                    searchText: searchText,
+                    turnDuration: turnDurations[index],
+                    parallelToolCount: parallelToolCounts[index] ?? 0
+                )
+            }
 
         case .system:
             if record.subtype == "compact_boundary" {
@@ -253,6 +272,41 @@ struct ChatView: View {
         default:
             EmptyView()
         }
+    }
+
+    @ViewBuilder
+    private func fileChangesSection(_ changes: [FileChangeSummary]) -> some View {
+        DisclosureGroup(isExpanded: $fileChangesExpanded) {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(changes) { change in
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        Text(change.path)
+                            .font(Typography.code)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Spacer()
+                        Text("v\(change.latestVersion)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+            }
+            .padding(.top, 6)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 12))
+                Text("Files changed (\(changes.count))")
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(.bar)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
