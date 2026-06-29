@@ -41,6 +41,12 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SKL013  // allowed-tools/disallowed-tools malformed or contradictory
     case SKL_AGG  // aggregate descriptions >16000 chars
 
+    // Hook matcher checks
+    case HOOK001  // mcp__ matcher with no tool segment matches no tool (CC 2.1.195 exact-match)
+    case HOOK002  // comma-separated matcher silently never fires (<CC 2.1.191)
+    case HOOK003  // matcher references unknown/removed MCP server
+    case HOOK004  // matcher set on an event that ignores matchers
+
     // Cross-cutting
     case XCT001  // total token estimate
     case XCT002  // tokens >5000

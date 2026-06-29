@@ -251,6 +251,22 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "autoMode missing hard_deny baseline",
         hint: "settings.json has an autoMode block but no hard_deny baseline. hard_deny rules are the non-bypassable stops for unattended runs; without them the agent can take destructive actions autonomously during long or batch jobs. Add a hard_deny baseline."
     ),
+    .HOOK001: RuleMetadata(
+        displayName: "Hook matcher matches no tool",
+        hint: "This matcher names an MCP server but has no tool segment, so it matches nothing. Since Claude Code 2.1.195, matchers like \"mcp__server\" (and hyphenated names like \"mcp__brave-search\") are compared exactly and never match real tool names, which are \"mcp__server__tool\". Append \"__.*\" to match all of the server's tools."
+    ),
+    .HOOK002: RuleMetadata(
+        displayName: "Comma-separated hook matcher",
+        hint: "Comma-separated matchers (e.g. \"Bash,PowerShell\") silently never fired before Claude Code 2.1.191. Use \"|\" as the separator (\"Bash|PowerShell\") so the hook fires across versions."
+    ),
+    .HOOK003: RuleMetadata(
+        displayName: "Hook matcher references unknown MCP server",
+        hint: "This matcher targets an MCP server that is not in the loaded configuration. It may be a typo or a removed server, in which case the hook never fires. Verify the server name (plugin-provided servers are not always detected, so this is advisory)."
+    ),
+    .HOOK004: RuleMetadata(
+        displayName: "Matcher ignored on this event",
+        hint: "This hook event does not support matchers; the matcher is silently ignored and the hook always fires. Remove the matcher field to make the configuration explicit."
+    ),
     .PLG001: RuleMetadata(
         displayName: "Unsatisfied plugin dependency",
         hint: "A plugin declares a dependency that is not installed or enabled. Install or enable the dependency, or remove the requirement."
@@ -277,7 +293,7 @@ struct CategoryDef: Identifiable {
 let healthCategories: [CategoryDef] = [
     CategoryDef(id: "security", label: "Security", icon: "!", color: Color(red: 0.886, green: 0.294, blue: 0.290), prefixes: ["SEC"], sortOrder: 1),
     CategoryDef(id: "performance", label: "Session performance", icon: "~", color: Color(red: 0.937, green: 0.624, blue: 0.153), prefixes: ["SES"], sortOrder: 2),
-    CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS"], sortOrder: 3),
+    CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS", "HOOK"], sortOrder: 3),
     CategoryDef(id: "config", label: "Configuration", icon: "i", color: Color(red: 0.216, green: 0.541, blue: 0.867), prefixes: ["XCT", "CFG", "CMD", "RUL"], sortOrder: 4),
     CategoryDef(id: "plugins", label: "Plugins", icon: "P", color: Color(red: 0.357, green: 0.678, blue: 0.518), prefixes: ["PLG"], sortOrder: 5),
 ]
