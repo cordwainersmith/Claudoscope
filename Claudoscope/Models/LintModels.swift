@@ -71,6 +71,9 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG006  // CLAUDE_CODE_SUBPROCESS_ENV_SCRUB not set
     case CFG007  // disableSkillShellExecution not set
     case CFG008  // allowAllClaudeAiMcps enabled (governance risk)
+    case CFG009  // sandbox.enabled without sandbox.credentials
+    case CFG010  // sandbox.allowAppleEvents enabled (weakens isolation)
+    case CFG011  // respondToBashCommands disabled with hooks present
 
     // Hardening baseline checks
     case HRD001  // sandbox.enabled missing or false
@@ -85,6 +88,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case HRD010  // governance block missing or drifted in CLAUDE.md
     case HRD011  // security awareness skill missing or drifted
     case HRD012  // autoMode present but missing hard_deny baseline
+    case HRD013  // availableModels listed but not enforced
 
     // Plugin checks
     case PLG001  // unsatisfied or missing plugin dependency

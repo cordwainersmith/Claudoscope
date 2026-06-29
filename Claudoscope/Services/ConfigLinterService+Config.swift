@@ -132,6 +132,48 @@ extension ConfigLinterService {
             ))
         }
 
+        // CFG009: sandbox enabled but no credential protection configured (CC 2.1.187)
+        if let sandbox = json["sandbox"] as? [String: Any],
+           let enabled = sandbox["enabled"] as? Bool, enabled {
+            let cred = sandbox["credentials"] as? [String: Any]
+            let fileCount = (cred?["files"] as? [Any])?.count ?? 0
+            let envCount = (cred?["envVars"] as? [Any])?.count ?? 0
+            if cred == nil || (fileCount == 0 && envCount == 0) {
+                results.append(LintResult(
+                    severity: .info,
+                    checkId: .CFG009,
+                    filePath: settingsPath,
+                    message: "sandbox.enabled is true but sandbox.credentials is not configured. Sandboxed commands can still read credential files and secret environment variables.",
+                    fix: "Add sandbox.credentials.files and/or sandbox.credentials.envVars deny entries to block secret access.",
+                    displayPath: "settings.json"
+                ))
+            }
+        }
+
+        // CFG010: sandbox.allowAppleEvents weakens isolation (CC 2.1.181)
+        if let sandbox = json["sandbox"] as? [String: Any],
+           let allowAE = sandbox["allowAppleEvents"] as? Bool, allowAE {
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .CFG010,
+                filePath: settingsPath,
+                message: "sandbox.allowAppleEvents is enabled. Sandboxed commands can send Apple Events to launch or control other apps, weakening process isolation.",
+                fix: "Set sandbox.allowAppleEvents to false unless a specific workflow requires it.",
+                displayPath: "settings.json"
+            ))
+        }
+
+        // CFG011: respondToBashCommands disabled while hooks are configured (CC 2.1.186)
+        if let respond = json["respondToBashCommands"] as? Bool, !respond, json["hooks"] != nil {
+            results.append(LintResult(
+                severity: .info,
+                checkId: .CFG011,
+                filePath: settingsPath,
+                message: "respondToBashCommands is false, so \"!\" bash commands are added to context without a model response. Confirm hook-driven automation still behaves as intended.",
+                displayPath: "settings.json"
+            ))
+        }
+
         return results
     }
 }

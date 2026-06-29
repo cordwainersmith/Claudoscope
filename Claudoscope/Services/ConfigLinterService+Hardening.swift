@@ -300,6 +300,20 @@ extension ConfigLinterService {
             }
         }
 
+        // HRD013: availableModels listed but not enforced (CC 2.1.175)
+        let availableModels = settingsJSON["availableModels"] as? [String] ?? []
+        let enforceModels = settingsJSON["enforceAvailableModels"] as? Bool ?? false
+        if !availableModels.isEmpty && !enforceModels {
+            results.append(LintResult(
+                severity: .info,
+                checkId: .HRD013,
+                filePath: settingsPath,
+                message: "availableModels lists \(availableModels.count) model(s) but enforceAvailableModels is not enabled, so the allowlist is not enforced.",
+                fix: "Set enforceAvailableModels to true to constrain the default model to the allowlist.",
+                displayPath: "settings.json"
+            ))
+        }
+
         return results
     }
 

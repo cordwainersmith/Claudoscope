@@ -150,4 +150,102 @@ final class ExtendedConfigTests: XCTestCase {
         let ext = await service.loadExtendedConfig()
         XCTAssertNil(ext.cleanupPeriodDays)
     }
+
+    // MARK: - sandbox.credentials / allowAppleEvents (CC 2.1.187 / 2.1.181)
+
+    func testSandboxCredentialsObjectFormParsed() async throws {
+        try writeSettings([
+            "sandbox": [
+                "credentials": [
+                    "files": [["path": "~/.aws/credentials", "mode": "deny"]],
+                    "envVars": [["name": "AWS_SECRET_ACCESS_KEY", "mode": "deny"]]
+                ]
+            ]
+        ])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.sandbox?.credentials?.files, ["~/.aws/credentials"])
+        XCTAssertEqual(ext.sandbox?.credentials?.envVars, ["AWS_SECRET_ACCESS_KEY"])
+    }
+
+    func testSandboxCredentialsStringArrayFormParsed() async throws {
+        try writeSettings([
+            "sandbox": ["credentials": ["files": ["~/.netrc"], "envVars": ["TOKEN"]]]
+        ])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.sandbox?.credentials?.files, ["~/.netrc"])
+        XCTAssertEqual(ext.sandbox?.credentials?.envVars, ["TOKEN"])
+    }
+
+    func testSandboxAllowAppleEventsParsed() async throws {
+        try writeSettings(["sandbox": ["allowAppleEvents": true]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.sandbox?.allowAppleEvents, true)
+    }
+
+    func testSandboxCredentialsAbsentByDefault() async throws {
+        try writeSettings(["sandbox": ["enabled": true]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertNil(ext.sandbox?.credentials)
+        XCTAssertEqual(ext.sandbox?.allowAppleEvents, false)
+    }
+
+    // MARK: - attribution.sessionUrl (CC 2.1.183)
+
+    func testAttributionSessionUrlOmittedWhenFalse() async throws {
+        try writeSettings(["attribution": ["sessionUrl": false]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.attribution?.omitSessionUrl, true)
+    }
+
+    func testAttributionSessionUrlNotOmittedByDefault() async throws {
+        try writeSettings(["attribution": ["commitMessage": "x"]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.attribution?.omitSessionUrl, false)
+    }
+
+    // MARK: - autoMode.classifyAllShell (CC 2.1.193)
+
+    func testAutoModeClassifyAllShellParsed() async throws {
+        try writeSettings(["autoMode": ["classifyAllShell": true]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.autoMode?.classifyAllShell, true)
+    }
+
+    // MARK: - availableModels / enforce / version pins / respondToBashCommands
+
+    func testAvailableModelsAndEnforceParsed() async throws {
+        try writeSettings([
+            "availableModels": ["claude-opus-4-8", "claude-sonnet-4-6"],
+            "enforceAvailableModels": true
+        ])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.availableModels, ["claude-opus-4-8", "claude-sonnet-4-6"])
+        XCTAssertTrue(ext.enforceAvailableModels)
+    }
+
+    func testRequiredVersionsParsed() async throws {
+        try writeSettings([
+            "requiredMinimumVersion": "2.1.180",
+            "requiredMaximumVersion": "2.2.0"
+        ])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.requiredMinimumVersion, "2.1.180")
+        XCTAssertEqual(ext.requiredMaximumVersion, "2.2.0")
+    }
+
+    func testRespondToBashCommandsParsed() async throws {
+        try writeSettings(["respondToBashCommands": false])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.respondToBashCommands, false)
+    }
+
+    func testNewKeysDefaultWhenUnset() async throws {
+        try writeSettings([:])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertNil(ext.respondToBashCommands)
+        XCTAssertEqual(ext.availableModels, [])
+        XCTAssertFalse(ext.enforceAvailableModels)
+        XCTAssertNil(ext.requiredMinimumVersion)
+        XCTAssertNil(ext.requiredMaximumVersion)
+    }
 }

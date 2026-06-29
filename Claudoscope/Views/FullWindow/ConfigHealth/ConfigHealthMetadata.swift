@@ -247,9 +247,25 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "All claude.ai MCP servers trusted",
         hint: "allowAllClaudeAiMcps is enabled, which trusts every claude.ai MCP server without per-server review. Disable it and allow only the MCP servers you intend to use."
     ),
+    .CFG009: RuleMetadata(
+        displayName: "Sandbox credentials not configured",
+        hint: "sandbox.enabled is true but sandbox.credentials is not set, so sandboxed commands can still read credential files and secret environment variables. Add sandbox.credentials.files / .envVars deny entries (Claude Code 2.1.187) to block secret access from inside the sandbox."
+    ),
+    .CFG010: RuleMetadata(
+        displayName: "Apple Events allowed from sandbox",
+        hint: "sandbox.allowAppleEvents is enabled, letting sandboxed commands send Apple Events to launch or control other apps. This weakens process isolation; disable it unless a specific workflow needs it."
+    ),
+    .CFG011: RuleMetadata(
+        displayName: "Bash commands do not trigger a response",
+        hint: "respondToBashCommands is false, so \"!\" bash commands are added to context without a model response. Harmless on its own, but confirm any hook-driven automation still behaves as intended."
+    ),
     .HRD012: RuleMetadata(
         displayName: "autoMode missing hard_deny baseline",
         hint: "settings.json has an autoMode block but no hard_deny baseline. hard_deny rules are the non-bypassable stops for unattended runs; without them the agent can take destructive actions autonomously during long or batch jobs. Add a hard_deny baseline."
+    ),
+    .HRD013: RuleMetadata(
+        displayName: "Model allowlist not enforced",
+        hint: "availableModels lists models but enforceAvailableModels is not enabled, so the default model is not constrained to the allowlist. In managed/team setups, set enforceAvailableModels to true (and consider requiredMinimumVersion / requiredMaximumVersion to pin the Claude Code version range)."
     ),
     .HOOK001: RuleMetadata(
         displayName: "Hook matcher matches no tool",
