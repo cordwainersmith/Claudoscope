@@ -281,11 +281,22 @@ struct ObservabilityAnalyzer {
 
     // MARK: - Subagent Tree
 
+    /// Strip the subagent filename decorations down to the bare agent id that
+    /// `toolUseResult.agentId` references: drops the "agent-" prefix and the
+    /// "acompact-"/"aside_question-" infixes used by context-fork files.
+    static func normalizeAgentId(_ raw: String) -> String {
+        var s = raw
+        if s.hasPrefix("agent-") { s = String(s.dropFirst("agent-".count)) }
+        if s.hasPrefix("acompact-") { s = String(s.dropFirst("acompact-".count)) }
+        if s.hasPrefix("aside_question-") { s = String(s.dropFirst("aside_question-".count)) }
+        return s
+    }
+
     static func buildSubagentTree(
         parentSession: SessionSummary,
         subagentSummaries: [SessionSummary]
     ) -> SubagentNode {
-        let children = subagentSummaries.map { sub in
+        func makeNode(_ sub: SessionSummary, children: [SubagentNode]) -> SubagentNode {
             SubagentNode(
                 id: sub.id,
                 sessionTitle: sub.title,
@@ -295,21 +306,40 @@ struct ObservabilityAnalyzer {
                 estimatedCost: sub.estimatedCost,
                 toolCallCount: sub.toolCallCount,
                 messageCount: sub.messageCount,
-                children: []
+                children: children
             )
         }
 
-        return SubagentNode(
-            id: parentSession.id,
-            sessionTitle: parentSession.title,
-            model: parentSession.primaryModel,
-            totalInputTokens: parentSession.totalInputTokens,
-            totalOutputTokens: parentSession.totalOutputTokens,
-            estimatedCost: parentSession.estimatedCost,
-            toolCallCount: parentSession.toolCallCount,
-            messageCount: parentSession.messageCount,
-            children: children
-        )
+        // Index subagents by bare agent id and collect every spawned id.
+        var byAgentId: [String: SessionSummary] = [:]
+        for sub in subagentSummaries {
+            if let aid = sub.agentId { byAgentId[aid] = sub }
+        }
+        let spawnedByOthers = Set(subagentSummaries.flatMap(\.spawnedAgentIds))
+
+        // Forest roots: subagents the session spawned directly (not spawned by
+        // another subagent). With no edge info every subagent is a root, which
+        // reproduces the previous flat rendering.
+        let rootSummaries = subagentSummaries.filter { sub in
+            guard let aid = sub.agentId else { return true }
+            return !spawnedByOthers.contains(aid)
+        }
+
+        var visited = Set<String>()
+        func node(_ sub: SessionSummary, depth: Int) -> SubagentNode {
+            let key = sub.agentId ?? sub.id
+            guard depth < 16, visited.insert(key).inserted else {
+                return makeNode(sub, children: [])
+            }
+            let childNodes = sub.spawnedAgentIds
+                .compactMap { byAgentId[$0] }
+                .filter { $0.id != sub.id }
+                .map { node($0, depth: depth + 1) }
+            return makeNode(sub, children: childNodes)
+        }
+
+        let childNodes = rootSummaries.map { node($0, depth: 1) }
+        return makeNode(parentSession, children: childNodes)
     }
 
     // MARK: - ISO8601 Parsing Helper

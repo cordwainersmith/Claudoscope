@@ -86,6 +86,10 @@ struct SessionSummary: Identifiable, Sendable {
     /// above; date-windowed analytics sum only the in-range days so a `/resume`d
     /// session's earlier-day spend is not counted under "today".
     let dailyContributions: [DailyContribution]
+    /// Subagent linkage (subagent files only): this file's bare agent id and the
+    /// bare ids of subagents it spawned (via toolUseResult.agentId).
+    let agentId: String?
+    let spawnedAgentIds: [String]
 
     init(
         id: String,
@@ -110,7 +114,9 @@ struct SessionSummary: Identifiable, Sendable {
         observability: SessionObservability,
         isSubagent: Bool,
         dailyContributions: [DailyContribution],
-        isCowork: Bool = false
+        isCowork: Bool = false,
+        agentId: String? = nil,
+        spawnedAgentIds: [String] = []
     ) {
         self.id = id
         self.projectId = projectId
@@ -135,6 +141,8 @@ struct SessionSummary: Identifiable, Sendable {
         self.isSubagent = isSubagent
         self.dailyContributions = dailyContributions
         self.isCowork = isCowork
+        self.agentId = agentId
+        self.spawnedAgentIds = spawnedAgentIds
     }
 }
 
