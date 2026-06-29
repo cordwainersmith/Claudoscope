@@ -69,10 +69,31 @@ extension ConfigService {
             let weaker = sandboxDict["enableWeakerNestedSandbox"] as? Bool ?? false
             let network = sandboxDict["network"] as? [String: Any]
             let denied = network?["deniedDomains"] as? [String] ?? []
+            // credentials (CC 2.1.187): { files: [{path, mode}], envVars: [{name, mode}] }.
+            // Tolerate both the object form and a plain string-array form.
+            var credentials: SandboxCredentials? = nil
+            if let credDict = sandboxDict["credentials"] as? [String: Any] {
+                let files: [String]
+                if let arr = credDict["files"] as? [[String: Any]] {
+                    files = arr.compactMap { $0["path"] as? String }
+                } else {
+                    files = credDict["files"] as? [String] ?? []
+                }
+                let envVars: [String]
+                if let arr = credDict["envVars"] as? [[String: Any]] {
+                    envVars = arr.compactMap { $0["name"] as? String }
+                } else {
+                    envVars = credDict["envVars"] as? [String] ?? []
+                }
+                credentials = SandboxCredentials(files: files, envVars: envVars)
+            }
+            let allowAppleEvents = sandboxDict["allowAppleEvents"] as? Bool ?? false
             sandbox = SandboxConfig(
                 unsandboxedCommands: cmds,
                 enableWeakerNestedSandbox: weaker,
-                deniedDomains: denied
+                deniedDomains: denied,
+                credentials: credentials,
+                allowAppleEvents: allowAppleEvents
             )
         } else {
             sandbox = nil
@@ -87,7 +108,8 @@ extension ConfigService {
             let commit = attrDict["commitMessage"] as? String
             let pr = attrDict["pullRequestDescription"] as? String
             let deprecated = settings["includeCoAuthoredBy"] != nil
-            attribution = AttributionConfig(commitTemplate: commit, prTemplate: pr, hasDeprecatedCoAuthoredBy: deprecated)
+            let omitSessionUrl = (attrDict["sessionUrl"] as? Bool) == false
+            attribution = AttributionConfig(commitTemplate: commit, prTemplate: pr, hasDeprecatedCoAuthoredBy: deprecated, omitSessionUrl: omitSessionUrl)
         } else if settings["includeCoAuthoredBy"] != nil {
             attribution = AttributionConfig(commitTemplate: nil, prTemplate: nil, hasDeprecatedCoAuthoredBy: true)
         } else {
@@ -101,13 +123,19 @@ extension ConfigService {
         if let autoModeDict = settings["autoMode"] as? [String: Any] {
             let hardDeny = autoModeDict["hard_deny"] as? [String] ?? []
             let environment = autoModeDict["environment"] as? [String] ?? []
-            autoMode = AutoModeConfig(hardDeny: hardDeny, environment: environment)
+            let classifyAllShell = autoModeDict["classifyAllShell"] as? Bool ?? false
+            autoMode = AutoModeConfig(hardDeny: hardDeny, environment: environment, classifyAllShell: classifyAllShell)
         } else {
             autoMode = nil
         }
 
         let allowAllClaudeAiMcps = settings["allowAllClaudeAiMcps"] as? Bool
         let cleanupPeriodDays = settings["cleanupPeriodDays"] as? Int
+        let respondToBashCommands = settings["respondToBashCommands"] as? Bool
+        let availableModels = settings["availableModels"] as? [String] ?? []
+        let enforceAvailableModels = settings["enforceAvailableModels"] as? Bool ?? false
+        let requiredMinimumVersion = settings["requiredMinimumVersion"] as? String
+        let requiredMaximumVersion = settings["requiredMaximumVersion"] as? String
 
         // Plugins
         var plugins: [PluginInfo] = []
@@ -191,7 +219,12 @@ extension ConfigService {
             profile: profile,
             autoMode: autoMode,
             allowAllClaudeAiMcps: allowAllClaudeAiMcps,
-            cleanupPeriodDays: cleanupPeriodDays
+            cleanupPeriodDays: cleanupPeriodDays,
+            respondToBashCommands: respondToBashCommands,
+            availableModels: availableModels,
+            enforceAvailableModels: enforceAvailableModels,
+            requiredMinimumVersion: requiredMinimumVersion,
+            requiredMaximumVersion: requiredMaximumVersion
         )
     }
 

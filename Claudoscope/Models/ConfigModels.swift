@@ -91,16 +91,24 @@ struct MemoryFile: Identifiable, Sendable {
 
 // MARK: - Extended Config Models
 
+struct SandboxCredentials: Sendable {
+    let files: [String]      // sandbox.credentials.files paths (mode: deny)
+    let envVars: [String]    // sandbox.credentials.envVars names (mode: deny)
+}
+
 struct SandboxConfig: Sendable {
     let unsandboxedCommands: [String]
     let enableWeakerNestedSandbox: Bool
     let deniedDomains: [String]
+    var credentials: SandboxCredentials? = nil   // sandbox.credentials (CC 2.1.187)
+    var allowAppleEvents: Bool = false            // sandbox.allowAppleEvents (CC 2.1.181)
 }
 
 struct AttributionConfig: Sendable {
     let commitTemplate: String?
     let prTemplate: String?
     let hasDeprecatedCoAuthoredBy: Bool
+    var omitSessionUrl: Bool = false              // attribution.sessionUrl == false (CC 2.1.183)
 }
 
 /// One drillable component a plugin contributes (a skill, agent, command, or
@@ -144,6 +152,7 @@ struct ClaudeProfile: Sendable {
 struct AutoModeConfig: Sendable {
     let hardDeny: [String]      // autoMode.hard_deny rules
     let environment: [String]   // autoMode.environment trusted entries
+    var classifyAllShell: Bool = false   // autoMode.classifyAllShell (CC 2.1.193)
 }
 
 struct ExtendedConfig: Sendable {
@@ -158,6 +167,11 @@ struct ExtendedConfig: Sendable {
     var autoMode: AutoModeConfig? = nil       // settings.json autoMode block (CC 2.1.136)
     var allowAllClaudeAiMcps: Bool? = nil     // managed setting (CC 2.1.149)
     var cleanupPeriodDays: Int? = nil         // settings.json transcript retention (default 30)
+    var respondToBashCommands: Bool? = nil    // CC 2.1.186 (default true)
+    var availableModels: [String] = []        // model allowlist
+    var enforceAvailableModels: Bool = false  // managed (CC 2.1.175)
+    var requiredMinimumVersion: String? = nil // managed (CC 2.1.163)
+    var requiredMaximumVersion: String? = nil // managed (CC 2.1.163)
 }
 
 // MARK: - Theme Models

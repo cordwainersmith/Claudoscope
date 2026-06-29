@@ -110,8 +110,10 @@ extension SettingsMainPanelView {
             }
             return nil
         }()
+        let availableModels = dict["availableModels"] as? [String] ?? []
+        let enforceModels = dict["enforceAvailableModels"] as? Bool ?? false
         settingsSection(id: "model", icon: "cpu", title: "Model") {
-            if model != nil || smallModel != nil || fallbackModel != nil {
+            if model != nil || smallModel != nil || fallbackModel != nil || !availableModels.isEmpty {
                 VStack(spacing: 0) {
                     if let model = model {
                         SettingsKeyValueRow(key: "model", value: model, mono: true)
@@ -123,6 +125,14 @@ extension SettingsMainPanelView {
                     if let fallbackModel = fallbackModel {
                         if model != nil || smallModel != nil { Divider().padding(.horizontal, 12) }
                         SettingsKeyValueRow(key: "fallbackModel", value: fallbackModel, mono: true)
+                    }
+                    if !availableModels.isEmpty {
+                        if model != nil || smallModel != nil || fallbackModel != nil { Divider().padding(.horizontal, 12) }
+                        SettingsKeyValueRow(
+                            key: enforceModels ? "availableModels (enforced)" : "availableModels",
+                            value: availableModels.joined(separator: ", "),
+                            mono: true
+                        )
                     }
                 }
             } else {
@@ -205,7 +215,10 @@ extension SettingsMainPanelView {
         let deniedDomains = sandbox?.deniedDomains ?? []
         let hasDeniedDomains = !deniedDomains.isEmpty
         let skillShellDisabled = ext?.disableSkillShellExecution ?? false
-        let isDefault = !yolo && !hasUnsandboxed && !weakerSandbox && !hasDeniedDomains
+        let credentials = sandbox?.credentials
+        let hasCredentialProtection = !((credentials?.files ?? []).isEmpty && (credentials?.envVars ?? []).isEmpty)
+        let allowAppleEvents = sandbox?.allowAppleEvents ?? false
+        let isDefault = !yolo && !hasUnsandboxed && !weakerSandbox && !hasDeniedDomains && !allowAppleEvents && !hasCredentialProtection
 
         settingsSection(id: "security", icon: "lock.shield", title: "Security") {
             VStack(alignment: .leading, spacing: 8) {
@@ -280,6 +293,29 @@ extension SettingsMainPanelView {
                     }
                 }
 
+                if allowAppleEvents {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 11))
+                        Text("Apple Events allowed from sandbox")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 12)
+                }
+
+                if hasCredentialProtection {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.green)
+                        Text("Credential protection configured")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 12)
+                }
+
                 let hasPlugins = !(ext?.plugins ?? []).isEmpty
                 if hasPlugins && !skillShellDisabled {
                     HStack(spacing: 6) {
@@ -342,7 +378,8 @@ extension SettingsMainPanelView {
             "attribution", "includeCoAuthoredBy",
             "autoUpdatesChannel",
             "enabledPlugins", "extraKnownMarketplaces",
-            "skippedPlugins", "skippedMarketplaces", "strictKnownMarketplaces"
+            "skippedPlugins", "skippedMarketplaces", "strictKnownMarketplaces",
+            "respondToBashCommands", "availableModels", "enforceAvailableModels"
         ]
         var entries: [(key: String, value: String)] = []
         for key in dict.keys.sorted() {
@@ -543,6 +580,17 @@ extension SettingsMainPanelView {
 
                     if let prUrl = prUrlTemplate, !prUrl.isEmpty {
                         attributionRow(label: "PR URL Template", value: prUrl)
+                    }
+
+                    if attr?.omitSessionUrl == true {
+                        HStack(spacing: 6) {
+                            Image(systemName: "link.badge.plus")
+                                .font(.system(size: 11))
+                            Text("Session URL omitted from commits and PRs")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
                     }
 
                     if attr?.hasDeprecatedCoAuthoredBy == true {
