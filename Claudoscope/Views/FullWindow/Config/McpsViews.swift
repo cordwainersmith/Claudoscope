@@ -45,14 +45,32 @@ struct McpServerRow: View {
         return "stdio"
     }
 
+    private var authColor: Color {
+        switch server.authStatus {
+        case .authenticated: return .green
+        case .needsLogin, .expired: return .orange
+        case .notApplicable, .unknown: return .secondary
+        }
+    }
+
+    private var authHelp: String {
+        switch server.authStatus {
+        case .authenticated: return "Authenticated (no login flagged)"
+        case .needsLogin: return "Needs login"
+        case .expired: return "Authentication expired"
+        case .notApplicable: return "Local server (no authentication)"
+        case .unknown: return "Authentication status unknown"
+        }
+    }
+
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 8) {
-                // Status dot
+                // Status dot reflects auth state (or selection highlight)
                 Circle()
-                    .fill(isSelected ? .white : .secondary)
+                    .fill(isSelected ? Color.white : authColor)
                     .frame(width: 6, height: 6)
-                    .help("Configured in settings.json")
+                    .help(authHelp)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(server.name)
@@ -137,6 +155,24 @@ struct McpServerCard: View {
         return "stdio"
     }
 
+    private var authLabel: String {
+        switch server.authStatus {
+        case .authenticated: return "Authenticated"
+        case .needsLogin: return "Needs login"
+        case .expired: return "Expired"
+        case .notApplicable: return "n/a"
+        case .unknown: return "Unknown"
+        }
+    }
+
+    private var authColor: Color {
+        switch server.authStatus {
+        case .authenticated: return .green
+        case .needsLogin, .expired: return .orange
+        case .notApplicable, .unknown: return .secondary
+        }
+    }
+
     private var connectionString: String {
         if let url = server.url { return url }
         if let command = server.command {
@@ -175,6 +211,16 @@ struct McpServerCard: View {
                                 .padding(.vertical, 1)
                                 .background((server.url != nil ? Color.blue : Color.green).opacity(0.1))
                                 .clipShape(Capsule())
+
+                            if server.url != nil {
+                                Text(authLabel)
+                                    .font(Typography.caption)
+                                    .foregroundStyle(authColor)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(authColor.opacity(0.1))
+                                    .clipShape(Capsule())
+                            }
 
                             if let level = server.level {
                                 Text(level)

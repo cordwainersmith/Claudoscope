@@ -42,6 +42,14 @@ struct HookEventGroup: Identifiable, Sendable {
 
 // MARK: - MCP Models
 
+enum McpAuthStatus: Sendable, Equatable {
+    case notApplicable   // stdio server (no OAuth)
+    case authenticated   // http server not flagged as needing login (best-effort)
+    case needsLogin      // http server present in the needs-auth cache
+    case expired
+    case unknown
+}
+
 struct McpServerEntry: Identifiable, Sendable {
     var id: String { name }
     let name: String
@@ -50,6 +58,7 @@ struct McpServerEntry: Identifiable, Sendable {
     let url: String?
     let env: [String: String]
     let level: String?      // "global", "project", "local"
+    var authStatus: McpAuthStatus = .notApplicable
 }
 
 // MARK: - Command Models
