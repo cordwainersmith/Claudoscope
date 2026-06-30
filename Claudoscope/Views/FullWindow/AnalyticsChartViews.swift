@@ -39,8 +39,8 @@ struct IOTokensChartView: View {
                 .opacity(hoveredDate == nil || hoveredDate == day.date ? 1.0 : 0.4)
             }
             .chartForegroundStyleScale([
-                "Input": Color.blue.opacity(0.7),
-                "Output": Color.green.opacity(0.7),
+                "Input": Color.okabeBlue,
+                "Output": Color.okabeOrange,
             ])
             .dailyChartAxes(dates: dailyUsage.map(\.date))
             .chartLegend(position: .bottom, spacing: 16)
@@ -54,8 +54,8 @@ struct IOTokensChartView: View {
                 if let date = hoveredDate,
                    let day = dailyUsage.first(where: { $0.date == date }) {
                     ChartTooltip(items: [
-                        ("Input", formatTokens(day.inputTokens), .blue),
-                        ("Output", formatTokens(day.outputTokens), .green),
+                        ("Input", formatTokens(day.inputTokens), .okabeBlue),
+                        ("Output", formatTokens(day.outputTokens), .okabeOrange),
                     ], date: formatChartDate(date))
                     .padding(8)
                 }
@@ -95,8 +95,8 @@ struct CacheTokensChartView: View {
                 .opacity(hoveredDate == nil || hoveredDate == day.date ? 1.0 : 0.4)
             }
             .chartForegroundStyleScale([
-                "Cache Read": Color.purple.opacity(0.5),
-                "Cache Write": Color.orange.opacity(0.6),
+                "Cache Read": Color.okabeSkyBlue,
+                "Cache Write": Color.okabeVermillion,
             ])
             .dailyChartAxes(dates: dailyUsage.map(\.date))
             .chartLegend(position: .bottom, spacing: 16)
@@ -110,8 +110,8 @@ struct CacheTokensChartView: View {
                 if let date = hoveredDate,
                    let day = dailyUsage.first(where: { $0.date == date }) {
                     ChartTooltip(items: [
-                        ("Cache Read", formatTokens(day.cacheReadTokens), .purple),
-                        ("Cache Write", formatTokens(day.cacheCreationTokens), .orange),
+                        ("Cache Read", formatTokens(day.cacheReadTokens), .okabeSkyBlue),
+                        ("Cache Write", formatTokens(day.cacheCreationTokens), .okabeVermillion),
                     ], date: formatChartDate(date))
                     .padding(8)
                 }

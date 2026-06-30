@@ -6,9 +6,7 @@ struct CostByProjectView: View {
     let projectCosts: [ProjectCost]
     let totalCost: Double
 
-    private let barColors: [Color] = [
-        .blue, .green, .orange, .red, .purple, .cyan, .yellow, .pink, .mint, .teal
-    ]
+    private let barColors = Color.chartCategorical
 
     var topProjects: [ProjectCost] {
         Array(projectCosts.prefix(8))
@@ -41,7 +39,7 @@ struct CostByProjectView: View {
 
                             GeometryReader { geo in
                                 RoundedRectangle(cornerRadius: 2)
-                                    .fill(barColors[index % barColors.count].opacity(0.6))
+                                    .fill(barColors[index % barColors.count])
                                     .frame(width: max(4, geo.size.width * (totalCost > 0 ? project.totalCost / totalCost : 0)))
                             }
                             .frame(height: 4)
@@ -58,9 +56,7 @@ struct CostByProjectView: View {
 struct ModelDistributionView: View {
     let modelUsage: [ModelUsage]
 
-    private let pieColors: [Color] = [
-        .purple, .blue, .green, .orange, .red, .cyan, .yellow, .pink
-    ]
+    private let pieColors = Color.chartCategorical
 
     var totalTurns: Int {
         modelUsage.reduce(0) { $0 + $1.turnCount }
@@ -141,12 +137,14 @@ struct DonutSlice: View {
         GeometryReader { geo in
             let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
             let radius = min(geo.size.width, geo.size.height) / 2
-            Path { path in
+            let slice = Path { path in
                 path.addArc(center: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: false)
                 path.addArc(center: center, radius: radius * 0.6, startAngle: endAngle, endAngle: startAngle, clockwise: true)
                 path.closeSubpath()
             }
-            .fill(color)
+            slice
+                .fill(color)
+                .overlay(slice.stroke(Color.cardBackground, lineWidth: 1.5))
         }
     }
 }

@@ -49,12 +49,7 @@ private struct DailyModelCostChartView: View {
     @State private var hoveredDate: String?
 
     private func colorForModel(_ model: String) -> Color {
-        let lowered = model.lowercased()
-        if lowered.contains("fable") { return .pink.opacity(0.7) }
-        if lowered.contains("opus") { return .purple.opacity(0.7) }
-        if lowered.contains("sonnet") { return .blue.opacity(0.7) }
-        if lowered.contains("haiku") { return .green.opacity(0.7) }
-        return .gray.opacity(0.7)
+        Color.forModel(model)
     }
 
     private var modelNames: [String] {

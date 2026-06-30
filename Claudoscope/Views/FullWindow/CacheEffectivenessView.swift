@@ -244,10 +244,10 @@ private struct CacheTierBreakdownView: View {
                             let frac5m = total > 0 ? CGFloat(tokens5m) / CGFloat(total) : 0.5
                             HStack(spacing: 1) {
                                 RoundedRectangle(cornerRadius: 3)
-                                    .fill(.blue.opacity(0.6))
+                                    .fill(Color.okabeBlue)
                                     .frame(width: max(geo.size.width * frac5m, 2))
                                 RoundedRectangle(cornerRadius: 3)
-                                    .fill(.purple.opacity(0.6))
+                                    .fill(Color.okabeOrange)
                                     .frame(width: max(geo.size.width * (1 - frac5m), 2))
                             }
                         }
@@ -257,10 +257,10 @@ private struct CacheTierBreakdownView: View {
                         HStack(spacing: 16) {
                             Label("5-min", systemImage: "circle.fill")
                                 .font(Typography.caption)
-                                .foregroundStyle(.blue.opacity(0.8))
+                                .foregroundStyle(Color.okabeBlue)
                             Label("1-hour", systemImage: "circle.fill")
                                 .font(Typography.caption)
-                                .foregroundStyle(.purple.opacity(0.8))
+                                .foregroundStyle(Color.okabeOrange)
                         }
                     }
 
@@ -385,13 +385,7 @@ private struct ModelCacheSavingsView: View {
     let savings: [ModelCacheSavings]
 
     private func modelColor(_ model: String) -> Color {
-        switch model.lowercased() {
-        case "fable": return .pink
-        case "opus", "opus4": return .purple
-        case "sonnet": return .blue
-        case "haiku", "haiku3": return .green
-        default: return .gray
-        }
+        Color.forModel(model)
     }
 
     var body: some View {
@@ -454,8 +448,8 @@ private struct CacheCostBreakdownView: View {
 
     private var costEntries: [(label: String, cost: Double, color: Color)] {
         [
-            ("Actual Cost", data.actualCost, .green.opacity(0.6)),
-            ("Without Cache", data.hypotheticalUncachedCost, .orange.opacity(0.6)),
+            ("Actual Cost", data.actualCost, .okabeBlue),
+            ("Without Cache", data.hypotheticalUncachedCost, .okabeVermillion),
         ]
     }
 

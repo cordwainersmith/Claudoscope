@@ -353,9 +353,7 @@ private struct AnalyticsSidebarContent: View {
         filtered.map(\.totalCost).max() ?? 1
     }
 
-    private let barColors: [Color] = [
-        .blue, .green, .orange, .red, .purple, .cyan, .yellow, .pink, .mint, .teal
-    ]
+    private let barColors = Color.chartCategorical
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 0) {
