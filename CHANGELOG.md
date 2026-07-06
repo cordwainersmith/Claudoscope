@@ -1,8 +1,25 @@
 # Changelog
 
 ## [Unreleased]
+
+## [0.9.0]
+### New Features
+- **File-history checkpoint timeline.** The chat view activates the previously inert `file-history-snapshot` records: a collapsible "Files changed (N)" section lists each file touched in the session with its latest version and last backup time, and assistant turns that produced a backup gain a "Checkpoint" marker. Reads the in-transcript snapshot index only; reading `~/.claude/file-history/` for diffs is a later phase.
+- **Blocked and denied actions in chat.** Auto mode (Claude Code 2.1.183+) blocks destructive git and IaC commands and routes denial reasons into the transcript, but there is no dedicated on-disk denial record. Claudoscope now detects the canonical `is_error` tool-result markers and classifies them (destructive git, IaC destroy, permission-setting, user-rejected) into a collapsible "Blocked & denied actions" section. Full-view only, since embedded tool-result denials are invisible to the lite scan.
+- **MCP auth status in the MCPs rail.** Claude Code 2.1.186 added OAuth for remote MCP servers. Each server now shows a best-effort auth state derived from its transport plus the `~/.claude/mcp-needs-auth-cache.json` hint (timestamps and hashes only, no secrets): stdio is n/a, an http server flagged in the cache needs login, an unflagged http server is treated as authenticated. The sidebar status dot is colored accordingly and http server cards show an auth capsule. Deliberately file-only to preserve the app's no-secrets posture, since OAuth tokens live in the Keychain.
+- **Launch at login.** An optional login item registered via `SMAppService`, gated behind a one-time prompt after onboarding and a reversible toggle in Settings > General. Off by default; the system login-item status is the source of truth.
+- **Hook-matcher linter (HOOK001 through HOOK004).** A new HOOK rule family flags hook matchers broken or weakened by recent Claude Code changes: an `mcp__` matcher with no tool segment that now matches nothing (HOOK001), a comma-separated matcher that silently never fired before 2.1.191 (HOOK002), a matcher targeting an MCP server absent from the loaded config (HOOK003), and a matcher set on an event that ignores matchers (HOOK004).
+- **New settings.json keys surfaced and linted.** Recognizes the June 2026 Claude Code keys (`sandbox.credentials`, `sandbox.allowAppleEvents`, `attribution.sessionUrl`, `autoMode.classifyAllShell`, `availableModels`, `enforceAvailableModels`, `requiredMinVersion`/`requiredMaxVersion`, `respondToBashCommands`) and adds four governance lint rules: CFG009 (sandbox enabled without credential denies), CFG010 (Apple Events weaken isolation), CFG011 (`respondToBashCommands` off while hooks expect it), and HRD013 (models listed but not enforced).
+
 ### Improvements
 - **Cache Coverage stat.** The Cache analytics view adds a Cache Coverage figure next to Hit Rate: the share of all input tokens served from cache (reads ÷ reads + writes + fresh input). It sits below Hit Rate and drops sharply when a turn sends large uncached content, whereas Hit Rate (reads ÷ reads + writes) can stay high. The dollar impact remains on the Savings card.
+- **Depth-aware subagent trees.** Claude Code 2.1.172 lets subagents spawn subagents up to five deep, but the tree builder only ever produced one flat level. It now reconstructs the full forest recursively from the `toolUseResult.agentId` edges (with a cycle guard and depth cap), falling back to flat rendering when no edge info is present.
+- **Colorblind-safe chart palette.** Analytics charts previously used raw system colors, putting green, orange, and red in the same chart and collapsing for red-green colorblind viewers. Charts now share an Okabe-Ito categorical palette, a cool-to-warm ordered scale for ranked data, and a single `Color.forModel` helper, with separators added between donut slices.
+- **Sonnet 5 pricing.** `claude-sonnet-5` resolves to the existing Sonnet family at $3 input / $15 output (Sonnet's rate has been flat from 3.5 through 5), so no new table row is required; regression tests now lock the family detection, Anthropic and Vertex-regional rates, and an end-to-end parse.
+
+### Bug Fixes
+- **Chat CPU spin on large sessions.** Opening a large, live-growing session pegged the main thread at 100% CPU because `parseMarkdown` ran from a computed property on every SwiftUI body evaluation for every visible and prefetched message. Parsing is now memoized (an `NSLock`-guarded LRU, capacity 512) and each view parses its blocks once in an explicit init.
+- **Per-session chat state bleed.** `ChatView` had no view identity, so switching sessions reused the same instance and its state (search text, highlights, scroll flags) leaked from the previous session. Adding `.id(session.id)` resets state on session switch without tearing down on file growth.
 
 ## [0.8.0]
 ### New Features
