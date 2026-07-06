@@ -252,6 +252,7 @@ struct AnalyticsEngine {
     ) -> CacheAnalytics {
         var totalCacheRead = 0
         var totalCacheWrite = 0
+        var totalInput = 0
         var totalCache5m = 0
         var totalCache1h = 0
         var actualCost = 0.0
@@ -262,6 +263,7 @@ struct AnalyticsEngine {
         for w in windowed {
             totalCacheRead += w.cacheReadTokens
             totalCacheWrite += w.cacheCreationTokens
+            totalInput += w.inputTokens
             totalCache5m += w.cacheCreation5mTokens
             totalCache1h += w.cacheCreation1hTokens
             actualCost += w.cost
@@ -282,6 +284,10 @@ struct AnalyticsEngine {
 
         let totalCacheTokens = totalCacheRead + totalCacheWrite
         let hitRatio = totalCacheTokens > 0 ? Double(totalCacheRead) / Double(totalCacheTokens) : 0
+        // Coverage: share of ALL input-side tokens served from cache (Anthropic's total
+        // input = read + write + input). Always <= hitRatio, which omits plain input.
+        let coverageDenom = totalCacheTokens + totalInput
+        let cacheCoverage = coverageDenom > 0 ? Double(totalCacheRead) / Double(coverageDenom) : 0
         let reuseRate = totalCacheWrite > 0 ? Double(totalCacheRead) / Double(totalCacheWrite) : 0
         let costSavings = hypotheticalUncachedCost - actualCost
 
@@ -348,6 +354,7 @@ struct AnalyticsEngine {
 
         return CacheAnalytics(
             hitRatio: hitRatio,
+            cacheCoverage: cacheCoverage,
             totalCacheReadTokens: totalCacheRead,
             totalCacheWriteTokens: totalCacheWrite,
             costSavings: costSavings,

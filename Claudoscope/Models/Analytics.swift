@@ -123,6 +123,9 @@ struct AnalyticsData: Sendable {
 
 struct CacheAnalytics: Sendable {
     let hitRatio: Double
+    /// Share of all input-side tokens served from cache: read / (read + write + input).
+    /// Always <= hitRatio; a token-share (reuse) measure, not a cost/savings ratio.
+    let cacheCoverage: Double
     let totalCacheReadTokens: Int
     let totalCacheWriteTokens: Int
     let costSavings: Double
@@ -138,7 +141,7 @@ struct CacheAnalytics: Sendable {
     let cacheBustingDays: [String]
 
     static let empty = CacheAnalytics(
-        hitRatio: 0, totalCacheReadTokens: 0, totalCacheWriteTokens: 0,
+        hitRatio: 0, cacheCoverage: 0, totalCacheReadTokens: 0, totalCacheWriteTokens: 0,
         costSavings: 0, hypotheticalUncachedCost: 0, actualCost: 0,
         averageReuseRate: 0, dailyHitRatio: [],
         totalCache5mTokens: 0, totalCache1hTokens: 0,

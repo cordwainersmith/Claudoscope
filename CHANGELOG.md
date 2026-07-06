@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+### Improvements
+- **Cache Coverage stat.** The Cache analytics view adds a Cache Coverage figure next to Hit Rate: the share of all input tokens served from cache (reads ÷ reads + writes + fresh input). It sits below Hit Rate and drops sharply when a turn sends large uncached content, whereas Hit Rate (reads ÷ reads + writes) can stay high. The dollar impact remains on the Savings card.
+
 ## [0.8.0]
 ### New Features
 - **Plugins rail.** New rail that inventories installed Claude Code plugins and the components each one contributes (commands, skills, agents, hooks, MCP servers). Expand a plugin to see component names grouped by kind, and click any component to open its source (a skill's `SKILL.md`, a command or agent `.md`, or a hook/MCP config JSON) in a sheet. Three dependency lint rules back the rail: PLG001 (a plugin declares a dependency that is not installed or enabled), PLG002 (plugin dependencies form a cycle), and PLG003 (a plugin contributes no components).

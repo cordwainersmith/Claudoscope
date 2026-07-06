@@ -54,6 +54,13 @@ struct CacheEffectivenessView: View {
                             RoundedRectangle(cornerRadius: Radius.lg)
                                 .strokeBorder(hitRateColor.opacity(0.3), lineWidth: 1)
                         )
+                        .help("Of tokens that used the cache, the share served from cache — reads ÷ (reads + writes).")
+
+                        StatCard(
+                            title: "Cache Coverage",
+                            value: String(format: "%.0f%%", data.cacheCoverage * 100)
+                        )
+                        .help("Share of all input tokens served from cache — reads ÷ (reads + writes + fresh input). Lower than Hit Rate when you send large uncached content.")
 
                         StatCard(
                             title: "Savings",
