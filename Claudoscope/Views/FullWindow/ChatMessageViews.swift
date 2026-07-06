@@ -15,6 +15,18 @@ func strippedUserText(_ raw: String?) -> String {
     return text.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+/// Single source of truth for whether a content block renders under the current
+/// Focus filters. Mirrors the exact render guards in `contentBlockView` so
+/// `ChatView.isRecordVisible` and `AssistantMessageView.visibleBlocks` cannot drift.
+func chatBlockIsVisible(_ b: ContentBlockRaw, showThinking: Bool, showToolCalls: Bool) -> Bool {
+    switch b.type {
+    case "text":     return !(b.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    case "thinking": return showThinking  && !(b.thinking ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    case "tool_use": return showToolCalls && b.name != nil && b.id != nil
+    default:         return false
+    }
+}
+
 // MARK: - User Message
 
 struct UserMessageBubble: View {
@@ -49,6 +61,8 @@ struct AssistantMessageView: View {
     var searchText: String = ""
     var turnDuration: TurnDuration? = nil
     var parallelToolCount: Int = 0
+    var showThinking = true
+    var showToolCalls = true
 
     private var effortLevel: EffortLevel {
         var thinkingChars = 0
@@ -69,6 +83,10 @@ struct AssistantMessageView: View {
         guard let content = record.message?.content,
               case .blocks(let blocks) = content else { return [] }
         return blocks
+    }
+
+    private var visibleBlocks: [ContentBlockRaw] {
+        contentBlocks.filter { chatBlockIsVisible($0, showThinking: showThinking, showToolCalls: showToolCalls) }
     }
 
     private var textContent: String {
@@ -107,7 +125,7 @@ struct AssistantMessageView: View {
                     }
                 }
 
-                if turnDuration != nil || effortLevel != .low || parallelToolCount > 1 {
+                if turnDuration != nil || effortLevel != .low || (showToolCalls && parallelToolCount > 1) {
                     HStack(spacing: 4) {
                         if let td = turnDuration, td.durationMs > 0 {
                             TurnDurationBadge(durationMs: td.durationMs)
@@ -115,16 +133,20 @@ struct AssistantMessageView: View {
                         if effortLevel != .low {
                             EffortLevelBadge(level: effortLevel)
                         }
-                        if parallelToolCount > 1 {
+                        if showToolCalls && parallelToolCount > 1 {
                             ParallelToolBadge(count: parallelToolCount)
                         }
                     }
                 }
             }
 
-            // Content blocks
-            if !contentBlocks.isEmpty {
-                ForEach(Array(contentBlocks.enumerated()), id: \.offset) { index, block in
+            // Content blocks. Enumerate the unfiltered blocks and filter the pairs so
+            // survivors keep their original offsets; enumerating the filtered array would
+            // re-index blocks and collapse an expanded tool call when a filter toggles.
+            if !visibleBlocks.isEmpty {
+                ForEach(Array(contentBlocks.enumerated()).filter {
+                    chatBlockIsVisible($0.element, showThinking: showThinking, showToolCalls: showToolCalls)
+                }, id: \.offset) { index, block in
                     contentBlockView(for: block, index: index)
                 }
             } else if !textContent.isEmpty {

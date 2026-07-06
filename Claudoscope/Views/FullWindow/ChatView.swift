@@ -9,6 +9,11 @@ struct ChatView: View {
     @State private var fileChangesExpanded = false
     @State private var blockedActionsExpanded = false
 
+    @AppStorage("showThinking") private var showThinking = true
+    @AppStorage("showToolCalls") private var showToolCalls = true
+
+    private var filtersActive: Bool { !showThinking || !showToolCalls }
+
     private var turnDurations: [Int: TurnDuration] {
         let durations = ObservabilityAnalyzer.computeTurnDurations(records: session.records)
         var dict: [Int: TurnDuration] = [:]
@@ -59,20 +64,22 @@ struct ChatView: View {
             return true
         }
 
-        // Check inside content blocks (thinking, tool inputs, tool results)
+        // Check inside content blocks (thinking, tool inputs, tool results).
+        // Gate by the Focus filters so search only matches content that is actually
+        // rendered; hidden blocks are never shown, so they must not match either.
         if let content = record.message?.content, case .blocks(let blocks) = content {
             for block in blocks {
-                if let thinking = block.thinking, thinking.lowercased().contains(query) {
+                if showThinking, let thinking = block.thinking, thinking.lowercased().contains(query) {
                     return true
                 }
-                if let input = block.input {
+                if showToolCalls, let input = block.input {
                     for (_, value) in input {
                         if let str = value.stringValue, str.lowercased().contains(query) {
                             return true
                         }
                     }
                 }
-                if let toolId = block.id, let result = session.toolResultMap[toolId] {
+                if showToolCalls, let toolId = block.id, let result = session.toolResultMap[toolId] {
                     if result.content.lowercased().contains(query) {
                         return true
                     }
@@ -80,6 +87,28 @@ struct ChatView: View {
             }
         }
         return false
+    }
+
+    /// Whether a record renders anything under the current Focus filters.
+    /// Consulted for every row: with both switches on it drops only records that
+    /// render nothing (empty streaming fragments, blank tool_result/user rows); with
+    /// a filter active it also hides thinking/tool turns. Kept in sync with
+    /// `AssistantMessageView` via `chatBlockIsVisible`.
+    private func isRecordVisible(_ record: ParsedRecordRaw) -> Bool {
+        switch record.type {
+        case .user:
+            return !strippedUserText(record.message?.content?.textContent).isEmpty
+        case .assistant:
+            if case .blocks(let blocks) = record.message?.content,
+               blocks.contains(where: { chatBlockIsVisible($0, showThinking: showThinking, showToolCalls: showToolCalls) }) {
+                return true
+            }
+            return !(record.message?.content?.textContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .system:
+            return record.subtype == "compact_boundary"   // CompactionDivider, never filtered
+        default:
+            return false
+        }
     }
 
     var body: some View {
@@ -120,6 +149,8 @@ struct ChatView: View {
             searchText: $searchText,
             currentMatchIndex: $currentMatchIndex,
             matchCount: matchingIndices.count,
+            showThinking: $showThinking,
+            showToolCalls: $showToolCalls,
             onNavigate: { direction in
                 guard !matchingIndices.isEmpty else { return }
                 if direction == .next {
@@ -139,6 +170,12 @@ struct ChatView: View {
         let fileChanges = FileHistoryService.summarize(records: session.records)
         let checkpoints = FileHistoryService.checkpointMessageIds(records: session.records)
         let blockedActions = ObservabilityAnalyzer.extractBlockedActions(from: extractToolCalls(from: session))
+        // Keep original offsets so `record-\(index)` ids, turnDurations, parallelToolCounts,
+        // and search scrollTo stay aligned. Always drop records that render nothing
+        // (empty streaming fragments, blank tool_result/user rows); when a Focus filter
+        // is active, isRecordVisible additionally hides thinking/tool turns.
+        let pairs = Array(session.records.enumerated())
+        let shown = pairs.filter { isRecordVisible($0.element) }
         return ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 Color.clear.frame(height: 0).id("chat-top")
@@ -155,8 +192,17 @@ struct ChatView: View {
                     fileChangesSection(fileChanges)
                 }
 
-                ForEach(Array(session.records.enumerated()), id: \.offset) { index, record in
-                    searchHighlightedRecord(record: record, index: index, checkpoints: checkpoints)
+                if filtersActive && shown.isEmpty {
+                    EmptyStateView(
+                        icon: "line.3.horizontal.decrease.circle",
+                        title: "Nothing to show with these filters",
+                        message: "This session has only thinking and tool activity. Turn a filter back on to see it."
+                    )
+                    .padding(.top, 40)
+                } else {
+                    ForEach(shown, id: \.offset) { index, record in
+                        searchHighlightedRecord(record: record, index: index, checkpoints: checkpoints)
+                    }
                 }
 
                 Color.clear.frame(height: 0).id("chat-bottom")
@@ -266,7 +312,9 @@ struct ChatView: View {
                     toolResultMap: session.toolResultMap,
                     searchText: searchText,
                     turnDuration: turnDurations[index],
-                    parallelToolCount: parallelToolCounts[index] ?? 0
+                    parallelToolCount: parallelToolCounts[index] ?? 0,
+                    showThinking: showThinking,
+                    showToolCalls: showToolCalls
                 )
             }
 
@@ -367,7 +415,20 @@ struct ChatSearchBar: View {
     @Binding var searchText: String
     @Binding var currentMatchIndex: Int
     let matchCount: Int
+    @Binding var showThinking: Bool
+    @Binding var showToolCalls: Bool
     let onNavigate: (SearchDirection) -> Void
+
+    private var filtersActive: Bool { !showThinking || !showToolCalls }
+
+    private var filterLabel: String {
+        switch (showThinking, showToolCalls) {
+        case (true, true):   return "Filter"
+        case (false, false): return "Focus"
+        case (false, true):  return "Hiding thinking"
+        case (true, false):  return "Hiding tools"
+        }
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -415,6 +476,37 @@ struct ChatSearchBar: View {
                 }
                 .buttonStyle(.plain)
             }
+
+            Menu {
+                Toggle("Focus mode", isOn: Binding(
+                    get: { !showThinking && !showToolCalls },
+                    set: { on in showThinking = !on; showToolCalls = !on }
+                ))
+                Divider()
+                Toggle("Thinking", isOn: $showThinking)
+                Toggle("Tool & MCP calls", isOn: $showToolCalls)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: filtersActive
+                        ? "line.3.horizontal.decrease.circle.fill"
+                        : "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 12))
+                    Text(filterLabel)
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundStyle(filtersActive ? Color.accentColor : .secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    filtersActive ? AnyShapeStyle(Color.accentColor.opacity(0.12)) : AnyShapeStyle(.quaternary),
+                    in: Capsule()
+                )
+                .contentShape(Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("Message filters")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
