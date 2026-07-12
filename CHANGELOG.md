@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+### New Features
+- **Cost alerts (optional, off by default).** Settings > Cost Alerts adds four global rules with fixed thresholds in estimated dollars or tokens: single-session cap, rolling-window spend (5 minutes to 4 hours, doubling as runaway-burn detection), daily total, and monthly total. Alerts re-fire at each doubling of the threshold (X, 2X, 4X, ...), are delivered as a macOS notification plus a red menu bar dot, and stay in the popover until dismissed. Clicking a notification opens the dashboard. All figures are estimates; fired thresholds persist across relaunches so nothing alerts twice. Rolling spend is tracked by an in-memory delta ledger that rebaselines on rescans and pricing switches, so pricing changes and offline gaps never produce phantom alerts.
 
 ## [0.9.0]
 ### New Features

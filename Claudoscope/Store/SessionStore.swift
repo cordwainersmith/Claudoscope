@@ -117,6 +117,12 @@ final class SessionStore {
         UserDefaults.standard.set(secrets, forKey: alertedSecretsKey)
     }
 
+    // Cost alerts: owned by the app, evaluated at the end of recomputeAnalytics().
+    @ObservationIgnored var costAlertService: CostAlertService?
+    /// The first Cowork merge adds lifetime totals in one jump; it must
+    /// rebaseline the spend ledger, not enter the rolling window.
+    @ObservationIgnored private var coworkMergedIntoCostLedger = false
+
     // Lint caching
     private var lintResultsValid: Bool = false
 
@@ -224,6 +230,43 @@ final class SessionStore {
         return (tokens, cost)
     }
 
+    /// Pure fold of one calendar month's billed tokens/cost. `monthKey` is
+    /// "yyyy-MM"; day keys are "yyyy-MM-dd", so a prefix match selects the month.
+    nonisolated static func monthTotals(
+        sessions: [SessionSummary],
+        monthKey: String
+    ) -> (tokens: Int, cost: Double) {
+        var tokens = 0
+        var cost = 0.0
+        for session in sessions {
+            for day in session.dailyContributions where day.date.hasPrefix(monthKey) {
+                tokens += day.inputTokens + day.outputTokens
+                cost += day.estimatedCost
+            }
+        }
+        return (tokens, cost)
+    }
+
+    /// Sessions eligible for the per-session cost alert: activity within the
+    /// last 30 minutes, subagents excluded (their UUID titles make useless
+    /// alerts; fan-out spend is the rolling rule's job).
+    nonisolated static func recentSessionFigures(
+        sessions: [SessionSummary],
+        now: Date
+    ) -> [CostSessionFigure] {
+        sessions.compactMap { session in
+            guard !session.isSubagent,
+                  let date = ISO8601.parse(session.lastTimestamp),
+                  now.timeIntervalSince(date) < 30 * 60 else { return nil }
+            return CostSessionFigure(
+                id: session.id,
+                title: session.title,
+                cost: session.estimatedCost,
+                tokens: session.totalInputTokens + session.totalOutputTokens
+            )
+        }
+    }
+
     func clearAlertedSecrets() {
         alertedSecrets.removeAll()
     }
@@ -304,7 +347,7 @@ final class SessionStore {
     /// Reload Cowork availability + sessions + parsed transcripts + popover
     /// summaries. Concurrency cap of 8 mirrors ProjectScanner. Map replacement
     /// is atomic at the end so the UI never sees a half-populated state.
-    func loadCowork() async {
+    func loadCowork(rebaselineCostLedger: Bool = false) async {
         coworkLoading = true
         let (availability, sessions) = await coworkService.loadSessions()
         let table = pricingTable
@@ -343,7 +386,9 @@ final class SessionStore {
 
         // Cowork totals contribute to the Analytics page's "Est. Cost" card.
         // Recompute so the breakdown stays in sync when sessions land or change.
-        recomputeAnalytics()
+        let firstCoworkMerge = !coworkMergedIntoCostLedger
+        coworkMergedIntoCostLedger = true
+        recomputeAnalytics(rebaselineCostLedger: rebaselineCostLedger || firstCoworkMerge)
     }
 
     private func performInitialScan() {
@@ -495,9 +540,9 @@ final class SessionStore {
 
             self.projects = scannedProjects
             self.sessionsByProject = scannedSessions
-            self.recomputeAnalytics()
+            self.recomputeAnalytics(rebaselineCostLedger: true)
             await self.recomputeDataCoverage()
-            await self.loadCowork()
+            await self.loadCowork(rebaselineCostLedger: true)
         }
     }
 
@@ -519,7 +564,7 @@ final class SessionStore {
         )
     }
 
-    func recomputeAnalytics() {
+    func recomputeAnalytics(rebaselineCostLedger: Bool = false) {
         let sessions: [(session: SessionSummary, project: Project)]
         if let projectId = selectedAnalyticsProjectId {
             sessions = allSessionsWithProjects.filter { $0.project.id == projectId }
@@ -564,11 +609,46 @@ final class SessionStore {
             from: thirtyDaysAgo,
             to: nil
         )
+
+        evaluateCostAlerts(rebaselineLedger: rebaselineCostLedger)
     }
 
     /// Cached analytics for the sidebar (always all projects, 30d, for cost ranking).
     /// Recomputed only when recomputeAnalytics() is called, not on every view access.
     var sidebarAnalyticsData: AnalyticsData = .empty
+
+    private func evaluateCostAlerts(rebaselineLedger: Bool) {
+        guard !isLoading, let costAlertService else { return }
+
+        let all = allSessionsWithProjects.map(\.session) + coworkSummaries
+        var cumulativeCost = 0.0
+        var cumulativeTokens = 0
+        for session in all {
+            cumulativeCost += session.estimatedCost
+            cumulativeTokens += session.totalInputTokens + session.totalOutputTokens
+        }
+
+        let now = Date()
+        let dayKey = Self.localDayFormatter.string(from: now)
+        let monthKey = String(dayKey.prefix(7))
+        let today = Self.dayTotals(sessions: all, dayKey: dayKey)
+        let month = Self.monthTotals(sessions: all, monthKey: monthKey)
+
+        costAlertService.evaluate(
+            snapshot: CostSnapshot(
+                cumulativeCost: cumulativeCost,
+                cumulativeTokens: cumulativeTokens,
+                recentSessions: Self.recentSessionFigures(sessions: all, now: now),
+                todayCost: today.cost,
+                todayTokens: today.tokens,
+                monthCost: month.cost,
+                monthTokens: month.tokens,
+                dayKey: dayKey,
+                monthKey: monthKey
+            ),
+            rebaselineLedger: rebaselineLedger
+        )
+    }
 
     func loadSession(id: String, projectId: String, subagentFileName: String? = nil) async {
         let cacheKey = if let subagentFileName {

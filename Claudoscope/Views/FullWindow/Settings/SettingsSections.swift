@@ -856,6 +856,15 @@ extension SettingsMainPanelView {
         return rows
     }
 
+    // MARK: - Cost Alerts Section
+
+    @ViewBuilder
+    func costAlertsSection() -> some View {
+        settingsSection(id: "costAlerts", icon: "bell.badge", title: "Cost Alerts") {
+            CostAlertsSectionContent()
+        }
+    }
+
     // MARK: - Updates Section
 
     @ViewBuilder
@@ -1090,6 +1099,133 @@ struct UpdatesSectionContent: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Cost Alerts Section Content
+
+struct CostAlertsSectionContent: View {
+    @Environment(CostAlertService.self) private var costAlertService
+
+    var body: some View {
+        @Bindable var service = costAlertService
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Enable cost alerts", isOn: $service.config.masterEnabled)
+                    .toggleStyle(.checkbox)
+                    .font(Typography.body)
+
+                Text("Get notified when estimated spend crosses a threshold, then again at each doubling. Figures are estimates based on your pricing settings.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+
+            if costAlertService.config.masterEnabled {
+                Divider().padding(.horizontal, 12)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    CostAlertRuleRow(
+                        title: "Single session",
+                        subtitle: "Any one session passes the threshold.",
+                        rule: $service.config.session
+                    )
+                    CostAlertRuleRow(
+                        title: "Rolling window",
+                        subtitle: "Spend across all sessions within the window. Catches runaway agents.",
+                        rule: $service.config.rolling,
+                        windowMinutes: $service.config.rollingWindowMinutes
+                    )
+                    CostAlertRuleRow(
+                        title: "Daily total",
+                        subtitle: "Today's combined spend.",
+                        rule: $service.config.daily
+                    )
+                    CostAlertRuleRow(
+                        title: "Monthly total",
+                        subtitle: "This calendar month's combined spend.",
+                        rule: $service.config.monthly
+                    )
+                }
+                .padding(.horizontal, 12)
+
+                if costAlertService.notificationsUnavailable {
+                    HStack(spacing: 4) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                        Text("Notifications are available in the installed app. The menu bar badge still works.")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                } else if costAlertService.notificationsDenied {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 11))
+                        Text("Notifications are off for Claudoscope in System Settings. The menu bar badge still works.")
+                            .font(.system(size: 11))
+                        Button("Open Notification Settings") {
+                            costAlertService.openSystemNotificationSettings()
+                        }
+                        .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .onAppear { costAlertService.refreshAuthorizationStatus() }
+    }
+}
+
+private struct CostAlertRuleRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var rule: CostAlertRule
+    var windowMinutes: Binding<Int>? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Toggle(title, isOn: $rule.enabled)
+                    .toggleStyle(.checkbox)
+                    .font(Typography.body)
+
+                Spacer()
+
+                if let windowMinutes {
+                    Picker("", selection: windowMinutes) {
+                        ForEach(CostAlertConfig.rollingWindowOptions, id: \.minutes) { option in
+                            Text(option.label).tag(option.minutes)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .disabled(!rule.enabled)
+                }
+
+                TextField("", value: $rule.threshold, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 70)
+                    .disabled(!rule.enabled)
+
+                Picker("", selection: $rule.unit) {
+                    Text("est. $").tag(CostAlertUnit.dollars)
+                    Text("tokens").tag(CostAlertUnit.tokens)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .disabled(!rule.enabled)
+            }
+
+            Text(subtitle)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuBarPopoverContent: View {
     @Environment(SessionStore.self) private var store
     @Environment(UpdateService.self) private var updateService
+    @Environment(CostAlertService.self) private var costAlertService
     @State private var showAbout = false
     @State private var showUpToDate = false
     @AppStorage("hasSeenRepositionTip") private var hasSeenTip = false
@@ -30,6 +31,15 @@ struct MenuBarPopoverContent: View {
             .padding(.bottom, 8)
 
             Divider()
+
+            if let latest = costAlertService.recentAlerts.first {
+                CostAlertStrip(
+                    latest: latest,
+                    extraCount: costAlertService.recentAlerts.count - 1,
+                    onDismiss: { costAlertService.dismissAlerts() }
+                )
+                Divider()
+            }
 
             if store.isLoading {
                 // Loading state with animated logo
@@ -119,6 +129,7 @@ struct MenuBarPopoverContent: View {
             }
         }
         .frame(width: 280)
+        .onAppear { costAlertService.acknowledgeSeen() }
         .overlay {
             if showAbout {
                 AboutOverlay {
@@ -139,6 +150,46 @@ struct MenuBarPopoverContent: View {
                 guard let date = ISO8601.parse(session.lastTimestamp) else { return false }
                 return now.timeIntervalSince(date) < 60
             }
+    }
+}
+
+// MARK: - Cost Alert Strip
+
+private struct CostAlertStrip: View {
+    let latest: CostAlertEvent
+    let extraCount: Int
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "bell.badge.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(.red)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(latest.headline)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(latest.detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if extraCount > 0 {
+                    Text("+\(extraCount) more alert\(extraCount == 1 ? "" : "s")")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer(minLength: 0)
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(Typography.micro)
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 }
 

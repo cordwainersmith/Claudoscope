@@ -5,18 +5,28 @@ struct ClaudoscopeApp: App {
     @State private var store: SessionStore
     @State private var updateService: UpdateService
     @State private var loginItemService: LoginItemService
+    @State private var costAlertService: CostAlertService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     init() {
         let store = SessionStore()
         let updateService = UpdateService()
         let loginItemService = LoginItemService()
+        let costAlertService = CostAlertService()
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
         _loginItemService = State(initialValue: loginItemService)
+        _costAlertService = State(initialValue: costAlertService)
+
+        store.costAlertService = costAlertService
+        costAlertService.onOpenDashboard = { [weak store] in
+            guard let store else { return }
+            MainWindowController.shared.open(store: store)
+        }
 
         MainWindowController.shared.setUpdateService(updateService)
         MainWindowController.shared.setLoginItemService(loginItemService)
+        MainWindowController.shared.setCostAlertService(costAlertService)
 
         store.onSecretAlert = { [weak store] alert in
             guard let store else { return }
@@ -59,12 +69,16 @@ struct ClaudoscopeApp: App {
                 .environment(store)
                 .environment(updateService)
                 .environment(loginItemService)
+                .environment(costAlertService)
                 .background {
                     UpdateTriggerView()
                         .environment(updateService)
                 }
         } label: {
-            MenuBarIcon(hasUpdate: updateService.updateAvailable != nil)
+            MenuBarIcon(
+                hasUpdate: updateService.updateAvailable != nil,
+                hasCostAlert: costAlertService.hasUnseen
+            )
         }
         .menuBarExtraStyle(.window)
 
@@ -136,6 +150,7 @@ private struct UpdateTriggerView: View {
 /// Loads the custom menu bar icon from bundle resources
 struct MenuBarIcon: View {
     var hasUpdate: Bool = false
+    var hasCostAlert: Bool = false
 
     var body: some View {
         if let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
@@ -145,7 +160,12 @@ struct MenuBarIcon: View {
                 ZStack(alignment: .topTrailing) {
                     Image(nsImage: nsImage)
                         .renderingMode(.original)
-                    if hasUpdate {
+                    if hasCostAlert {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 6, height: 6)
+                            .offset(x: 2, y: -2)
+                    } else if hasUpdate {
                         Circle()
                             .fill(.orange)
                             .frame(width: 6, height: 6)
