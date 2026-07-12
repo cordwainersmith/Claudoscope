@@ -78,6 +78,8 @@ struct FullWindowView: View {
             // Fire-and-forget data loading (don't block the UI)
             loadDataForRail(newRail)
         }
+        .onAppear { applyRequestedRail() }
+        .onChange(of: store.requestedRail) { _, _ in applyRequestedRail() }
         .onChange(of: SessionSelection(projectId: selectedProjectId, sessionId: selectedSessionId)) { _, selection in
             if let sessionId = selection.sessionId, let projectId = selection.projectId {
                 let subagent = pendingSubagentFileName
@@ -173,6 +175,19 @@ struct FullWindowView: View {
                 selectedSessionId: $selectedSessionId,
                 coworkVisible: store.coworkAvailability.isReady
             )
+        }
+    }
+
+    /// Applies a rail navigation requested from outside the window (menu bar
+    /// popover). Clears the request so it fires once. Switching the rail routes
+    /// through the existing selectedRail onChange for bookkeeping and data load.
+    private func applyRequestedRail() {
+        guard let requested = store.requestedRail else { return }
+        store.requestedRail = nil
+        if selectedRail != requested {
+            selectedRail = requested
+        } else {
+            loadDataForRail(requested)
         }
     }
 

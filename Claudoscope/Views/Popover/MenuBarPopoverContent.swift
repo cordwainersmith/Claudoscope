@@ -119,6 +119,11 @@ struct MenuBarPopoverContent: View {
 
                 Divider()
 
+                PopoverMenuButton(label: "Settings", systemImage: "gear") {
+                    store.requestedRail = .settings
+                    MainWindowController.shared.open(store: store, updateService: updateService)
+                }
+
                 PopoverMenuButton(label: "About Claudoscope", systemImage: "info.circle") {
                     openWindow(id: "about")
                 }

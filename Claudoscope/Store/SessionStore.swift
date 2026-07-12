@@ -42,6 +42,11 @@ final class SessionStore {
     var scanSessionsTotal: Int = 0
     var selectedSession: ParsedSession?
 
+    /// One-shot rail navigation requested from outside the dashboard window
+    /// (e.g. the menu bar popover's Settings button). FullWindowView observes
+    /// this, switches to the requested rail, then clears it back to nil.
+    var requestedRail: RailItem?
+
     // Plans data
     var plans: [PlanSummary] = []
     var selectedPlanDetail: PlanDetail?
