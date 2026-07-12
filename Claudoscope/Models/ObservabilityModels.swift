@@ -15,7 +15,7 @@ struct TurnDuration: Identifiable, Sendable {
 
 // MARK: - Effort Level
 
-enum EffortLevel: String, CaseIterable, Sendable {
+enum EffortLevel: String, CaseIterable, Sendable, Codable {
     case low
     case medium
     case high
@@ -33,7 +33,7 @@ enum EffortLevel: String, CaseIterable, Sendable {
 
 // MARK: - Effort Distribution
 
-struct EffortDistribution: Sendable {
+struct EffortDistribution: Sendable, Codable, Equatable {
     let low: Int
     let medium: Int
     let high: Int
@@ -56,7 +56,7 @@ struct EffortCostBreakdown: Identifiable, Sendable {
 
 // MARK: - Error Classification
 
-enum ErrorClassification: String, CaseIterable, Sendable {
+enum ErrorClassification: String, CaseIterable, Sendable, Codable {
     case rateLimit
     case authFailure
     case proxyError
@@ -125,7 +125,7 @@ struct SubagentNode: Identifiable, Sendable {
 
 // MARK: - Session Observability
 
-struct SessionObservability: Sendable {
+struct SessionObservability: Sendable, Codable, Equatable {
     let medianTurnDurationMs: Double?
     let maxTurnDurationMs: Double?
     let dominantEffortLevel: EffortLevel?

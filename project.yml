@@ -10,6 +10,9 @@ packages:
   swift-collections:
     url: https://github.com/apple/swift-collections.git
     from: "1.1.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    exactVersion: "7.11.1"
 
 targets:
   Claudoscope:
@@ -37,6 +40,8 @@ targets:
     dependencies:
       - package: swift-collections
         product: OrderedCollections
+      - package: GRDB
+        product: GRDB
     entitlements:
       path: Claudoscope/Claudoscope.entitlements
       properties:
@@ -69,6 +74,8 @@ targets:
       - path: ClaudoscopeTests
     dependencies:
       - target: Claudoscope
+      - package: GRDB
+        product: GRDB
     settings:
       base:
         SWIFT_VERSION: "5.9"

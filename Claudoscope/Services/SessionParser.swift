@@ -26,6 +26,21 @@ private struct DayAcc {
 /// Stream-parses Claude Code JSONL session files.
 /// Port of server/services/session-parser.ts
 actor SessionParser {
+    /// Version stamp for the persistent summary cache (SessionSummaryStore).
+    /// Cached SessionSummary blobs are valid only while this matches the value
+    /// stored in the cache's meta table; a mismatch wipes the cache and
+    /// reparses everything on next launch. BUMP THIS when any of the following
+    /// change, or users silently keep stale numbers:
+    ///  (a) parse/billing/dedup logic (orphan billing, sidechain handling,
+    ///      context-fork stripping, usage accumulation, stop_reason handling)
+    ///  (b) any field on SessionSummary or its nested types (an added field
+    ///      makes old blobs undecodable, which degrades into a silent full
+    ///      reparse; the bump makes the wipe explicit)
+    ///  (c) getModelFamily detection regexes (they steer pricing lookup)
+    /// Pricing rate-table edits do NOT need a bump: rates are hashed into the
+    /// cache's pricing key. See docs/sqlite-persistence-roadmap.md, section 9.
+    static let parserVersion: Int = 1
+
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
         d.userInfo[.decodeMode] = DecodeMode.lite
@@ -99,8 +114,29 @@ actor SessionParser {
     /// replay the parent's history verbatim — same msg.ids, same usage blocks —
     /// before issuing their one genuinely new API call. Ordinary `agent-<hash>`
     /// subagents do not, so the prefix gate is deliberately narrow.
-    private static func isContextForkFilename(_ fileName: String) -> Bool {
+    /// Internal (not private): the summary cache fingerprints these files with
+    /// their parent's stat as well, and must use the exact same gate.
+    static func isContextForkFilename(_ fileName: String) -> Bool {
         fileName.hasPrefix("agent-acompact-") || fileName.hasPrefix("agent-aside_question-")
+    }
+
+    /// True for a context-forking subagent file in its canonical location
+    /// (`.../subagents/agent-acompact-*` or `agent-aside_question-*`). The
+    /// cache fingerprints these files with their parent transcript's stat as
+    /// well; this is the shared gate for that decision.
+    static func isContextForkSubagentFile(_ url: URL) -> Bool {
+        url.deletingLastPathComponent().lastPathComponent == "subagents"
+            && isContextForkFilename(url.lastPathComponent)
+    }
+
+    /// Parent transcript URL for a subagent file at
+    /// `<project>/<parentUuid>/subagents/<sub>.jsonl`: the parent lives at
+    /// `<project>/<parentUuid>.jsonl`. Shared with the scanner's cache
+    /// fingerprinting so the two can never disagree on the parent path.
+    static func parentTranscriptURL(forSubagentFile url: URL) -> URL {
+        url.deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathExtension("jsonl")
     }
 
     /// Billable assistant msg.ids of the parent transcript for a subagent file
@@ -109,9 +145,7 @@ actor SessionParser {
     /// reentrancy safety depends on no `await` between the dedup decision and
     /// the seen-id inserts in the billing loops.
     private func parentAssistantMessageIds(forSubagentFileAt url: URL) -> Set<String> {
-        let parentURL = url.deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathExtension("jsonl")
+        let parentURL = Self.parentTranscriptURL(forSubagentFile: url)
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: parentURL.path),
               let mtime = attrs[.modificationDate] as? Date else {
             // Parent missing or unreadable: don't cache, so a parent that

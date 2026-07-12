@@ -55,7 +55,7 @@ struct SessionMetadata: Sendable {
 
 // MARK: - Session Summary (lightweight for sidebar)
 
-struct SessionSummary: Identifiable, Sendable {
+struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     let id: String
     let projectId: String
     let slug: String?
@@ -146,7 +146,7 @@ struct SessionSummary: Identifiable, Sendable {
     }
 }
 
-struct ModelTokenBreakdown: Sendable {
+struct ModelTokenBreakdown: Sendable, Codable, Equatable {
     let model: String           // model family: "opus", "sonnet", "haiku"
     let inputTokens: Int
     let outputTokens: Int
@@ -157,7 +157,7 @@ struct ModelTokenBreakdown: Sendable {
 
 /// Per-family cost/tokens billed on a single calendar day. Lives inside a
 /// `DailyContribution`, so the family rollups stay date-accurate under a window.
-struct ModelDayCost: Sendable {
+struct ModelDayCost: Sendable, Codable, Equatable {
     let model: String           // model family: "opus", "sonnet", "haiku"
     let inputTokens: Int
     let outputTokens: Int
@@ -168,7 +168,7 @@ struct ModelDayCost: Sendable {
 
 /// One calendar day's worth of billed activity for a session. `date` is the
 /// LOCAL day (YYYY-MM-DD) the messages landed on, fixed at parse time.
-struct DailyContribution: Sendable {
+struct DailyContribution: Sendable, Codable, Equatable {
     let date: String
     let inputTokens: Int
     let outputTokens: Int

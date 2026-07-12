@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 enum PricingProvider: String, CaseIterable, Sendable {
@@ -61,6 +62,30 @@ struct PricingTables {
         case .vertex:
             return region == .global ? vertexGlobal : vertexRegional
         }
+    }
+
+    /// Invalidation key for the persistent summary cache. Cost is baked into
+    /// cached summaries, so the key must change whenever anything that feeds
+    /// `estimateCostFromTokens` changes: provider/region selection, any rate
+    /// in the selected table, or the fast-mode multiplier. Hashing the rates
+    /// makes hardcoded table edits self-invalidating with no manual bump.
+    static func cacheKey(provider: PricingProvider, region: VertexRegion) -> String {
+        let hash = tableHash(table(provider: provider, region: region))
+        return "\(provider.rawValue)|\(region.rawValue)|\(hash)"
+    }
+
+    /// SHA256 over a canonical serialization of the table plus the fast-mode
+    /// multiplier. Internal (not private) so tests can hash synthetic tables;
+    /// `fastMultiplier` is parameterized for the same reason.
+    static func tableHash(_ table: [String: ModelPricing], fastMultiplier: Double = fastModeRateMultiplier) -> String {
+        var canonical = ""
+        for key in table.keys.sorted() {
+            let p = table[key]!
+            canonical += "\(key):\(p.input),\(p.output),\(p.cacheRead),\(p.cacheCreation5m),\(p.cacheCreation1h);"
+        }
+        canonical += "fast:\(fastMultiplier)"
+        let digest = SHA256.hash(data: Data(canonical.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
 

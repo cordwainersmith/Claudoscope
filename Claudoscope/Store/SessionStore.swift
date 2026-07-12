@@ -38,6 +38,10 @@ final class SessionStore {
     var analyticsCustomFrom: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
     var analyticsCustomTo: Date = Date()
     var isLoading: Bool = true
+    /// True while the background reconcile pass diffs disk against the summary
+    /// cache and re-parses changed files. Gates cost-alert evaluation (alerts
+    /// must only ever see complete data) and the scan banner on warm launches.
+    var isReconciling: Bool = false
     var scanSessionsProcessed: Int = 0
     var scanSessionsTotal: Int = 0
     var selectedSession: ParsedSession?
@@ -148,6 +152,14 @@ final class SessionStore {
     private let claudeDir: URL
     private let parser = SessionParser()
     private let cache = SessionCache()
+    /// Persistent summary cache. nil when SQLite is unavailable (corruption
+    /// recovery failed twice), in which case every scan degrades to the
+    /// full-parse behavior this cache replaced.
+    @ObservationIgnored private var summaryStore: SessionSummaryStore?
+    /// The in-flight scan/reconcile pipeline. Rescans cancel-and-AWAIT it
+    /// before recomputing global keys so a straggler batch upsert can never
+    /// land after a global-key wipe and resurrect stale-priced rows.
+    @ObservationIgnored private var scanTask: Task<Void, Never>?
     private let watcher: ClaudeFileWatcher
     private let plansService: PlansService
     private let timelineService: TimelineService
@@ -392,42 +404,180 @@ final class SessionStore {
     }
 
     private func performInitialScan() {
-        Task {
-            let scanner = ProjectScanner(
-                claudeDir: claudeDir,
-                parser: parser,
-                pricingTable: pricingTable
+        scanTask = Task {
+            await self.runScanPipeline(hydrateFirst: true)
+        }
+    }
+
+    /// The launch/rescan pipeline: open the summary cache, apply global
+    /// invalidation keys, hydrate the UI from cached rows (launch only), then
+    /// reconcile disk against the cache in the background, parsing only
+    /// changed files. With no cache (open failure) the reconcile degenerates
+    /// to the full parse this app always did.
+    private func runScanPipeline(hydrateFirst: Bool) async {
+        if summaryStore == nil {
+            summaryStore = SessionSummaryStore.open(at: SessionSummaryStore.defaultURL())
+        }
+
+        scanSessionsProcessed = 0
+        scanSessionsTotal = 0
+
+        // Global keys: any mismatch (parser version bump, pricing rates or
+        // provider/region change, timezone change) wipes all cached rows so
+        // the reconcile below reparses everything.
+        if let store = summaryStore {
+            let keys = SessionSummaryStore.GlobalCacheKeys(
+                parserVersion: SessionParser.parserVersion,
+                pricingKey: PricingTables.cacheKey(provider: pricingProvider, region: pricingRegion),
+                tzIdentifier: TimeZone.current.identifier
             )
-            let (scannedProjects, scannedSessions) = await scanner.scan { [weak self] processed, total in
+            do {
+                let wiped = try await store.checkAndApplyGlobalKeys(keys)
+                if wiped {
+                    NSLog("[Claudoscope] SummaryCache: global keys changed, cache wiped for reindex")
+                }
+            } catch {
+                NSLog("[Claudoscope] SummaryCache: global key check failed: %@", error.localizedDescription)
+            }
+        }
+
+        // Hydrate: first paint from SQLite before any JSONL is parsed. Only
+        // on launch; a rescan already has a populated in-memory index.
+        if hydrateFirst, let store = summaryStore {
+            let hydrateStart = Date()
+            do {
+                let (rows, undecodable) = try await store.fetchAllForHydration()
+                if !undecodable.isEmpty {
+                    // A model field changed without a parserVersion bump.
+                    // Drop the rows so they become plain misses below.
+                    try? await store.delete(filePaths: undecodable)
+                    NSLog("[Claudoscope] SummaryCache: dropped %d undecodable rows", undecodable.count)
+                }
+                if !rows.isEmpty {
+                    var grouped: [String: [SessionSummary]] = [:]
+                    for (projectDir, summary) in rows {
+                        grouped[projectDir, default: []].append(summary)
+                    }
+                    for key in grouped.keys {
+                        grouped[key]?.sort(by: ProjectScanner.sessionOrder)
+                    }
+                    let projectsDir = claudeDir.appendingPathComponent("projects")
+                    var hydratedProjects: [Project] = grouped.map { dirName, sessions in
+                        Project(
+                            id: dirName,
+                            name: decodeProjectName(dirName),
+                            path: projectsDir.appendingPathComponent(dirName).path,
+                            sessionCount: sessions.count
+                        )
+                    }
+                    hydratedProjects.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+                    // isReconciling BEFORE the recompute: cost alerts must not
+                    // evaluate against hydrated (possibly stale) totals. They
+                    // run exactly once, at pipeline end, on complete data.
+                    self.isReconciling = true
+                    self.projects = hydratedProjects
+                    self.sessionsByProject = grouped
+                    self.isLoading = false
+                    self.checkActiveSession()
+                    self.recomputeAnalytics()
+                    Task { await self.recomputeDataCoverage() }
+                    NSLog("[Claudoscope] SummaryCache: hydrated %d sessions in %.0f ms",
+                          rows.count, Date().timeIntervalSince(hydrateStart) * 1000)
+                }
+            } catch {
+                NSLog("[Claudoscope] SummaryCache: hydration failed (%@), falling back to full scan",
+                      error.localizedDescription)
+            }
+        }
+
+        // Cold path (no rows) keeps isLoading = true, so launch UX is
+        // unchanged; rescans need the flag for the banner and alert gate.
+        self.isReconciling = true
+
+        let scanner = ProjectScanner(
+            claudeDir: claudeDir,
+            parser: parser,
+            pricingTable: pricingTable
+        )
+        let reconcileStart = Date()
+        let liveKeys = await scanner.reconcile(
+            store: summaryStore,
+            onProgress: { [weak self] processed, total in
                 self?.scanSessionsProcessed = processed
                 self?.scanSessionsTotal = total
+            },
+            applyDelta: { [weak self] delta in
+                guard let self else { return }
+                for upsert in delta.upserts {
+                    self.applySummary(upsert.summary, projectId: upsert.projectDir)
+                }
+                for deletion in delta.deletions {
+                    self.removeSummary(projectId: deletion.projectDir, sessionId: deletion.sessionId)
+                }
             }
+        )
 
-            self.projects = scannedProjects
-            self.sessionsByProject = scannedSessions
-            self.isLoading = false
-            self.checkActiveSession()
-            self.recomputeAnalytics()
-            await self.recomputeDataCoverage()
+        if Task.isCancelled {
+            // A rescan superseded this run; it owns the flag transitions now.
+            return
         }
+
+        // Ghost purge: in-memory entries with neither a file nor a cache row
+        // (e.g. watcher inserts made while the cache was unavailable).
+        for (projectId, sessions) in sessionsByProject {
+            for session in sessions
+            where !liveKeys.contains(.init(projectDir: projectId, sessionId: session.id)) {
+                removeSummary(projectId: projectId, sessionId: session.id)
+            }
+        }
+
+        // Finalize: one sort pass and fresh session counts.
+        let projectsDir = claudeDir.appendingPathComponent("projects")
+        var finalProjects: [Project] = []
+        for (projectId, var sessions) in sessionsByProject {
+            sessions.sort(by: ProjectScanner.sessionOrder)
+            sessionsByProject[projectId] = sessions
+            finalProjects.append(Project(
+                id: projectId,
+                name: decodeProjectName(projectId),
+                path: projectsDir.appendingPathComponent(projectId).path,
+                sessionCount: sessions.count
+            ))
+        }
+        finalProjects.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        self.projects = finalProjects
+
+        if let store = summaryStore {
+            try? await store.setLastFullScanAt(Date())
+        }
+
+        NSLog("[Claudoscope] SummaryCache: reconcile finished in %.0f ms (%d changed of %d live files)",
+              Date().timeIntervalSince(reconcileStart) * 1000, scanSessionsTotal, liveKeys.count)
+
+        self.isReconciling = false
+        self.isLoading = false
+        self.checkActiveSession()
+        // Rebaseline ALWAYS: on a warm launch the reconcile delta can be a
+        // week of appends, which the rolling spend ledger would misread as a
+        // burst; on a cold launch the first observe self-baselines anyway.
+        self.recomputeAnalytics(rebaselineCostLedger: true)
+        await self.recomputeDataCoverage()
     }
 
     private func handleFileChange(_ change: FileChange) async {
         switch change {
         case .sessionUpdated(let url), .sessionCreated(let url):
             let sessionId = url.deletingPathExtension().lastPathComponent
-
-            // Derive projectId by finding the "projects" path component
-            let components = url.pathComponents
-            let projectId: String
-            if let idx = components.lastIndex(of: "projects"), idx + 1 < components.count {
-                projectId = components[idx + 1]
-            } else {
-                projectId = url.deletingLastPathComponent().lastPathComponent
-            }
+            let projectId = Self.projectId(for: url)
 
             // Invalidate cache
             await cache.invalidate(sessionId)
+
+            // Fingerprint BEFORE parsing: bytes appended mid-parse would
+            // otherwise be recorded as already cached. A pre-parse identity is
+            // at worst stale, which self-heals on the next reconcile.
+            let identity = SessionSummaryStore.statIdentity(for: url)
 
             do {
                 let summary = try await parser.parseMetadata(
@@ -436,26 +586,10 @@ final class SessionStore {
                     pricingTable: pricingTable
                 )
 
-                // Re-read after the await so concurrent handlers (or a rescan)
-                // that completed during the suspension don't get clobbered.
-                var sessions = self.sessionsByProject[projectId] ?? []
-                if let idx = sessions.firstIndex(where: { $0.id == sessionId }) {
-                    sessions[idx] = summary
-                } else {
-                    sessions.insert(summary, at: 0)
-                }
-                self.sessionsByProject[projectId] = sessions
-
-                if !self.projects.contains(where: { $0.id == projectId }) {
-                    let project = Project(
-                        id: projectId,
-                        name: decodeProjectName(projectId),
-                        path: url.deletingLastPathComponent().path,
-                        sessionCount: sessions.count
-                    )
-                    self.projects.append(project)
-                    self.projects.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-                }
+                // applySummary re-reads state after the await so concurrent
+                // handlers (or a rescan) that completed during the suspension
+                // don't get clobbered.
+                self.applySummary(summary, projectId: projectId)
 
                 self.checkActiveSession()
                 self.recomputeAnalytics()
@@ -464,6 +598,23 @@ final class SessionStore {
                 // only — plain updates don't change the known-id set.
                 if case .sessionCreated = change {
                     await self.recomputeDataCoverage()
+                }
+
+                // Write-through to the summary cache. Failures are non-fatal:
+                // memory stays authoritative and the next reconcile heals.
+                if let store = summaryStore, let identity {
+                    do {
+                        let record = try SessionSummaryRecord.make(
+                            summary: summary,
+                            filePath: url.path,
+                            projectDir: projectId,
+                            identity: identity
+                        )
+                        try await store.upsert([record])
+                    } catch {
+                        NSLog("[Claudoscope] Watcher: cache upsert failed for %@: %@",
+                              sessionId, error.localizedDescription)
+                    }
                 }
             } catch {
                 NSLog("[Claudoscope] Watcher: failed to parse session %@ in project %@: %@",
@@ -476,12 +627,76 @@ final class SessionStore {
             // Real-time secret scan: check last 50 lines for secrets
             await scanForRealtimeSecrets(url: url, sessionId: sessionId, projectId: projectId)
 
+        case .sessionDeleted(let url):
+            let sessionId = url.deletingPathExtension().lastPathComponent
+            let projectId = Self.projectId(for: url)
+
+            await cache.invalidate(sessionId)
+            self.removeSummary(projectId: projectId, sessionId: sessionId)
+            if let store = summaryStore {
+                try? await store.delete(filePaths: [url.path])
+            }
+
+            self.lintResultsValid = false
+            self.checkActiveSession()
+            self.recomputeAnalytics()
+            // The known-id set shrank; the coverage badge must reflect it.
+            await self.recomputeDataCoverage()
+
         case .configChanged:
             // Handled by the debounced config-reload pipeline in setupWatcher().
             break
 
         case .mustRescan:
             rescanAllSessions()
+        }
+    }
+
+    /// Project directory id for a session file: the path component right
+    /// after "projects" (subagent files live two levels deeper).
+    nonisolated private static func projectId(for url: URL) -> String {
+        let components = url.pathComponents
+        if let idx = components.lastIndex(of: "projects"), idx + 1 < components.count {
+            return components[idx + 1]
+        }
+        return url.deletingLastPathComponent().lastPathComponent
+    }
+
+    /// Insert-or-replace one summary in the in-memory index, creating its
+    /// Project entry when needed. Shared by the watcher handler and the
+    /// reconcile delta application; reads current state at call time, so it
+    /// is safe after suspensions.
+    private func applySummary(_ summary: SessionSummary, projectId: String) {
+        var sessions = sessionsByProject[projectId] ?? []
+        if let idx = sessions.firstIndex(where: { $0.id == summary.id }) {
+            sessions[idx] = summary
+        } else {
+            sessions.insert(summary, at: 0)
+        }
+        sessionsByProject[projectId] = sessions
+
+        if !projects.contains(where: { $0.id == projectId }) {
+            let project = Project(
+                id: projectId,
+                name: decodeProjectName(projectId),
+                path: claudeDir.appendingPathComponent("projects").appendingPathComponent(projectId).path,
+                sessionCount: sessions.count
+            )
+            projects.append(project)
+            projects.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+    }
+
+    /// Remove one summary from the in-memory index, dropping the Project
+    /// entry when its last session goes.
+    private func removeSummary(projectId: String, sessionId: String) {
+        guard var sessions = sessionsByProject[projectId] else { return }
+        sessions.removeAll { $0.id == sessionId }
+        if sessions.isEmpty {
+            sessionsByProject.removeValue(forKey: projectId)
+            projects.removeAll { $0.id == projectId }
+        } else {
+            sessionsByProject[projectId] = sessions
         }
     }
 
@@ -528,20 +743,22 @@ final class SessionStore {
         }
     }
 
-    /// Re-scan all sessions with the current pricing table (e.g. after pricing provider change)
+    /// Re-scan all sessions with the current pricing table (e.g. after pricing
+    /// provider change) or after an FSEvents overflow. A pricing change
+    /// mismatches the cache's pricing key, so the pipeline wipes and reparses
+    /// everything (with progress); an overflow reconciles against matching
+    /// keys, which is a cheap stat-everything diff.
     func rescanAllSessions() {
         Task {
-            let scanner = ProjectScanner(
-                claudeDir: claudeDir,
-                parser: parser,
-                pricingTable: pricingTable
-            )
-            let (scannedProjects, scannedSessions) = await scanner.scan()
+            // Cancel-and-AWAIT before the pipeline recomputes global keys:
+            // a straggler batch upsert landing after the wipe would resurrect
+            // stale-priced rows.
+            self.scanTask?.cancel()
+            await self.scanTask?.value
 
-            self.projects = scannedProjects
-            self.sessionsByProject = scannedSessions
-            self.recomputeAnalytics(rebaselineCostLedger: true)
-            await self.recomputeDataCoverage()
+            let pipeline = Task { await self.runScanPipeline(hydrateFirst: false) }
+            self.scanTask = pipeline
+            await pipeline.value
             await self.loadCowork(rebaselineCostLedger: true)
         }
     }
@@ -618,7 +835,7 @@ final class SessionStore {
     var sidebarAnalyticsData: AnalyticsData = .empty
 
     private func evaluateCostAlerts(rebaselineLedger: Bool) {
-        guard !isLoading, let costAlertService else { return }
+        guard !isLoading, !isReconciling, let costAlertService else { return }
 
         let all = allSessionsWithProjects.map(\.session) + coworkSummaries
         var cumulativeCost = 0.0
