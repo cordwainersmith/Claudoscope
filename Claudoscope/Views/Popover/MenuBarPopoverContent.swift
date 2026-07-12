@@ -5,7 +5,7 @@ struct MenuBarPopoverContent: View {
     @Environment(SessionStore.self) private var store
     @Environment(UpdateService.self) private var updateService
     @Environment(CostAlertService.self) private var costAlertService
-    @State private var showAbout = false
+    @Environment(\.openWindow) private var openWindow
     @State private var showUpToDate = false
     @AppStorage("hasSeenRepositionTip") private var hasSeenTip = false
 
@@ -120,7 +120,7 @@ struct MenuBarPopoverContent: View {
                 Divider()
 
                 PopoverMenuButton(label: "About Claudoscope", systemImage: "info.circle") {
-                    showAbout = true
+                    openWindow(id: "about")
                 }
 
                 PopoverMenuButton(label: "Quit Claudoscope", systemImage: "power", shortcut: "\u{2318}Q") {
@@ -130,13 +130,6 @@ struct MenuBarPopoverContent: View {
         }
         .frame(width: 280)
         .onAppear { costAlertService.acknowledgeSeen() }
-        .overlay {
-            if showAbout {
-                AboutOverlay {
-                    showAbout = false
-                }
-            }
-        }
     }
 
     private var activeSessions: [SessionSummary] {

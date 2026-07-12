@@ -57,7 +57,10 @@ struct WhatsNewWindowContent: View {
 
 // MARK: - Activation Policy Management
 
-private struct ActivationPolicyModifier: ViewModifier {
+/// Brings an auxiliary window to the front in this `LSUIElement` app, then
+/// reverts to accessory mode on close when no other normal window remains.
+/// Shared by the update, what's-new, and about windows.
+struct ActivationPolicyModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear {

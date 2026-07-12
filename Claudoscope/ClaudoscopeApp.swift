@@ -95,6 +95,12 @@ struct ClaudoscopeApp: App {
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 440, height: 450)
+
+        Window("About Claudoscope", id: "about") {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 340, height: 260)
     }
 
 }
