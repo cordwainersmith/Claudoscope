@@ -4,6 +4,7 @@ import Combine
 enum FileChange: Sendable {
     case sessionUpdated(URL)
     case sessionCreated(URL)
+    case sessionDeleted(URL)
     case configChanged(URL)
     case mustRescan
 }
@@ -145,13 +146,21 @@ final class ClaudeFileWatcher: @unchecked Sendable {
         // surface event is ItemRenamed (sometimes paired with ItemInodeMetaMod).
         let isRenamed = flags & UInt32(kFSEventStreamEventFlagItemRenamed) != 0
         let isInodeMeta = flags & UInt32(kFSEventStreamEventFlagItemInodeMetaMod) != 0
+        let isRemoved = flags & UInt32(kFSEventStreamEventFlagItemRemoved) != 0
 
         // Session .jsonl files only live under ~/.claude/projects/. Now that the
         // watch root is the whole ~/.claude/ tree, gate on the path component to
         // ignore unrelated .jsonl files (e.g. ~/.claude/history.jsonl).
         if path.hasSuffix(".jsonl") && path.contains("/projects/") {
-            guard isCreated || isModified || isRenamed || isInodeMeta else { return }
+            guard isCreated || isModified || isRenamed || isInodeMeta || isRemoved else { return }
             debounceEmit(key: path) {
+                // Existence decides at fire time, not event time: atomic saves
+                // emit Removed/Renamed with the file present again (an update),
+                // and delete-then-recreate inside the debounce window must
+                // resolve to created/updated, never a deletion.
+                if !FileManager.default.fileExists(atPath: path) {
+                    return .sessionDeleted(url)
+                }
                 if isCreated {
                     return .sessionCreated(url)
                 } else {

@@ -8,12 +8,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.11.1"),
     ],
     targets: [
         .executableTarget(
             name: "Claudoscope",
             dependencies: [
                 .product(name: "OrderedCollections", package: "swift-collections"),
+                .product(name: "GRDB", package: "GRDB.swift"),
             ],
             path: "Claudoscope",
             exclude: ["Info.plist", "Claudoscope.entitlements"],
@@ -29,7 +31,10 @@ let package = Package(
         ),
         .testTarget(
             name: "ClaudoscopeTests",
-            dependencies: ["Claudoscope"],
+            dependencies: [
+                "Claudoscope",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
             path: "ClaudoscopeTests"
         ),
     ]

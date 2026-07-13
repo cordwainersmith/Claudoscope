@@ -52,10 +52,13 @@ struct FullWindowView: View {
             commandPaletteLayer
         }
         .overlay(alignment: .top) {
-            if store.isLoading {
+            // Reconcile visibility is gated on total > 0 so a warm no-change
+            // launch (0 changed files) never flashes the banner.
+            let showScanBanner = store.isLoading || (store.isReconciling && store.scanSessionsTotal > 0)
+            if showScanBanner {
                 ScanProgressBanner()
                 .transition(.move(edge: .top).combined(with: .opacity))
-                .animation(.easeInOut(duration: 0.3), value: store.isLoading)
+                .animation(.easeInOut(duration: 0.3), value: showScanBanner)
             }
         }
         .onChange(of: selectedRail) { oldRail, newRail in
