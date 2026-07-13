@@ -185,13 +185,25 @@ final class SessionStore {
             }
     }
 
+    /// A session counts as "active" if its last activity was within this many
+    /// seconds. Shared by the Active Sessions card (< threshold), the menu bar
+    /// dot (`checkActiveSession`), and `recentSessions` (>= threshold) so the
+    /// active/recent boundary can never drift out of sync.
+    nonisolated static let activeThreshold: TimeInterval = 60
+
     /// Recent sessions (last 3, any date, CLI + Cowork). Subagents are filtered
     /// out — their UUID titles would push real top-level sessions out of the
-    /// popover's list.
+    /// popover's list. Currently-active sessions are excluded too: they already
+    /// show in the Active Sessions card, so Recent complements it, never mirrors it.
     var recentSessions: [SessionSummary] {
-        Array(
+        let now = Date()
+        return Array(
             (allSessionsWithProjects.map(\.session) + coworkSummaries)
                 .filter { !$0.isSubagent }
+                .filter { session in
+                    guard let date = ISO8601.parse(session.lastTimestamp) else { return true }
+                    return now.timeIntervalSince(date) >= Self.activeThreshold
+                }
                 .sorted { $0.lastTimestamp > $1.lastTimestamp }
                 .prefix(3)
         )
@@ -529,7 +541,7 @@ final class SessionStore {
         let now = Date()
         hasActiveSession = allSessionsWithProjects.contains { pair in
             guard let date = ISO8601.parse(pair.session.lastTimestamp) else { return false }
-            return now.timeIntervalSince(date) < 60
+            return now.timeIntervalSince(date) < Self.activeThreshold
         }
     }
 

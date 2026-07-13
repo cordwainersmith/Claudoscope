@@ -146,7 +146,7 @@ struct MenuBarPopoverContent: View {
                 // still counts subagents so the menu bar dot remains accurate.
                 guard !session.isSubagent else { return false }
                 guard let date = ISO8601.parse(session.lastTimestamp) else { return false }
-                return now.timeIntervalSince(date) < 60
+                return now.timeIntervalSince(date) < SessionStore.activeThreshold
             }
     }
 }
