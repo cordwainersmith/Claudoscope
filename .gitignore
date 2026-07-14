@@ -44,3 +44,6 @@ ClaudoscopeTests/SecretDetectionTests.swift
 # User-submitted diagnostics bundles
 claudoscope-diag-*.tar.gz
 claudoscope-diag-*/
+
+# xcode 
+.build-xcode/
