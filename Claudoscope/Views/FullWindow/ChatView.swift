@@ -2,11 +2,16 @@ import SwiftUI
 
 struct ChatView: View {
     let session: ParsedSession
+    /// Record uuid to scroll to (set by the Files tab's jump-to-chat).
+    /// Consumed and cleared on appear / on change; .constant(nil) when the
+    /// host has no Files tab (Cowork).
+    @Binding var scrollTargetUuid: String?
+    /// Navigates to the Files tab; nil hides the file-changes link (Cowork).
+    var onOpenFilesTab: (() -> Void)? = nil
     @State private var isNearTop = true
     @State private var isNearBottom = false
     @State private var searchText = ""
     @State private var currentMatchIndex = 0
-    @State private var fileChangesExpanded = false
     @State private var blockedActionsExpanded = false
 
     @AppStorage("showThinking") private var showThinking = true
@@ -141,6 +146,28 @@ struct ChatView: View {
                     }
                 }
             }
+            .onAppear { consumeScrollTarget(proxy: proxy) }
+            .onChange(of: scrollTargetUuid) { _, _ in consumeScrollTarget(proxy: proxy) }
+        }
+    }
+
+    /// Jump-to-chat: map the target uuid to its parse-order index (the
+    /// `record-\(index)` anchors), un-hide tool calls if the record is
+    /// filtered out, then scroll on the next runloop so the anchor exists.
+    private func consumeScrollTarget(proxy: ScrollViewProxy) {
+        guard let target = scrollTargetUuid else { return }
+        guard let index = session.records.firstIndex(where: { $0.uuid == target }) else {
+            scrollTargetUuid = nil
+            return
+        }
+        if !isRecordVisible(session.records[index]) {
+            showToolCalls = true
+        }
+        Task { @MainActor in
+            withAnimation {
+                proxy.scrollTo("record-\(index)", anchor: .center)
+            }
+            scrollTargetUuid = nil
         }
     }
 
@@ -188,8 +215,8 @@ struct ChatView: View {
                     blockedActionsSection(blockedActions)
                 }
 
-                if !fileChanges.isEmpty {
-                    fileChangesSection(fileChanges)
+                if !fileChanges.isEmpty, onOpenFilesTab != nil {
+                    fileChangesLink
                 }
 
                 if filtersActive && shown.isEmpty {
@@ -328,39 +355,33 @@ struct ChatView: View {
         }
     }
 
-    @ViewBuilder
-    private func fileChangesSection(_ changes: [FileChangeSummary]) -> some View {
-        DisclosureGroup(isExpanded: $fileChangesExpanded) {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(changes) { change in
-                    HStack(spacing: 8) {
-                        Image(systemName: "doc.text")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                        Text(change.path)
-                            .font(Typography.code)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Text("v\(change.latestVersion)")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-            .padding(.top, 6)
+    /// Slim deep-link into the Files tab. Deliberately count-free: the
+    /// snapshot-based summary here and the patch-based Files tab can disagree
+    /// (subagent edits), so only one authoritative number is ever shown.
+    private var fileChangesLink: some View {
+        Button {
+            onOpenFilesTab?()
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "clock.arrow.circlepath")
+                Image(systemName: "doc.text")
                     .font(.system(size: 12))
-                Text("Files changed (\(changes.count))")
+                Text("View file changes")
                     .font(.system(size: 12, weight: .medium))
+                Spacer()
+                Text("diffs")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
             .foregroundStyle(.secondary)
+            .padding(12)
+            .background(.bar)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
         }
-        .padding(12)
-        .background(.bar)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

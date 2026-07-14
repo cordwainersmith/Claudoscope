@@ -148,34 +148,60 @@ private struct SessionDetailTabView: View {
     let session: ParsedSession
     @Environment(SessionStore.self) private var store
     @State private var selectedTab: SessionTab = .chat
+    /// Set by the Files tab's jump-to-chat; ChatView consumes and clears it.
+    @State private var chatScrollTargetUuid: String?
 
     enum SessionTab: String, CaseIterable {
         case chat = "Chat"
+        case files = "Files"
         case agentTree = "Agent Tree"
     }
 
-    private var showAgentTreeTab: Bool {
+    private var availableTabs: [SessionTab] {
         store.hasSubagentFiles(sessionId: session.id, projectId: session.projectId)
+            ? SessionTab.allCases
+            : [.chat, .files]
+    }
+
+    /// Computed instead of an onChange reset so switching to a session
+    /// without subagents while Agent Tree is selected never renders an
+    /// out-of-set tab for a frame.
+    private var effectiveTab: SessionTab {
+        availableTabs.contains(selectedTab) ? selectedTab : .chat
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            if showAgentTreeTab {
-                Picker("", selection: $selectedTab) {
-                    ForEach(SessionTab.allCases, id: \.self) { tab in
-                        Text(tab.rawValue).tag(tab)
-                    }
+            Picker("", selection: Binding(
+                get: { effectiveTab },
+                set: { selectedTab = $0 }
+            )) {
+                ForEach(availableTabs, id: \.self) { tab in
+                    Text(tab.rawValue).tag(tab)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
             }
+            .pickerStyle(.segmented)
+            .frame(width: CGFloat(availableTabs.count) * 110)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
 
-            switch selectedTab {
+            switch effectiveTab {
             case .chat:
-                ChatView(session: session)
-                    .id(session.id)
+                ChatView(
+                    session: session,
+                    scrollTargetUuid: $chatScrollTargetUuid,
+                    onOpenFilesTab: { selectedTab = .files }
+                )
+                .id(session.id)
+            case .files:
+                SessionFilesView(
+                    session: session,
+                    onJumpToChat: { uuid in
+                        chatScrollTargetUuid = uuid
+                        selectedTab = .chat
+                    }
+                )
+                .id(session.id)
             case .agentTree:
                 AgentTreeView(session: session)
                     .id(session.id)

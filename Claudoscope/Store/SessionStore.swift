@@ -86,6 +86,12 @@ final class SessionStore {
     var subagentTree: SubagentNode? = nil
     var sessionBadges: [String: SessionBadgeData] = [:]
 
+    // File changes data (session-detail Files tab). fileChangeSet.sessionKey
+    // identifies which session it belongs to; the view ignores a mismatch.
+    var fileChangeSet: FileChangeSet?
+    var fileChangesLoading: Bool = false
+    var fileDiskStates: [String: FileDiskState] = [:]
+
     // Lint data
     var lintResults: [LintResult] = []
     var lintSummary: LintSummary = .empty
@@ -170,6 +176,7 @@ final class SessionStore {
     private let timelineService: TimelineService
     private let configService: ConfigService
     private let linterService = ConfigLinterService()
+    private let fileChangesService = FileChangesService()
     private let coworkService = CoworkService()
     private let coworkWatcher = CoworkFileWatcher(supportDir: CoworkService.defaultSupportDir)
     private var cancellables = Set<AnyCancellable>()
@@ -1114,6 +1121,36 @@ final class SessionStore {
             }
         } catch {
             self.subagentTree = nil
+        }
+    }
+
+    // MARK: - File Changes (Files tab)
+
+    /// Locator key for a session's Files-tab data. The view's .task(id:) and
+    /// stale-guard use this exact key, so it can never diverge from what
+    /// loadFileChanges stores (see FileChangesService.fileChangesLocator).
+    func fileChangesKey(for session: ParsedSession) -> String {
+        FileChangesService.fileChangesLocator(for: session, claudeDir: claudeDir).key
+    }
+
+    func loadFileChanges(for session: ParsedSession) async {
+        let locator = FileChangesService.fileChangesLocator(for: session, claudeDir: claudeDir)
+        fileChangesLoading = true
+        defer { fileChangesLoading = false }
+        do {
+            let changeSet = try await fileChangesService.loadChangeSet(
+                mainFileURL: locator.url,
+                sessionKey: locator.key
+            )
+            // Disk states are re-checked on every activation, cache hit or not.
+            let states = await fileChangesService.diskStates(for: changeSet)
+            self.fileChangeSet = changeSet
+            self.fileDiskStates = states
+        } catch {
+            if self.fileChangeSet?.sessionKey == locator.key {
+                self.fileChangeSet = nil
+                self.fileDiskStates = [:]
+            }
         }
     }
 

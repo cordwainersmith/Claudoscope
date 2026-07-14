@@ -178,7 +178,7 @@ private struct CoworkSessionDetail: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 16)
-                    ChatView(session: parsed)
+                    ChatView(session: parsed, scrollTargetUuid: .constant(nil))
                         .frame(minHeight: 400)
                 }
             }
