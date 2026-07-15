@@ -865,6 +865,15 @@ extension SettingsMainPanelView {
         }
     }
 
+    // MARK: - Notifications Section
+
+    @ViewBuilder
+    func notificationsSection() -> some View {
+        settingsSection(id: "notifications", icon: "bell", title: "Notifications") {
+            NotificationsSectionContent()
+        }
+    }
+
     // MARK: - Updates Section
 
     @ViewBuilder
@@ -1226,6 +1235,178 @@ private struct CostAlertRuleRow: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+// MARK: - Notifications Section Content
+
+struct NotificationsSectionContent: View {
+    @Environment(SessionNotificationService.self) private var service
+    @Environment(SessionStore.self) private var store
+    @State private var showReplaceConfirm = false
+    @State private var busy = false
+
+    var body: some View {
+        @Bindable var service = service
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Enable session notifications", isOn: Binding(
+                    get: { service.config.masterEnabled },
+                    set: { toggle(to: $0) }
+                ))
+                .toggleStyle(.checkbox)
+                .font(Typography.body)
+                .disabled(busy)
+
+                Text("Get a macOS notification when a session is waiting on you (permission, plan, or an MCP prompt) or finishes after a long run. Installs a Claude Code notification hook.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+
+            if service.config.masterEnabled {
+                Divider().padding(.horizontal, 12)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Play a sound", isOn: $service.config.soundEnabled)
+                        .toggleStyle(.checkbox)
+                        .font(Typography.body)
+
+                    Toggle("Quiet hours", isOn: $service.config.quietHoursEnabled)
+                        .toggleStyle(.checkbox)
+                        .font(Typography.body)
+
+                    if service.config.quietHoursEnabled {
+                        HStack(spacing: 8) {
+                            Text("From").font(.system(size: 12)).foregroundStyle(.secondary)
+                            DatePicker(
+                                "",
+                                selection: timeBinding($service.config.quietHoursStartMinutes),
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
+                            .fixedSize()
+                            Text("to").font(.system(size: 12)).foregroundStyle(.secondary)
+                            DatePicker(
+                                "",
+                                selection: timeBinding($service.config.quietHoursEndMinutes),
+                                displayedComponents: .hourAndMinute
+                            )
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        .padding(.leading, 20)
+                    }
+
+                    if !store.projects.isEmpty {
+                        Divider()
+                        Text("Notify for these projects")
+                            .font(Typography.bodyMedium)
+                        Text("Uncheck a project to mute its notifications.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 4) {
+                                ForEach(store.projects, id: \.id) { project in
+                                    Toggle(project.name, isOn: muteBinding(for: project.id))
+                                        .toggleStyle(.checkbox)
+                                        .font(Typography.body)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 180)
+                    }
+                }
+                .padding(.horizontal, 12)
+
+                if service.notificationsUnavailable {
+                    HStack(spacing: 4) {
+                        Image(systemName: "info.circle").font(.system(size: 11))
+                        Text("Notifications are available in the installed app.")
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                } else if service.notificationsDenied {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle").font(.system(size: 11))
+                        Text("Notifications are off for Claudoscope in System Settings.")
+                            .font(.system(size: 11))
+                        Button("Open Notification Settings") {
+                            service.openSystemNotificationSettings()
+                        }
+                        .font(.system(size: 11))
+                    }
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        .onAppear { service.refreshAuthorizationStatus() }
+        .confirmationDialog(
+            "Replace your existing notification hook?",
+            isPresented: $showReplaceConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Replace session-notify.sh") { Task { await doEnable() } }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("You already have a session-notify.sh hook that shows its own banners. Claudoscope will disable it to avoid duplicates. It is restored if you turn this off.")
+        }
+    }
+
+    private func toggle(to newValue: Bool) {
+        guard !busy else { return }
+        if newValue {
+            Task {
+                if await service.hasConflictingHook() {
+                    showReplaceConfirm = true
+                } else {
+                    await doEnable()
+                }
+            }
+        } else {
+            Task {
+                busy = true
+                await service.disable()
+                busy = false
+            }
+        }
+    }
+
+    private func doEnable() async {
+        busy = true
+        await service.enable()
+        busy = false
+    }
+
+    private func timeBinding(_ minutes: Binding<Int>) -> Binding<Date> {
+        Binding<Date>(
+            get: {
+                let cal = Calendar.current
+                let start = cal.startOfDay(for: Date())
+                return cal.date(byAdding: .minute, value: minutes.wrappedValue, to: start) ?? start
+            },
+            set: { newDate in
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                minutes.wrappedValue = (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
+            }
+        )
+    }
+
+    private func muteBinding(for projectId: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { !service.config.mutedProjectIds.contains(projectId) },
+            set: { isOn in
+                if isOn {
+                    service.config.mutedProjectIds.remove(projectId)
+                } else {
+                    service.config.mutedProjectIds.insert(projectId)
+                }
+            }
+        )
     }
 }
 

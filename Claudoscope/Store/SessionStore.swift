@@ -134,6 +134,9 @@ final class SessionStore {
 
     // Cost alerts: owned by the app, evaluated at the end of recomputeAnalytics().
     @ObservationIgnored var costAlertService: CostAlertService?
+    // Session lifecycle notifications: owned by the app, fed spool events and
+    // per-session activity from handleFileChange.
+    @ObservationIgnored var sessionNotificationService: SessionNotificationService?
     /// The first Cowork merge adds lifetime totals in one jump; it must
     /// rebaseline the spend ledger, not enter the rolling window.
     @ObservationIgnored private var coworkMergedIntoCostLedger = false
@@ -615,6 +618,17 @@ final class SessionStore {
                 // don't get clobbered.
                 self.applySummary(summary, projectId: projectId)
 
+                // Feed the notification service (subagents skipped inside): drives
+                // the "completed after a long run" timer and clears any waiting state.
+                self.sessionNotificationService?.noteActivity(
+                    sessionId: summary.id,
+                    isSubagent: summary.isSubagent,
+                    projectId: projectId,
+                    title: summary.title,
+                    firstTimestamp: summary.firstTimestamp,
+                    lastTimestamp: summary.lastTimestamp
+                )
+
                 self.checkActiveSession()
                 self.recomputeAnalytics()
                 // A brand-new transcript can close a coverage gap (a previously
@@ -666,6 +680,9 @@ final class SessionStore {
             self.recomputeAnalytics()
             // The known-id set shrank; the coverage badge must reflect it.
             await self.recomputeDataCoverage()
+
+        case .notificationEvent(let url):
+            sessionNotificationService?.handleSpoolFile(url)
 
         case .configChanged:
             // Handled by the debounced config-reload pipeline in setupWatcher().

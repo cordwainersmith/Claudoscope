@@ -6,6 +6,9 @@ enum FileChange: Sendable {
     case sessionCreated(URL)
     case sessionDeleted(URL)
     case configChanged(URL)
+    /// A file dropped into ~/.claude/.claudoscope-events/ by our own Notification
+    /// hook bridge (claudoscope-notify.sh). Carries the spool file URL.
+    case notificationEvent(URL)
     case mustRescan
 }
 
@@ -166,6 +169,15 @@ final class ClaudeFileWatcher: @unchecked Sendable {
                 } else {
                     return .sessionUpdated(url)
                 }
+            }
+        } else if path.contains("/.claudoscope-events/") && path.hasSuffix(".json") {
+            // Our own Notification hook spool. Emit on create/rename/modify only;
+            // the app deletes files it has processed, and that removal must not
+            // feed back as an event. The service tolerates a missing file, so an
+            // already-drained path is a safe no-op.
+            guard isCreated || isModified || isRenamed || isInodeMeta else { return }
+            debounceEmit(key: path) {
+                return .notificationEvent(url)
             }
         } else if path.hasSuffix("settings.json") ||
                   path.hasSuffix("settings.local.json") ||

@@ -19,6 +19,7 @@ struct SettingsSidebarContent: View {
         ("environment", "terminal", "Environment"),
         ("pricing", "dollarsign.circle", "Pricing"),
         ("costAlerts", "bell.badge", "Cost Alerts"),
+        ("notifications", "bell", "Notifications"),
         ("updates", "arrow.triangle.2.circlepath", "Updates"),
     ]
 

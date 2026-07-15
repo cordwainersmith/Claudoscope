@@ -8,7 +8,7 @@ struct SettingsMainPanelView: View {
     @State var settings: [String: Any]?
     @State var loadError: String?
     @State var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "security", "attribution", "themes", "plugins", "account", "general", "environment", "pricing", "costAlerts", "updates"
+        "appearance", "model", "permissions", "security", "attribution", "themes", "plugins", "account", "general", "environment", "pricing", "costAlerts", "notifications", "updates"
     ]
 
     var settingsPath: String {
@@ -69,6 +69,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("general") { generalSection([:]) }
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("costAlerts") { costAlertsSection() }
+                    if shouldShow("notifications") { notificationsSection() }
                     if shouldShow("updates") { updatesSection() }
                 }
                 .frame(maxWidth: 700)
@@ -130,6 +131,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("environment") { environmentSection(dict) }
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("costAlerts") { costAlertsSection() }
+                    if shouldShow("notifications") { notificationsSection() }
                     if shouldShow("updates") { updatesSection() }
                 }
                 .frame(maxWidth: 700)

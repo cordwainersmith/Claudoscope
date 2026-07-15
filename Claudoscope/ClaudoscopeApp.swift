@@ -6,6 +6,7 @@ struct ClaudoscopeApp: App {
     @State private var updateService: UpdateService
     @State private var loginItemService: LoginItemService
     @State private var costAlertService: CostAlertService
+    @State private var sessionNotificationService: SessionNotificationService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     init() {
@@ -13,12 +14,20 @@ struct ClaudoscopeApp: App {
         let updateService = UpdateService()
         let loginItemService = LoginItemService()
         let costAlertService = CostAlertService()
+        // Constructed AFTER costAlertService so its notification-center delegate
+        // is already set (this service deliberately installs none, relying on it).
+        let sessionNotificationService = SessionNotificationService(
+            claudeDir: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude"),
+            setInstallInProgress: { [weak store] value in store?.setInstallInProgress(value) }
+        )
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
         _loginItemService = State(initialValue: loginItemService)
         _costAlertService = State(initialValue: costAlertService)
+        _sessionNotificationService = State(initialValue: sessionNotificationService)
 
         store.costAlertService = costAlertService
+        store.sessionNotificationService = sessionNotificationService
         costAlertService.onOpenDashboard = { [weak store] in
             guard let store else { return }
             MainWindowController.shared.open(store: store)
@@ -27,6 +36,7 @@ struct ClaudoscopeApp: App {
         MainWindowController.shared.setUpdateService(updateService)
         MainWindowController.shared.setLoginItemService(loginItemService)
         MainWindowController.shared.setCostAlertService(costAlertService)
+        MainWindowController.shared.setSessionNotificationService(sessionNotificationService)
 
         store.onSecretAlert = { [weak store] alert in
             guard let store else { return }
@@ -70,6 +80,7 @@ struct ClaudoscopeApp: App {
                 .environment(updateService)
                 .environment(loginItemService)
                 .environment(costAlertService)
+                .environment(sessionNotificationService)
                 .background {
                     UpdateTriggerView()
                         .environment(updateService)
