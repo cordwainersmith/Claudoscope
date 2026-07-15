@@ -71,6 +71,13 @@ final class SessionStore {
     var plugins: [PluginInfo] = []
     var configLoading: Bool = false
 
+    // Canon data (per-project decision records; read-only viewer). canonData
+    // holds the currently-viewed project's records; canonLoadedProjectId lets the
+    // session-event piggyback know which project's canon to refresh live.
+    var canonData: CanonData?
+    var canonDetectedProjectIds: Set<String> = []
+    private var canonLoadedProjectId: String?
+
     // Cowork data (Claude desktop app's agentic mode, separate from Claude Code)
     var coworkAvailability: CoworkAvailability = .unknown
     var coworkSessions: [CoworkSession] = []
@@ -137,6 +144,9 @@ final class SessionStore {
     // Session lifecycle notifications: owned by the app, fed spool events and
     // per-session activity from handleFileChange.
     @ObservationIgnored var sessionNotificationService: SessionNotificationService?
+    // Canon: owned by the app. The lint pipeline consults it for per-project
+    // opt-in gating and the bundled protocol version.
+    @ObservationIgnored var canonService: CanonService?
     /// The first Cowork merge adds lifetime totals in one jump; it must
     /// rebaseline the spend ledger, not enter the rolling window.
     @ObservationIgnored private var coworkMergedIntoCostLedger = false
@@ -359,6 +369,32 @@ final class SessionStore {
                 Task {
                     await self.loadConfig(projectId: self.selectedAnalyticsProjectId)
                     await self.recomputeDataCoverage()   // picks up cleanupPeriodDays edits
+                }
+            }
+            .store(in: &cancellables)
+
+        // Canon liveness (hybrid): canon files live in the repo working tree,
+        // outside the watched ~/.claude/ tree, so they can't be watched directly.
+        // Instead, piggyback on session events — when a session in the currently
+        // viewed canon project updates (exactly when Claude appends records),
+        // refresh that project's records. projectId is derived off the publish
+        // thread; the loaded-project check runs on main to avoid a data race.
+        watcher.changes
+            .compactMap { change -> String? in
+                switch change {
+                case .sessionUpdated(let url), .sessionCreated(let url):
+                    return Self.projectId(for: url)
+                default:
+                    return nil
+                }
+            }
+            .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
+            .sink { [weak self] projectId in
+                guard let self else { return }
+                Task {
+                    if self.canonLoadedProjectId == projectId {
+                        await self.loadCanon(projectId: projectId)
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -993,6 +1029,101 @@ final class SessionStore {
         self.memoryFiles = memory
     }
 
+    // MARK: - Canon
+
+    /// Load the selected project's canon records + install status off disk.
+    /// Records `canonLoadedProjectId` so the session-event piggyback knows which
+    /// project to refresh live.
+    func loadCanon(projectId: String?) async {
+        let data = await configService.loadCanon(projectId: projectId)
+        self.canonData = data
+        self.canonLoadedProjectId = projectId
+    }
+
+    /// Recompute which known projects have canon artifacts on disk. Drives the
+    /// Canon sidebar's "detected on disk" indicator.
+    func refreshCanonDetection() async {
+        let ids = projects.map(\.id)
+        let detected = await configService.detectCanonProjects(projectIds: ids)
+        self.canonDetectedProjectIds = detected
+    }
+
+    /// Install canon into one project and record the opt-in. Resolves the real
+    /// repo path (Project.path is the session dir, not the working tree).
+    @discardableResult
+    func enableCanon(projectId: String) async throws -> CanonInstallResult {
+        guard let canonService else { throw CanonInstallError.io("Canon service unavailable") }
+        guard let realPath = await configService.realProjectPath(projectId) else {
+            throw CanonInstallError.io("Project directory not found on disk")
+        }
+        let result = try await canonService.enable(projectId: projectId, projectPath: realPath)
+        if canonLoadedProjectId == projectId { await loadCanon(projectId: projectId) }
+        await refreshCanonDetection()
+        return result
+    }
+
+    /// Remove the protocol rule for one project (records kept) and clear opt-in.
+    /// If the repo path is gone, just drops the stale opt-in.
+    func disableCanon(projectId: String) async throws {
+        guard let canonService else { throw CanonInstallError.io("Canon service unavailable") }
+        if let realPath = await configService.realProjectPath(projectId) {
+            try await canonService.disable(projectId: projectId, projectPath: realPath)
+        } else {
+            canonService.forgetOptIn(projectId)
+        }
+        if canonLoadedProjectId == projectId { await loadCanon(projectId: projectId) }
+        await refreshCanonDetection()
+    }
+
+    /// Bulk-enable canon across every known project. Projects whose repo path no
+    /// longer exists on disk are skipped. Refreshes viewer + detection once at
+    /// the end.
+    func enableCanonForAllProjects() async -> CanonBulkResult {
+        guard let canonService else { return CanonBulkResult() }
+        var result = CanonBulkResult()
+        for project in projects {
+            guard let realPath = await configService.realProjectPath(project.id) else {
+                result.skipped += 1
+                continue
+            }
+            do {
+                _ = try await canonService.enable(projectId: project.id, projectPath: realPath)
+                result.succeeded += 1
+            } catch {
+                result.failed += 1
+                result.failedNames.append(project.name)
+            }
+        }
+        if let pid = canonLoadedProjectId { await loadCanon(projectId: pid) }
+        await refreshCanonDetection()
+        return result
+    }
+
+    /// Bulk-disable canon across every currently opted-in project. Records are
+    /// kept on disk; only the protocol rule + opt-in are removed.
+    func disableCanonForAllProjects() async -> CanonBulkResult {
+        guard let canonService else { return CanonBulkResult() }
+        var result = CanonBulkResult()
+        let optedIn = projects.filter { canonService.isOptedIn($0.id) }
+        for project in optedIn {
+            if let realPath = await configService.realProjectPath(project.id) {
+                do {
+                    try await canonService.disable(projectId: project.id, projectPath: realPath)
+                    result.succeeded += 1
+                } catch {
+                    result.failed += 1
+                    result.failedNames.append(project.name)
+                }
+            } else {
+                canonService.forgetOptIn(project.id)
+                result.skipped += 1
+            }
+        }
+        if let pid = canonLoadedProjectId { await loadCanon(projectId: pid) }
+        await refreshCanonDetection()
+        return result
+    }
+
     // MARK: - Config Lint
 
     func runConfigLintIfNeeded(projectId: String?) async {
@@ -1023,6 +1154,16 @@ final class SessionStore {
         var fastResults = await linterService.lint(projectRoot: projectRoot, globalClaudeDir: claudeDir)
         let sessionResults = await linterService.lintSessions(sessions)
         fastResults.append(contentsOf: sessionResults)
+
+        // Canon (CAN family): only for the selected project when it is opted in.
+        if let projectId, let projectRoot, let canonService, canonService.isOptedIn(projectId) {
+            let canonResults = await linterService.lintCanon(
+                projectRoot: projectRoot,
+                bundledProtocolVersion: canonService.bundledProtocolVersion
+            )
+            fastResults.append(contentsOf: canonResults)
+        }
+
         fastResults.sort { $0.severity < $1.severity }
 
         let phase1Results = fastResults

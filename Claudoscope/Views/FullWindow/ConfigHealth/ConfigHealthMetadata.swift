@@ -295,6 +295,26 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Plugin contributes no components",
         hint: "A plugin contributes no commands, skills, or hooks. It may be misconfigured or an empty install."
     ),
+    .CAN001: RuleMetadata(
+        displayName: "Canon protocol missing",
+        hint: "Canon is enabled for this project but .claude/rules/canon.md is absent, so Claude Code won't follow the canon protocol. Re-enable Canon from the Canon rail to reinstall the protocol rule."
+    ),
+    .CAN002: RuleMetadata(
+        displayName: "Canon records gitignored",
+        hint: "The canon records (.claude/canon.md) are gitignored, so decisions committed by teammates won't be shared. Un-ignore the .claude canon files in .gitignore so the records travel with the repo."
+    ),
+    .CAN003: RuleMetadata(
+        displayName: "Malformed canon record",
+        hint: "A record in .claude/canon.md is missing its metadata line or uses an invalid kind/status. Each record needs `kind: <choice|constraint|convention|gotcha> | date: YYYY-MM-DD | status: canon`."
+    ),
+    .CAN004: RuleMetadata(
+        displayName: "Canon protocol outdated",
+        hint: "The installed canon protocol is older than the version this app bundles. Reinstall Canon from the Canon rail to refresh the protocol rule."
+    ),
+    .CAN005: RuleMetadata(
+        displayName: "Dangling canon supersede",
+        hint: "A record's `superseded by:` names a record that doesn't exist, or a non-canon record has no pointer. Point the status to an existing record title, or restore it to `status: canon`."
+    ),
 ]
 
 struct CategoryDef: Identifiable {
@@ -312,6 +332,7 @@ let healthCategories: [CategoryDef] = [
     CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS", "HOOK"], sortOrder: 3),
     CategoryDef(id: "config", label: "Configuration", icon: "i", color: Color(red: 0.216, green: 0.541, blue: 0.867), prefixes: ["XCT", "CFG", "CMD", "RUL"], sortOrder: 4),
     CategoryDef(id: "plugins", label: "Plugins", icon: "P", color: Color(red: 0.357, green: 0.678, blue: 0.518), prefixes: ["PLG"], sortOrder: 5),
+    CategoryDef(id: "canon", label: "Canon", icon: "C", color: Color(red: 0.553, green: 0.435, blue: 0.302), prefixes: ["CAN"], sortOrder: 6),
 ]
 
 let otherCategory = CategoryDef(id: "other", label: "Other", icon: "?", color: .gray, prefixes: [], sortOrder: 99)

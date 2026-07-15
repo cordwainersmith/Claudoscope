@@ -7,6 +7,7 @@ struct ClaudoscopeApp: App {
     @State private var loginItemService: LoginItemService
     @State private var costAlertService: CostAlertService
     @State private var sessionNotificationService: SessionNotificationService
+    @State private var canonService: CanonService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     init() {
@@ -20,14 +21,17 @@ struct ClaudoscopeApp: App {
             claudeDir: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude"),
             setInstallInProgress: { [weak store] value in store?.setInstallInProgress(value) }
         )
+        let canonService = CanonService()
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
         _loginItemService = State(initialValue: loginItemService)
         _costAlertService = State(initialValue: costAlertService)
         _sessionNotificationService = State(initialValue: sessionNotificationService)
+        _canonService = State(initialValue: canonService)
 
         store.costAlertService = costAlertService
         store.sessionNotificationService = sessionNotificationService
+        store.canonService = canonService
         costAlertService.onOpenDashboard = { [weak store] in
             guard let store else { return }
             MainWindowController.shared.open(store: store)
@@ -37,6 +41,7 @@ struct ClaudoscopeApp: App {
         MainWindowController.shared.setLoginItemService(loginItemService)
         MainWindowController.shared.setCostAlertService(costAlertService)
         MainWindowController.shared.setSessionNotificationService(sessionNotificationService)
+        MainWindowController.shared.setCanonService(canonService)
 
         store.onSecretAlert = { [weak store] alert in
             guard let store else { return }

@@ -95,6 +95,13 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case PLG002  // plugin dependency cycle
     case PLG003  // plugin declares no components
 
+    // Canon checks
+    case CAN001  // opted-in but protocol rule .claude/rules/canon.md missing
+    case CAN002  // canon records gitignored (won't be shared with the team)
+    case CAN003  // malformed record (missing metadata line or invalid kind/status)
+    case CAN004  // installed protocol older than the app's bundled version
+    case CAN005  // dangling supersede pointer / non-canon record without a pointer
+
     // Secret detection checks
     case SEC001  // private key
     case SEC002  // AWS access key

@@ -16,6 +16,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     case skills
     case plugins
     case memory
+    case canon
     case configHealth
     case hardening
 
@@ -36,6 +37,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .skills:    return "star"
         case .plugins:   return "puzzlepiece.extension"
         case .memory:       return "brain"
+        case .canon:        return "building.columns"
         case .configHealth: return "checkmark.shield"
         case .hardening:    return "lock.shield"
         case .settings:     return "gear"
@@ -56,6 +58,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .skills:    return "Skills"
         case .plugins:   return "Plugins"
         case .memory:       return "Memory"
+        case .canon:        return "Canon"
         case .configHealth: return "Health"
         case .hardening:    return "Hardening"
         case .settings:     return "Settings"
@@ -70,5 +73,5 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     }
 
     static var primaryItems: [RailItem] { [.analytics, .sessions, .tools, .plans, .timeline, .cowork] }
-    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .plugins, .memory, .configHealth, .hardening] }
+    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .plugins, .memory, .canon, .configHealth, .hardening] }
 }

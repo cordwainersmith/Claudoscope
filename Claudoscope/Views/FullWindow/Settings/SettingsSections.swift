@@ -874,6 +874,15 @@ extension SettingsMainPanelView {
         }
     }
 
+    // MARK: - Canon Section
+
+    @ViewBuilder
+    func canonSection() -> some View {
+        settingsSection(id: "canon", icon: "building.columns", title: "Canon") {
+            CanonSettingsSectionContent()
+        }
+    }
+
     // MARK: - Updates Section
 
     @ViewBuilder

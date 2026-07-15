@@ -18,6 +18,9 @@ struct FullWindowView: View {
     @State private var selectedMemoryId: String?
     @State private var selectedMemoryProjectId: String? // nil = global
 
+    // Canon state
+    @State private var selectedCanonProjectId: String?
+
     // Config Health state
     @State private var selectedLintResultId: String?
     @State private var hiddenLintSeverities: Set<LintSeverity> = []
@@ -106,6 +109,11 @@ struct FullWindowView: View {
                 await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
             }
         }
+        .onChange(of: selectedCanonProjectId) { _, _ in
+            Task {
+                await store.loadCanon(projectId: selectedCanonProjectId)
+            }
+        }
         .background {
             // Hidden button to capture Cmd+K globally
             Button("") { showCommandPalette = true }
@@ -133,6 +141,7 @@ struct FullWindowView: View {
                 selectedMcpName: $selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
                 selectedMemoryProjectId: $selectedMemoryProjectId,
+                selectedCanonProjectId: $selectedCanonProjectId,
                 selectedSettingsSection: $selectedSettingsSection,
                 selectedLintResultId: $selectedLintResultId,
                 hiddenLintSeverities: $hiddenLintSeverities,
@@ -152,6 +161,7 @@ struct FullWindowView: View {
                 selectedSkillName: $selectedSkillName,
                 selectedMcpName: selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
+                selectedCanonProjectId: selectedCanonProjectId,
                 selectedLintResultId: $selectedLintResultId,
                 hiddenLintSeverities: $hiddenLintSeverities,
                 selectedHealthItem: selectedHealthItem,
@@ -204,6 +214,9 @@ struct FullWindowView: View {
             case .memory:
                 await store.loadMemoryFiles(projectId: selectedMemoryProjectId)
                 await store.loadConfig(projectId: selectedProjectId)
+            case .canon:
+                await store.refreshCanonDetection()
+                await store.loadCanon(projectId: selectedCanonProjectId)
             case .configHealth, .hardening:
                 await store.runConfigLintIfNeeded(projectId: selectedProjectId)
             case .plugins:

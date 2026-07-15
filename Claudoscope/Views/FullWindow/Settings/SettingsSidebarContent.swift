@@ -20,6 +20,7 @@ struct SettingsSidebarContent: View {
         ("pricing", "dollarsign.circle", "Pricing"),
         ("costAlerts", "bell.badge", "Cost Alerts"),
         ("notifications", "bell", "Notifications"),
+        ("canon", "building.columns", "Canon"),
         ("updates", "arrow.triangle.2.circlepath", "Updates"),
     ]
 

@@ -14,6 +14,7 @@ struct MainPanelView: View {
     @Binding var selectedSkillName: String?
     let selectedMcpName: String?
     @Binding var selectedMemoryId: String?
+    let selectedCanonProjectId: String?
 
     // Config Health
     @Binding var selectedLintResultId: String?
@@ -109,6 +110,8 @@ struct MainPanelView: View {
                     memoryFiles: store.memoryFiles,
                     selectedMemoryId: $selectedMemoryId
                 )
+            case .canon:
+                CanonMainPanelView(selectedProjectId: selectedCanonProjectId)
             case .configHealth:
                 ConfigHealthMainPanelView(
                     lintResults: store.lintResults,

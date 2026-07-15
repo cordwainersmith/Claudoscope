@@ -13,6 +13,7 @@ struct SidebarView: View {
     @Binding var selectedMcpName: String?
     @Binding var selectedMemoryId: String?
     @Binding var selectedMemoryProjectId: String?
+    @Binding var selectedCanonProjectId: String?
     @Binding var selectedSettingsSection: String?
     @Binding var selectedLintResultId: String?
     @Binding var hiddenLintSeverities: Set<LintSeverity>
@@ -129,6 +130,13 @@ struct SidebarView: View {
                         memoryFiles: store.memoryFiles,
                         selectedMemoryId: $selectedMemoryId,
                         selectedProjectId: $selectedMemoryProjectId
+                    )
+                case .canon:
+                    CanonSidebarContent(
+                        filterText: filterText,
+                        projects: store.projects,
+                        detectedProjectIds: store.canonDetectedProjectIds,
+                        selectedProjectId: $selectedCanonProjectId
                     )
                 case .configHealth:
                     ConfigHealthSidebarContent(
