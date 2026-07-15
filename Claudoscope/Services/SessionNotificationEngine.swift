@@ -1,28 +1,20 @@
 import Foundation
 
-/// Pure logic for session lifecycle notifications: parsing hook spool payloads,
-/// deciding what counts as "waiting on you", and deciding which sessions have
-/// "completed" (ran a while, then went quiet). No I/O and no posting, so it is
+/// Pure logic for session lifecycle notifications: parsing hook spool payloads
+/// and classifying the passive idle prompt. No I/O and no posting, so it is
 /// unit-testable under `swift test`. Mirrors `CostAlertEngine`.
 enum SessionNotificationEngine {
 
-    /// Decoded Claude Code Notification-hook payload, as written to the spool by
-    /// `claudoscope-notify.sh`.
+    /// Decoded Claude Code hook payload, as written to the spool by
+    /// `claudoscope-notify.sh`. The same bridge script forwards both the
+    /// `Notification` and `Stop` hooks, so `hookEventName` distinguishes them.
     struct SpoolEvent: Sendable, Equatable {
         let sessionId: String
         let cwd: String?
         let transcriptPath: String?
         let notificationType: String?
         let message: String?
-    }
-
-    /// Per-session activity tracked for the "completed" timer.
-    struct ActivitySnapshot: Sendable, Equatable {
-        var spanSeconds: Double
-        var lastActivityWall: Date
-        var projectId: String
-        var firedCompleted: Bool
-        var waitingSince: Date?
+        let hookEventName: String?
     }
 
     private static let idlePhrase = "waiting for your input"
@@ -39,14 +31,15 @@ enum SessionNotificationEngine {
             cwd: obj["cwd"] as? String,
             transcriptPath: obj["transcript_path"] as? String,
             notificationType: obj["notification_type"] as? String,
-            message: obj["message"] as? String
+            message: obj["message"] as? String,
+            hookEventName: obj["hook_event_name"] as? String
         )
     }
 
     /// True when a Notification is the passive idle prompt ("waiting for your
     /// input"), which re-fires ~every 60s, as opposed to a real block (permission
-    /// prompt, plan approval, MCP elicitation). The caller routes idle vs block to
-    /// their own per-event toggles. Mirrors `session-notify.sh`'s idle detection.
+    /// prompt, plan approval, MCP elicitation). Idle is dropped; blocks fire.
+    /// Mirrors `session-notify.sh`'s idle detection.
     static func isIdlePrompt(notificationType: String?, message: String?) -> Bool {
         if let type = notificationType, !type.isEmpty {
             return type.contains("idle")
@@ -55,27 +48,5 @@ enum SessionNotificationEngine {
             return true
         }
         return false
-    }
-
-    /// Session ids that should fire a "completed" notification now: ran at least
-    /// `activeMinutes`, silent for at least `quietSeconds`, not currently waiting,
-    /// and not already fired. Per-project mute and quiet hours are applied by the
-    /// caller (they depend on config).
-    static func completedSessionsToFire(
-        _ activity: [String: ActivitySnapshot],
-        now: Date,
-        activeMinutes: Int = 10,
-        quietSeconds: Int = 180
-    ) -> [String] {
-        let minSpan = Double(activeMinutes) * 60
-        let minQuiet = Double(quietSeconds)
-        return activity.compactMap { id, snap in
-            guard !snap.firedCompleted,
-                  snap.waitingSince == nil,
-                  snap.spanSeconds >= minSpan,
-                  now.timeIntervalSince(snap.lastActivityWall) >= minQuiet
-            else { return nil }
-            return id
-        }
     }
 }

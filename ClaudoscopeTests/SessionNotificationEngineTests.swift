@@ -3,7 +3,7 @@ import XCTest
 
 /// Pure-logic tests for the notification engine and the service's pure static
 /// helpers. Nothing here constructs `SessionNotificationService` (its init drains
-/// the real spool dir and starts a timer) or touches the bundle-guarded posting.
+/// the real spool dir) or touches the bundle-guarded posting.
 final class SessionNotificationEngineTests: XCTestCase {
 
     // MARK: - isIdlePrompt
@@ -40,7 +40,7 @@ final class SessionNotificationEngineTests: XCTestCase {
     func testParseSpoolPayloadFull() {
         let data = Data("""
         {"session_id":"abc","cwd":"/tmp/proj","transcript_path":"/x/projects/enc/abc.jsonl",\
-        "notification_type":"permission_prompt","message":"hi"}
+        "notification_type":"permission_prompt","message":"hi","hook_event_name":"Notification"}
         """.utf8)
         let e = SessionNotificationEngine.parseSpoolPayload(data)
         XCTAssertEqual(e?.sessionId, "abc")
@@ -48,6 +48,16 @@ final class SessionNotificationEngineTests: XCTestCase {
         XCTAssertEqual(e?.transcriptPath, "/x/projects/enc/abc.jsonl")
         XCTAssertEqual(e?.notificationType, "permission_prompt")
         XCTAssertEqual(e?.message, "hi")
+        XCTAssertEqual(e?.hookEventName, "Notification")
+    }
+
+    func testParseSpoolPayloadStopEvent() {
+        // A Stop payload carries hook_event_name but no notification_type/message.
+        let data = Data(#"{"session_id":"s1","hook_event_name":"Stop","cwd":"/tmp/p"}"#.utf8)
+        let e = SessionNotificationEngine.parseSpoolPayload(data)
+        XCTAssertEqual(e?.sessionId, "s1")
+        XCTAssertEqual(e?.hookEventName, "Stop")
+        XCTAssertNil(e?.notificationType)
     }
 
     func testParseSpoolPayloadToleratesMissingKeys() {
@@ -55,6 +65,7 @@ final class SessionNotificationEngineTests: XCTestCase {
         XCTAssertEqual(e?.sessionId, "z")
         XCTAssertNil(e?.notificationType)
         XCTAssertNil(e?.cwd)
+        XCTAssertNil(e?.hookEventName)
     }
 
     func testParseSpoolPayloadRejectsGarbageAndMissingSession() {
@@ -63,66 +74,7 @@ final class SessionNotificationEngineTests: XCTestCase {
         XCTAssertNil(SessionNotificationEngine.parseSpoolPayload(Data(#"{"session_id":""}"#.utf8)))
     }
 
-    // MARK: - completedSessionsToFire
-
-    private func snapshot(
-        span: Double,
-        quietSeconds: Double,
-        fired: Bool = false,
-        waiting: Bool = false,
-        now: Date
-    ) -> SessionNotificationEngine.ActivitySnapshot {
-        .init(
-            spanSeconds: span,
-            lastActivityWall: now.addingTimeInterval(-quietSeconds),
-            projectId: "p",
-            firedCompleted: fired,
-            waitingSince: waiting ? now : nil
-        )
-    }
-
-    func testCompletedFiresWhenLongAndQuiet() {
-        let now = Date()
-        let activity = ["a": snapshot(span: 11 * 60, quietSeconds: 4 * 60, now: now)]
-        XCTAssertEqual(SessionNotificationEngine.completedSessionsToFire(activity, now: now), ["a"])
-    }
-
-    func testCompletedSuppressedWhenSpanTooShort() {
-        let now = Date()
-        let activity = ["a": snapshot(span: 9 * 60, quietSeconds: 4 * 60, now: now)]
-        XCTAssertTrue(SessionNotificationEngine.completedSessionsToFire(activity, now: now).isEmpty)
-    }
-
-    func testCompletedSuppressedWhenNotQuietEnough() {
-        let now = Date()
-        let activity = ["a": snapshot(span: 11 * 60, quietSeconds: 2 * 60, now: now)]
-        XCTAssertTrue(SessionNotificationEngine.completedSessionsToFire(activity, now: now).isEmpty)
-    }
-
-    func testCompletedSuppressedWhileWaiting() {
-        let now = Date()
-        let activity = ["a": snapshot(span: 11 * 60, quietSeconds: 4 * 60, waiting: true, now: now)]
-        XCTAssertTrue(SessionNotificationEngine.completedSessionsToFire(activity, now: now).isEmpty)
-    }
-
-    func testCompletedSuppressedWhenAlreadyFired() {
-        let now = Date()
-        let activity = ["a": snapshot(span: 11 * 60, quietSeconds: 4 * 60, fired: true, now: now)]
-        XCTAssertTrue(SessionNotificationEngine.completedSessionsToFire(activity, now: now).isEmpty)
-    }
-
     // MARK: - Service pure helpers
-
-    func testSpanSeconds() {
-        let span = SessionNotificationService.spanSeconds(
-            first: "2026-04-03T10:00:00.000Z",
-            last: "2026-04-03T10:15:00.000Z")
-        XCTAssertEqual(span, 900, accuracy: 1)
-    }
-
-    func testSpanSecondsGarbageIsZero() {
-        XCTAssertEqual(SessionNotificationService.spanSeconds(first: "x", last: "y"), 0)
-    }
 
     func testProjectIdFromTranscriptPath() {
         XCTAssertEqual(
@@ -148,7 +100,7 @@ final class SessionNotificationEngineTests: XCTestCase {
 
     func testComposeLabel() {
         let sid = "7642af63-729e-4cb1-a3f7-a898d22806b5"
-        // The raw 8-char session-id fallback is dropped -> folder only.
+        // Raw session-id fallback is dropped -> folder only.
         XCTAssertEqual(
             SessionNotificationService.composeLabel(title: String(sid.prefix(8)), folder: "Claudoscope", sessionId: sid),
             "Claudoscope")

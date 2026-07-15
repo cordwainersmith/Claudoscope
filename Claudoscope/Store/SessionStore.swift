@@ -618,15 +618,12 @@ final class SessionStore {
                 // don't get clobbered.
                 self.applySummary(summary, projectId: projectId)
 
-                // Feed the notification service (subagents skipped inside): drives
-                // the "completed after a long run" timer and clears any waiting state.
+                // Give the notification service the session title (subagents
+                // skipped inside) so "your turn" and block banners can show it.
                 self.sessionNotificationService?.noteActivity(
                     sessionId: summary.id,
                     isSubagent: summary.isSubagent,
-                    projectId: projectId,
-                    title: summary.title,
-                    firstTimestamp: summary.firstTimestamp,
-                    lastTimestamp: summary.lastTimestamp
+                    title: summary.title
                 )
 
                 self.checkActiveSession()

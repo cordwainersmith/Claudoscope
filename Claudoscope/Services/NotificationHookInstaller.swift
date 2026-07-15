@@ -71,6 +71,7 @@ actor NotificationHookInstaller {
 
         let removed = Self.stripHooks(basename: Self.sessionNotifyScriptName, from: &settings)
         Self.addCommandHook(event: "Notification", matcher: "", command: hookScriptURL.path, into: &settings)
+        Self.addCommandHook(event: "Stop", matcher: "", command: hookScriptURL.path, into: &settings)
         try atomicWriteJSON(dict: settings, to: settingsURL)
 
         try writeMarkerIfAbsent(removedSessionNotify: removed, backupPath: backupDir)
@@ -100,6 +101,34 @@ actor NotificationHookInstaller {
         }
         try? FileManager.default.removeItem(at: hookScriptURL)
         try? FileManager.default.removeItem(at: markerURL)
+    }
+
+    /// Idempotently ensure both hooks (Notification + Stop) and the bridge script
+    /// are present when the feature is enabled. Called on launch so an app update
+    /// that adds the Stop hook takes effect without a manual toggle. Only adds
+    /// what is missing (no backup, no strip) and writes settings.json only if
+    /// something changed.
+    func ensureHooks() async {
+        await gate(true)
+        defer { Task { await gate(false) } }
+
+        if !FileManager.default.fileExists(atPath: hookScriptURL.path) {
+            try? ensureSpoolDir()
+            try? writeHookScript()
+        }
+        guard var settings = try? readSettingsJSON(at: settingsURL) else { return }
+        let events = Set(Self.collectHookTriples(basename: Self.hookScriptName, in: settings)
+            .compactMap { $0["event"] })
+        var changed = false
+        if !events.contains("Notification") {
+            Self.addCommandHook(event: "Notification", matcher: "", command: hookScriptURL.path, into: &settings)
+            changed = true
+        }
+        if !events.contains("Stop") {
+            Self.addCommandHook(event: "Stop", matcher: "", command: hookScriptURL.path, into: &settings)
+            changed = true
+        }
+        if changed { try? atomicWriteJSON(dict: settings, to: settingsURL) }
     }
 
     // MARK: - Install gate

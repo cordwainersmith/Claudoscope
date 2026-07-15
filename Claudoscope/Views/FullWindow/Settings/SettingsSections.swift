@@ -1258,7 +1258,7 @@ struct NotificationsSectionContent: View {
                 .font(Typography.body)
                 .disabled(busy)
 
-                Text("Get macOS notifications when Claude needs you or finishes a long run. Choose which events below. Installs a Claude Code notification hook.")
+                Text("Get macOS notifications when Claude needs you or finishes a turn. Choose which events below. Installs Claude Code notification hooks.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1272,13 +1272,10 @@ struct NotificationsSectionContent: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Notify me about")
                             .font(Typography.bodyMedium)
-                        Toggle("Waiting on you (permission, plan, or MCP prompt)", isOn: $service.config.notifyOnBlocks)
+                        Toggle("Claude needs you (permission, plan, or MCP prompt)", isOn: $service.config.notifyOnBlocks)
                             .toggleStyle(.checkbox)
                             .font(Typography.body)
-                        Toggle("Idle (Claude is waiting for your input)", isOn: $service.config.notifyOnIdle)
-                            .toggleStyle(.checkbox)
-                            .font(Typography.body)
-                        Toggle("Session completed (after a long run)", isOn: $service.config.notifyOnCompleted)
+                        Toggle("Your turn (Claude finished a turn)", isOn: $service.config.notifyOnYourTurn)
                             .toggleStyle(.checkbox)
                             .font(Typography.body)
                     }

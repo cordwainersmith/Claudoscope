@@ -83,8 +83,8 @@ final class NotificationHookInstallerTests: XCTestCase {
             "session-notify.sh must be stripped")
 
         let ours = NotificationHookInstaller.collectHookTriples(basename: "claudoscope-notify.sh", in: settings)
-        XCTAssertEqual(ours.count, 1)
-        XCTAssertEqual(ours.first?["event"], "Notification")
+        XCTAssertEqual(ours.count, 2, "hook registered under Notification and Stop")
+        XCTAssertEqual(Set(ours.compactMap { $0["event"] }), ["Notification", "Stop"])
 
         XCTAssertFalse(
             NotificationHookInstaller.collectHookTriples(basename: "boost-sync.sh", in: settings).isEmpty,
@@ -118,7 +118,7 @@ final class NotificationHookInstallerTests: XCTestCase {
         try await installer.install()
         let settings = try readSettings()
         XCTAssertEqual(
-            NotificationHookInstaller.collectHookTriples(basename: "claudoscope-notify.sh", in: settings).count, 1)
+            NotificationHookInstaller.collectHookTriples(basename: "claudoscope-notify.sh", in: settings).count, 2)
     }
 
     func testInstallIsIdempotent() async throws {
@@ -126,8 +126,8 @@ final class NotificationHookInstallerTests: XCTestCase {
         try await installer.install()
         let settings = try readSettings()
         XCTAssertEqual(
-            NotificationHookInstaller.collectHookTriples(basename: "claudoscope-notify.sh", in: settings).count, 1,
-            "re-install must not duplicate the hook")
+            NotificationHookInstaller.collectHookTriples(basename: "claudoscope-notify.sh", in: settings).count, 2,
+            "re-install must not duplicate the hooks")
     }
 
     func testInstallRefusesMalformedSettings() async throws {
@@ -151,6 +151,23 @@ final class NotificationHookInstallerTests: XCTestCase {
         for _ in 0..<10 { await Task.yield() }
         try? await Task.sleep(nanoseconds: 100_000_000)
         XCTAssertEqual(recorder.calls, [true, false])
+    }
+
+    func testEnsureHooksAddsMissingStopHook() async throws {
+        // Simulate an old install that only registered the Notification hook.
+        try await installer.install()
+        var settings = try readSettings()
+        _ = NotificationHookInstaller.stripHooks(basename: "claudoscope-notify.sh", from: &settings)
+        let scriptPath = tempDir.appendingPathComponent("hooks/claudoscope-notify.sh").path
+        NotificationHookInstaller.addCommandHook(
+            event: "Notification", matcher: "", command: scriptPath, into: &settings)
+        try writeJSON(settings, to: settingsURL)
+
+        await installer.ensureHooks()
+
+        let after = NotificationHookInstaller.collectHookTriples(basename: "claudoscope-notify.sh", in: try readSettings())
+        XCTAssertEqual(Set(after.compactMap { $0["event"] }), ["Notification", "Stop"],
+                       "ensureHooks must add the missing Stop hook")
     }
 
     // MARK: - Uninstall

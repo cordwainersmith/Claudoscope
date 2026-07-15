@@ -31,10 +31,9 @@ final class NotificationConfigTests: XCTestCase {
         XCTAssertFalse(NotificationConfig.default.masterEnabled)
         XCTAssertTrue(NotificationConfig.default.soundEnabled)
         XCTAssertTrue(NotificationConfig.default.mutedProjectIds.isEmpty)
-        // All event types default on (opt-out model).
+        // Both event types default on (opt-out model).
         XCTAssertTrue(NotificationConfig.default.notifyOnBlocks)
-        XCTAssertTrue(NotificationConfig.default.notifyOnIdle)
-        XCTAssertTrue(NotificationConfig.default.notifyOnCompleted)
+        XCTAssertTrue(NotificationConfig.default.notifyOnYourTurn)
     }
 
     func testDecodeOldBlobDefaultsPerEventToTrue() throws {
@@ -46,8 +45,7 @@ final class NotificationConfigTests: XCTestCase {
         let c = try JSONDecoder().decode(NotificationConfig.self, from: old)
         // New fields default to true (all events on) ...
         XCTAssertTrue(c.notifyOnBlocks)
-        XCTAssertTrue(c.notifyOnIdle)
-        XCTAssertTrue(c.notifyOnCompleted)
+        XCTAssertTrue(c.notifyOnYourTurn)
         // ... and pre-existing settings survive intact (not reset to .default).
         XCTAssertTrue(c.masterEnabled)
         XCTAssertEqual(c.quietHoursStartMinutes, 1320)

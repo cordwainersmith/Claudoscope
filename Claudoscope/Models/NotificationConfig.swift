@@ -11,11 +11,10 @@ struct NotificationConfig: Codable, Sendable, Equatable {
     var quietHoursEndMinutes: Int
     /// Project ids (encoded projects-subdir names) muted from all notifications.
     var mutedProjectIds: Set<String>
-    /// Per-event delivery switches. A real block (permission/plan/MCP prompt),
-    /// the passive idle prompt, and long-run completion each toggle on their own.
+    /// Per-event delivery switches: a real block (permission/plan/MCP prompt)
+    /// from the Notification hook, and "your turn" from the Stop hook.
     var notifyOnBlocks: Bool
-    var notifyOnIdle: Bool
-    var notifyOnCompleted: Bool
+    var notifyOnYourTurn: Bool
 
     static let `default` = NotificationConfig(
         masterEnabled: false,
@@ -25,8 +24,7 @@ struct NotificationConfig: Codable, Sendable, Equatable {
         quietHoursEndMinutes: 7 * 60,      // 07:00
         mutedProjectIds: [],
         notifyOnBlocks: true,
-        notifyOnIdle: true,
-        notifyOnCompleted: true
+        notifyOnYourTurn: true
     )
 
     /// True when `now` (local time) falls inside the quiet-hours window. A window
@@ -50,7 +48,7 @@ extension NotificationConfig {
     private enum CodingKeys: String, CodingKey {
         case masterEnabled, soundEnabled, quietHoursEnabled
         case quietHoursStartMinutes, quietHoursEndMinutes, mutedProjectIds
-        case notifyOnBlocks, notifyOnIdle, notifyOnCompleted
+        case notifyOnBlocks, notifyOnYourTurn
     }
 
     init(from decoder: Decoder) throws {
@@ -62,7 +60,6 @@ extension NotificationConfig {
         quietHoursEndMinutes = try c.decode(Int.self, forKey: .quietHoursEndMinutes)
         mutedProjectIds = try c.decode(Set<String>.self, forKey: .mutedProjectIds)
         notifyOnBlocks = try c.decodeIfPresent(Bool.self, forKey: .notifyOnBlocks) ?? true
-        notifyOnIdle = try c.decodeIfPresent(Bool.self, forKey: .notifyOnIdle) ?? true
-        notifyOnCompleted = try c.decodeIfPresent(Bool.self, forKey: .notifyOnCompleted) ?? true
+        notifyOnYourTurn = try c.decodeIfPresent(Bool.self, forKey: .notifyOnYourTurn) ?? true
     }
 }

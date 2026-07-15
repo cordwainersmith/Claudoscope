@@ -2,10 +2,16 @@ import AppKit
 import Foundation
 import UserNotifications
 
-/// Owns session lifecycle notifications (waiting / completed): configuration,
-/// the installed hook, the spool ingest path, the per-session activity model,
-/// and delivery via `UNUserNotificationCenter`. App-owned and driven by
-/// `SessionStore` (spool events + activity), mirroring `CostAlertService`.
+/// Owns session lifecycle notifications: configuration, the installed hooks, the
+/// spool ingest path, a small session-title cache for labels, and delivery via
+/// `UNUserNotificationCenter`. App-owned and driven by `SessionStore` (spool
+/// events + titles), mirroring `CostAlertService`.
+///
+/// Two event-driven notifications, mirroring the classic session-notify.sh:
+/// "Claude needs you" from the `Notification` hook (real blocks: permission,
+/// plan, MCP; the passive idle prompt is dropped) and "Your turn" from the
+/// `Stop` hook (fires once when a turn ends). No timers and no per-session
+/// delivery state, so nothing can re-fire hours later.
 ///
 /// Deliberately sets NO `UNUserNotificationCenter` delegate: `CostAlertService`
 /// already installs one whose `willPresent` presents every notification, and we
@@ -15,8 +21,8 @@ import UserNotifications
 final class SessionNotificationService {
 
     enum Kind: String {
-        case waiting
-        case completed
+        case waiting     // a real block: permission / plan / MCP
+        case yourTurn    // a turn finished (Stop hook)
     }
 
     var config: NotificationConfig {
@@ -30,14 +36,12 @@ final class SessionNotificationService {
 
     @ObservationIgnored private let claudeDir: URL
     @ObservationIgnored private let installer: NotificationHookInstaller
-    @ObservationIgnored private var activity: [String: SessionNotificationEngine.ActivitySnapshot] = [:]
+    /// Session id -> display title, so notifications can show "Title (folder)".
+    /// A pure label cache; carries no delivery state.
     @ObservationIgnored private var sessionLabels: [String: String] = [:]
-    @ObservationIgnored private var completedTimer: Timer?
 
     private static let configKey = "sessionNotificationConfig"
-    private static let tickInterval: TimeInterval = 30
     private static let eventTTL: TimeInterval = 120
-    private static let activityCap = 500
 
     private var spoolDir: URL { claudeDir.appendingPathComponent(NotificationHookInstaller.spoolDirName) }
 
@@ -58,6 +62,12 @@ final class SessionNotificationService {
         // notifying, so a resolved prompt from an hour ago never surfaces.
         drainSpool()
 
+        // An app update can add the Stop hook to an already-enabled install;
+        // reconcile on launch so both hooks are present without a manual toggle.
+        if config.masterEnabled {
+            Task { await installer.ensureHooks() }
+        }
+
         // Returning from System Settings reactivates the app; refresh so the
         // denied warning clears as soon as the user flips notifications on.
         NotificationCenter.default.addObserver(
@@ -70,8 +80,6 @@ final class SessionNotificationService {
                 self.refreshAuthorizationStatus()
             }
         }
-
-        startCompletedTimer()
     }
 
     // MARK: - Enable / disable (drives hook install + permission)
@@ -100,16 +108,20 @@ final class SessionNotificationService {
         } catch {
             NSLog("[Claudoscope] Notification hook uninstall failed: %@", "\(error)")
         }
-        activity.removeAll()
         sessionLabels.removeAll()
         drainSpool()
     }
 
     // MARK: - Ingest (called by SessionStore)
 
-    /// A spool file appeared. Parse, filter, dedupe, deliver, then delete. Any
-    /// failure (unreadable, garbage, stale) is a silent no-op; the file is still
-    /// removed so it can never be reprocessed.
+    /// A spool file appeared. Parse, route by hook event, deliver, then delete.
+    /// Any failure (unreadable, garbage, stale) is a silent no-op; the file is
+    /// still removed so it can never be reprocessed.
+    ///
+    /// Both signals are event-driven and fire once per event (a `Stop` per turn,
+    /// a block `Notification` per block); the ~60s re-fire is only the idle
+    /// prompt, which is dropped. So no per-session dedupe is needed and nothing
+    /// can re-fire hours later.
     func handleSpoolFile(_ url: URL) {
         defer { try? FileManager.default.removeItem(at: url) }
         guard config.masterEnabled else { return }
@@ -119,102 +131,41 @@ final class SessionNotificationService {
         // Freshness guard (sleep/wake, backlog): ignore events older than the TTL.
         if let mtime = fileMTime(url), Date().timeIntervalSince(mtime) > Self.eventTTL { return }
 
-        let isIdle = SessionNotificationEngine.isIdlePrompt(
-            notificationType: event.notificationType,
-            message: event.message
-        )
-        guard isIdle ? config.notifyOnIdle : config.notifyOnBlocks else { return }
-
         let projectId = event.transcriptPath.flatMap { Self.projectId(forTranscriptPath: $0) }
-
-        // Dedupe: notify only on the transition INTO waiting. Repeated prompts
-        // for the same session (permission re-fires ~every 60s) are suppressed
-        // until real activity resumes and clears `waitingSince`.
-        if var snap = activity[event.sessionId] {
-            if snap.waitingSince != nil { return }
-            snap.waitingSince = Date()
-            activity[event.sessionId] = snap
-        } else {
-            activity[event.sessionId] = .init(
-                spanSeconds: 0,
-                lastActivityWall: Date(),
-                projectId: projectId ?? "",
-                firedCompleted: false,
-                waitingSince: Date()
-            )
-        }
-
         guard shouldDeliver(projectId: projectId) else { return }
         let label = notificationLabel(sessionId: event.sessionId, projectId: projectId, cwd: event.cwd)
-        postNotification(
-            kind: .waiting,
-            sessionId: event.sessionId,
-            title: isIdle ? "Claude is waiting" : "Claude needs you",
-            subtitle: label,
-            body: event.message ?? "Waiting for your input."
-        )
-    }
 
-    /// Record activity for a session. Subagents are skipped so their UUID-titled
-    /// files never fire "completed". New activity re-arms completion and clears
-    /// any waiting state (the block was resolved).
-    func noteActivity(
-        sessionId: String,
-        isSubagent: Bool,
-        projectId: String,
-        title: String,
-        firstTimestamp: String,
-        lastTimestamp: String
-    ) {
-        guard config.masterEnabled, !isSubagent else { return }
-        let span = Self.spanSeconds(first: firstTimestamp, last: lastTimestamp)
-        if var snap = activity[sessionId] {
-            snap.spanSeconds = span
-            snap.lastActivityWall = Date()
-            snap.projectId = projectId
-            snap.firedCompleted = false
-            snap.waitingSince = nil
-            activity[sessionId] = snap
-        } else {
-            activity[sessionId] = .init(
-                spanSeconds: span,
-                lastActivityWall: Date(),
-                projectId: projectId,
-                firedCompleted: false,
-                waitingSince: nil
-            )
-        }
-        if !title.isEmpty { sessionLabels[sessionId] = title }
-        pruneActivity()
-    }
-
-    // MARK: - Completed timer
-
-    private func startCompletedTimer() {
-        completedTimer?.invalidate()
-        completedTimer = Timer.scheduledTimer(withTimeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.onTick() }
-        }
-    }
-
-    private func onTick() {
-        sweepSpool()
-        guard config.masterEnabled, config.notifyOnCompleted else { return }
-        let now = Date()
-        for id in SessionNotificationEngine.completedSessionsToFire(activity, now: now) {
-            guard var snap = activity[id] else { continue }
-            snap.firedCompleted = true   // fire at most once per run, even if suppressed
-            activity[id] = snap
-            guard shouldDeliver(projectId: snap.projectId.isEmpty ? nil : snap.projectId) else { continue }
-            let label = notificationLabel(sessionId: id, projectId: snap.projectId, cwd: nil)
+        if event.hookEventName == "Stop" {
+            guard config.notifyOnYourTurn else { return }
             postNotification(
-                kind: .completed,
-                sessionId: id,
-                title: "Session complete",
+                kind: .yourTurn,
+                sessionId: event.sessionId,
+                title: "Claude is ready",
                 subtitle: label,
-                body: "Finished after a long run."
+                body: "Your turn."
+            )
+        } else {
+            // Notification hook: fire on real blocks, drop the passive idle prompt.
+            if SessionNotificationEngine.isIdlePrompt(
+                notificationType: event.notificationType, message: event.message
+            ) { return }
+            guard config.notifyOnBlocks else { return }
+            postNotification(
+                kind: .waiting,
+                sessionId: event.sessionId,
+                title: "Claude needs you",
+                subtitle: label,
+                body: event.message ?? "Waiting for your input."
             )
         }
+    }
+
+    /// Record a session's display title so notifications can show "Title (folder)".
+    /// Subagents are skipped (their titles are UUIDs). A pure label cache with no
+    /// delivery state.
+    func noteActivity(sessionId: String, isSubagent: Bool, title: String) {
+        guard config.masterEnabled, !isSubagent, !title.isEmpty else { return }
+        sessionLabels[sessionId] = title
     }
 
     // MARK: - Delivery
@@ -246,7 +197,7 @@ final class SessionNotificationService {
     private static func sound(for kind: Kind) -> UNNotificationSound {
         switch kind {
         case .waiting: return UNNotificationSound(named: UNNotificationSoundName("Funk.aiff"))
-        case .completed: return UNNotificationSound(named: UNNotificationSoundName("Glass.aiff"))
+        case .yourTurn: return UNNotificationSound(named: UNNotificationSoundName("Ping.aiff"))
         }
     }
 
@@ -284,37 +235,12 @@ final class SessionNotificationService {
         for f in files where f.pathExtension == "json" { try? fm.removeItem(at: f) }
     }
 
-    private func sweepSpool() {
-        let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(
-            at: spoolDir,
-            includingPropertiesForKeys: [.contentModificationDateKey]
-        ) else { return }
-        let cutoff = Date().addingTimeInterval(-Self.eventTTL)
-        for f in files where f.pathExtension == "json" {
-            if let m = fileMTime(f), m < cutoff { try? fm.removeItem(at: f) }
-        }
-    }
-
-    // MARK: - Helpers
-
-    private func pruneActivity() {
-        guard activity.count > Self.activityCap else { return }
-        let overflow = activity.count - Self.activityCap
-        let victims = activity
-            .sorted { $0.value.lastActivityWall < $1.value.lastActivityWall }
-            .prefix(overflow)
-            .map(\.key)
-        for id in victims {
-            activity.removeValue(forKey: id)
-            sessionLabels.removeValue(forKey: id)
-        }
-    }
+    // MARK: - Labels
 
     /// Notification subtitle: the project/repo folder name (same decoder the
     /// sidebar uses), with a meaningful session title overlaid as "Title (folder)".
-    /// The raw 8-char session-id fallback is never shown. Mirrors the original
-    /// session-notify.sh, which labeled by folder and only upgraded on /rename.
+    /// The raw 8-char session-id fallback is never shown. Everything comes from
+    /// the hook payload, so it reads the same across any terminal.
     private func notificationLabel(sessionId: String, projectId: String?, cwd: String?) -> String {
         let folder = projectId.flatMap { $0.isEmpty ? nil : Self.projectLabel(fromProjectId: $0) }
             ?? cwd.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0).lastPathComponent }
@@ -335,11 +261,6 @@ final class SessionNotificationService {
         (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
     }
 
-    nonisolated static func spanSeconds(first: String, last: String) -> Double {
-        guard let f = ISO8601.parse(first), let l = ISO8601.parse(last) else { return 0 }
-        return max(0, l.timeIntervalSince(f))
-    }
-
     /// Project directory id for a transcript path: the component right after
     /// "projects" (mirrors `SessionStore.projectId(for:)`).
     nonisolated static func projectId(forTranscriptPath path: String) -> String? {
@@ -350,8 +271,6 @@ final class SessionNotificationService {
         return nil
     }
 
-    /// Human label from an encoded project dir id like
-    /// "-Users-liranb-projects-Claudoscope" -> "Claudoscope".
     /// Human folder name for an encoded project id, via the app's shared decoder
     /// (correctly rejoins hyphenated folder names like "fix-okta-callback-race").
     nonisolated static func projectLabel(fromProjectId id: String) -> String {
