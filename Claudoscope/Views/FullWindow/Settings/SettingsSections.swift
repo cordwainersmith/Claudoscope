@@ -1258,7 +1258,7 @@ struct NotificationsSectionContent: View {
                 .font(Typography.body)
                 .disabled(busy)
 
-                Text("Get a macOS notification when a session is waiting on you (permission, plan, or an MCP prompt) or finishes after a long run. Installs a Claude Code notification hook.")
+                Text("Get macOS notifications when Claude needs you or finishes a long run. Choose which events below. Installs a Claude Code notification hook.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1269,6 +1269,22 @@ struct NotificationsSectionContent: View {
                 Divider().padding(.horizontal, 12)
 
                 VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Notify me about")
+                            .font(Typography.bodyMedium)
+                        Toggle("Waiting on you (permission, plan, or MCP prompt)", isOn: $service.config.notifyOnBlocks)
+                            .toggleStyle(.checkbox)
+                            .font(Typography.body)
+                        Toggle("Idle (Claude is waiting for your input)", isOn: $service.config.notifyOnIdle)
+                            .toggleStyle(.checkbox)
+                            .font(Typography.body)
+                        Toggle("Session completed (after a long run)", isOn: $service.config.notifyOnCompleted)
+                            .toggleStyle(.checkbox)
+                            .font(Typography.body)
+                    }
+
+                    Divider()
+
                     Toggle("Play a sound", isOn: $service.config.soundEnabled)
                         .toggleStyle(.checkbox)
                         .font(Typography.body)

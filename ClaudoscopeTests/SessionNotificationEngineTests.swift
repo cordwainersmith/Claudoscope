@@ -6,33 +6,33 @@ import XCTest
 /// the real spool dir and starts a timer) or touches the bundle-guarded posting.
 final class SessionNotificationEngineTests: XCTestCase {
 
-    // MARK: - isWaiting
+    // MARK: - isIdlePrompt
 
-    func testIsWaitingDropsIdle() {
-        XCTAssertFalse(SessionNotificationEngine.isWaiting(
+    func testIsIdlePromptDetectsIdle() {
+        XCTAssertTrue(SessionNotificationEngine.isIdlePrompt(
             notificationType: "idle_prompt",
             message: "Claude is waiting for your input"))
     }
 
-    func testIsWaitingAcceptsRealBlocks() {
-        XCTAssertTrue(SessionNotificationEngine.isWaiting(
+    func testIsIdlePromptRejectsRealBlocks() {
+        XCTAssertFalse(SessionNotificationEngine.isIdlePrompt(
             notificationType: "permission_prompt", message: "Claude needs your permission"))
-        XCTAssertTrue(SessionNotificationEngine.isWaiting(
+        XCTAssertFalse(SessionNotificationEngine.isIdlePrompt(
             notificationType: "elicitation_dialog", message: "MCP server asks..."))
-        // Unknown/future types are treated as waiting (defensive).
-        XCTAssertTrue(SessionNotificationEngine.isWaiting(
+        // Unknown/future types are treated as blocks (surfaced), not idle.
+        XCTAssertFalse(SessionNotificationEngine.isIdlePrompt(
             notificationType: "some_future_type", message: nil))
     }
 
-    func testIsWaitingNullTypeFallsBackToMessage() {
-        // Null type + idle phrase -> not waiting (mirrors session-notify.sh).
-        XCTAssertFalse(SessionNotificationEngine.isWaiting(
+    func testIsIdlePromptNullTypeFallsBackToMessage() {
+        // Null type + idle phrase -> idle (mirrors session-notify.sh).
+        XCTAssertTrue(SessionNotificationEngine.isIdlePrompt(
             notificationType: nil, message: "Claude is waiting for your input"))
-        // Null type + other message -> waiting.
-        XCTAssertTrue(SessionNotificationEngine.isWaiting(
+        // Null type + other message -> block.
+        XCTAssertFalse(SessionNotificationEngine.isIdlePrompt(
             notificationType: nil, message: "Claude needs your permission"))
-        // Null type + nil message -> waiting (default to surfacing).
-        XCTAssertTrue(SessionNotificationEngine.isWaiting(notificationType: nil, message: nil))
+        // Null type + nil message -> block (default to surfacing).
+        XCTAssertFalse(SessionNotificationEngine.isIdlePrompt(notificationType: nil, message: nil))
     }
 
     // MARK: - parseSpoolPayload
@@ -139,6 +139,30 @@ final class SessionNotificationEngineTests: XCTestCase {
     func testProjectLabelFromEncodedId() {
         XCTAssertEqual(
             SessionNotificationService.projectLabel(fromProjectId: "-Users-liranb-projects-Claudoscope"),
+            "Claudoscope")
+        // Hyphenated folder names are rejoined, not truncated to the last segment.
+        XCTAssertEqual(
+            SessionNotificationService.projectLabel(fromProjectId: "-Users-liranb-projects-fix-okta-callback-race"),
+            "fix-okta-callback-race")
+    }
+
+    func testComposeLabel() {
+        let sid = "7642af63-729e-4cb1-a3f7-a898d22806b5"
+        // The raw 8-char session-id fallback is dropped -> folder only.
+        XCTAssertEqual(
+            SessionNotificationService.composeLabel(title: String(sid.prefix(8)), folder: "Claudoscope", sessionId: sid),
+            "Claudoscope")
+        // A real title is overlaid as "Title (folder)".
+        XCTAssertEqual(
+            SessionNotificationService.composeLabel(title: "Fix the parser", folder: "Claudoscope", sessionId: sid),
+            "Fix the parser (Claudoscope)")
+        // A title identical to the folder isn't duplicated.
+        XCTAssertEqual(
+            SessionNotificationService.composeLabel(title: "Claudoscope", folder: "Claudoscope", sessionId: sid),
+            "Claudoscope")
+        // No title -> folder only.
+        XCTAssertEqual(
+            SessionNotificationService.composeLabel(title: nil, folder: "Claudoscope", sessionId: sid),
             "Claudoscope")
     }
 }

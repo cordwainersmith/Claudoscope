@@ -11,6 +11,11 @@ struct NotificationConfig: Codable, Sendable, Equatable {
     var quietHoursEndMinutes: Int
     /// Project ids (encoded projects-subdir names) muted from all notifications.
     var mutedProjectIds: Set<String>
+    /// Per-event delivery switches. A real block (permission/plan/MCP prompt),
+    /// the passive idle prompt, and long-run completion each toggle on their own.
+    var notifyOnBlocks: Bool
+    var notifyOnIdle: Bool
+    var notifyOnCompleted: Bool
 
     static let `default` = NotificationConfig(
         masterEnabled: false,
@@ -18,7 +23,10 @@ struct NotificationConfig: Codable, Sendable, Equatable {
         quietHoursEnabled: false,
         quietHoursStartMinutes: 22 * 60,   // 22:00
         quietHoursEndMinutes: 7 * 60,      // 07:00
-        mutedProjectIds: []
+        mutedProjectIds: [],
+        notifyOnBlocks: true,
+        notifyOnIdle: true,
+        notifyOnCompleted: true
     )
 
     /// True when `now` (local time) falls inside the quiet-hours window. A window
@@ -32,5 +40,29 @@ struct NotificationConfig: Codable, Sendable, Equatable {
         } else {
             return minutes >= quietHoursStartMinutes || minutes < quietHoursEndMinutes
         }
+    }
+}
+
+// Custom decode so adding the per-event fields never invalidates a saved config:
+// missing keys default to true (all events on) instead of throwing, which would
+// otherwise reset every other setting back to `.default`.
+extension NotificationConfig {
+    private enum CodingKeys: String, CodingKey {
+        case masterEnabled, soundEnabled, quietHoursEnabled
+        case quietHoursStartMinutes, quietHoursEndMinutes, mutedProjectIds
+        case notifyOnBlocks, notifyOnIdle, notifyOnCompleted
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        masterEnabled = try c.decode(Bool.self, forKey: .masterEnabled)
+        soundEnabled = try c.decode(Bool.self, forKey: .soundEnabled)
+        quietHoursEnabled = try c.decode(Bool.self, forKey: .quietHoursEnabled)
+        quietHoursStartMinutes = try c.decode(Int.self, forKey: .quietHoursStartMinutes)
+        quietHoursEndMinutes = try c.decode(Int.self, forKey: .quietHoursEndMinutes)
+        mutedProjectIds = try c.decode(Set<String>.self, forKey: .mutedProjectIds)
+        notifyOnBlocks = try c.decodeIfPresent(Bool.self, forKey: .notifyOnBlocks) ?? true
+        notifyOnIdle = try c.decodeIfPresent(Bool.self, forKey: .notifyOnIdle) ?? true
+        notifyOnCompleted = try c.decodeIfPresent(Bool.self, forKey: .notifyOnCompleted) ?? true
     }
 }

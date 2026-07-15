@@ -43,18 +43,18 @@ enum SessionNotificationEngine {
         )
     }
 
-    /// A Notification is "waiting on you" when it is a real block (permission
-    /// prompt, plan approval, MCP elicitation) but NOT the passive idle prompt
-    /// that re-fires ~every 60s. Mirrors `session-notify.sh`: drop when the type
-    /// is idle, or (type absent) the message is the idle phrase.
-    static func isWaiting(notificationType: String?, message: String?) -> Bool {
+    /// True when a Notification is the passive idle prompt ("waiting for your
+    /// input"), which re-fires ~every 60s, as opposed to a real block (permission
+    /// prompt, plan approval, MCP elicitation). The caller routes idle vs block to
+    /// their own per-event toggles. Mirrors `session-notify.sh`'s idle detection.
+    static func isIdlePrompt(notificationType: String?, message: String?) -> Bool {
         if let type = notificationType, !type.isEmpty {
-            return !type.contains("idle")
+            return type.contains("idle")
         }
         if let message, message.localizedCaseInsensitiveContains(idlePhrase) {
-            return false
+            return true
         }
-        return true
+        return false
     }
 
     /// Session ids that should fire a "completed" notification now: ran at least

@@ -223,7 +223,7 @@ final class NotificationHookInstallerTests: XCTestCase {
         let event = SessionNotificationEngine.parseSpoolPayload(try Data(contentsOf: jsonFiles[0]))
         XCTAssertEqual(event?.sessionId, "abc")
         XCTAssertEqual(event?.notificationType, "permission_prompt")
-        XCTAssertTrue(SessionNotificationEngine.isWaiting(
+        XCTAssertFalse(SessionNotificationEngine.isIdlePrompt(
             notificationType: event?.notificationType, message: event?.message))
 
         // No leftover staging file.

@@ -119,10 +119,11 @@ final class SessionNotificationService {
         // Freshness guard (sleep/wake, backlog): ignore events older than the TTL.
         if let mtime = fileMTime(url), Date().timeIntervalSince(mtime) > Self.eventTTL { return }
 
-        guard SessionNotificationEngine.isWaiting(
+        let isIdle = SessionNotificationEngine.isIdlePrompt(
             notificationType: event.notificationType,
             message: event.message
-        ) else { return }
+        )
+        guard isIdle ? config.notifyOnIdle : config.notifyOnBlocks else { return }
 
         let projectId = event.transcriptPath.flatMap { Self.projectId(forTranscriptPath: $0) }
 
@@ -144,11 +145,11 @@ final class SessionNotificationService {
         }
 
         guard shouldDeliver(projectId: projectId) else { return }
-        let label = waitingLabel(cwd: event.cwd, sessionId: event.sessionId, projectId: projectId)
+        let label = notificationLabel(sessionId: event.sessionId, projectId: projectId, cwd: event.cwd)
         postNotification(
             kind: .waiting,
             sessionId: event.sessionId,
-            title: "Claude needs you",
+            title: isIdle ? "Claude is waiting" : "Claude needs you",
             subtitle: label,
             body: event.message ?? "Waiting for your input."
         )
@@ -198,14 +199,14 @@ final class SessionNotificationService {
 
     private func onTick() {
         sweepSpool()
-        guard config.masterEnabled else { return }
+        guard config.masterEnabled, config.notifyOnCompleted else { return }
         let now = Date()
         for id in SessionNotificationEngine.completedSessionsToFire(activity, now: now) {
             guard var snap = activity[id] else { continue }
             snap.firedCompleted = true   // fire at most once per run, even if suppressed
             activity[id] = snap
             guard shouldDeliver(projectId: snap.projectId.isEmpty ? nil : snap.projectId) else { continue }
-            let label = sessionLabels[id] ?? Self.projectLabel(fromProjectId: snap.projectId)
+            let label = notificationLabel(sessionId: id, projectId: snap.projectId, cwd: nil)
             postNotification(
                 kind: .completed,
                 sessionId: id,
@@ -310,11 +311,24 @@ final class SessionNotificationService {
         }
     }
 
-    private func waitingLabel(cwd: String?, sessionId: String, projectId: String?) -> String {
-        if let title = sessionLabels[sessionId], !title.isEmpty { return title }
-        if let cwd, !cwd.isEmpty { return URL(fileURLWithPath: cwd).lastPathComponent }
-        if let projectId, !projectId.isEmpty { return Self.projectLabel(fromProjectId: projectId) }
-        return "a session"
+    /// Notification subtitle: the project/repo folder name (same decoder the
+    /// sidebar uses), with a meaningful session title overlaid as "Title (folder)".
+    /// The raw 8-char session-id fallback is never shown. Mirrors the original
+    /// session-notify.sh, which labeled by folder and only upgraded on /rename.
+    private func notificationLabel(sessionId: String, projectId: String?, cwd: String?) -> String {
+        let folder = projectId.flatMap { $0.isEmpty ? nil : Self.projectLabel(fromProjectId: $0) }
+            ?? cwd.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0).lastPathComponent }
+            ?? "a session"
+        return Self.composeLabel(title: sessionLabels[sessionId], folder: folder, sessionId: sessionId)
+    }
+
+    /// "Title (folder)" when the session has a real title, else just the folder.
+    /// Drops a title that is the 8-char session-id fallback or equals the folder.
+    nonisolated static func composeLabel(title: String?, folder: String, sessionId: String) -> String {
+        if let title, !title.isEmpty, title != String(sessionId.prefix(8)), title != folder {
+            return "\(title) (\(folder))"
+        }
+        return folder
     }
 
     private func fileMTime(_ url: URL) -> Date? {
@@ -338,9 +352,10 @@ final class SessionNotificationService {
 
     /// Human label from an encoded project dir id like
     /// "-Users-liranb-projects-Claudoscope" -> "Claudoscope".
+    /// Human folder name for an encoded project id, via the app's shared decoder
+    /// (correctly rejoins hyphenated folder names like "fix-okta-callback-race").
     nonisolated static func projectLabel(fromProjectId id: String) -> String {
-        let parts = id.split(separator: "-").filter { !$0.isEmpty }
-        return parts.last.map(String.init) ?? "a session"
+        decodeProjectName(id)
     }
 
     // MARK: - Persistence

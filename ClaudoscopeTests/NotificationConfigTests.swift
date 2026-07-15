@@ -31,6 +31,27 @@ final class NotificationConfigTests: XCTestCase {
         XCTAssertFalse(NotificationConfig.default.masterEnabled)
         XCTAssertTrue(NotificationConfig.default.soundEnabled)
         XCTAssertTrue(NotificationConfig.default.mutedProjectIds.isEmpty)
+        // All event types default on (opt-out model).
+        XCTAssertTrue(NotificationConfig.default.notifyOnBlocks)
+        XCTAssertTrue(NotificationConfig.default.notifyOnIdle)
+        XCTAssertTrue(NotificationConfig.default.notifyOnCompleted)
+    }
+
+    func testDecodeOldBlobDefaultsPerEventToTrue() throws {
+        // A config saved before per-event toggles existed carries no notifyOn* keys.
+        let old = Data("""
+        {"masterEnabled":true,"soundEnabled":true,"quietHoursEnabled":false,\
+        "quietHoursStartMinutes":1320,"quietHoursEndMinutes":420,"mutedProjectIds":["-a-b"]}
+        """.utf8)
+        let c = try JSONDecoder().decode(NotificationConfig.self, from: old)
+        // New fields default to true (all events on) ...
+        XCTAssertTrue(c.notifyOnBlocks)
+        XCTAssertTrue(c.notifyOnIdle)
+        XCTAssertTrue(c.notifyOnCompleted)
+        // ... and pre-existing settings survive intact (not reset to .default).
+        XCTAssertTrue(c.masterEnabled)
+        XCTAssertEqual(c.quietHoursStartMinutes, 1320)
+        XCTAssertEqual(c.mutedProjectIds, ["-a-b"])
     }
 
     // MARK: - Quiet hours
