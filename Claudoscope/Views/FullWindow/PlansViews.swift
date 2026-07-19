@@ -5,6 +5,7 @@ import SwiftUI
 struct PlansSidebarContent: View {
     let filterText: String
     let plans: [PlanSummary]
+    let globalFilterActive: Bool
     @Binding var selectedPlanFilename: String?
 
     private var filteredPlans: [PlanSummary] {
@@ -23,7 +24,7 @@ struct PlansSidebarContent: View {
                 Image(systemName: "doc.text")
                     .font(.system(size: 24))
                     .foregroundStyle(.quaternary)
-                Text("No plans found")
+                Text(globalFilterActive ? "No results for this filter" : "No plans found")
                     .font(Typography.body)
                     .foregroundStyle(.tertiary)
                 Spacer()

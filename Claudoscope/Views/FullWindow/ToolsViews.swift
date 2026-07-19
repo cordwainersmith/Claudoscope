@@ -6,6 +6,7 @@ struct ToolsSidebarContent: View {
     let projects: [Project]
     let sessionsByProject: [String: [SessionSummary]]
     let filterText: String
+    let globalFilterActive: Bool
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
 
@@ -20,17 +21,21 @@ struct ToolsSidebarContent: View {
     }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(filteredProjects) { project in
-                ToolsProjectGroup(
-                    project: project,
-                    sessions: filteredSessions(for: project),
-                    selectedSessionId: $selectedSessionId,
-                    selectedProjectId: $selectedProjectId
-                )
+        if globalFilterActive && filteredProjects.isEmpty {
+            GlobalFilterEmptyRow()
+        } else {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(filteredProjects) { project in
+                    ToolsProjectGroup(
+                        project: project,
+                        sessions: filteredSessions(for: project),
+                        selectedSessionId: $selectedSessionId,
+                        selectedProjectId: $selectedProjectId
+                    )
+                }
             }
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
     }
 
     // Subagents are hidden — see SidebarView for rationale.
