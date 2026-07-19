@@ -37,6 +37,14 @@ final class SessionStore {
     var analyticsTimeRange: AnalyticsTimeRange = .thirtyDays
     var analyticsCustomFrom: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
     var analyticsCustomTo: Date = Date()
+
+    // Global project + date filter (sessions/tools/timeline/plans rails only,
+    // sidebar-driven, persists across rail switches). Deliberately separate
+    // from the analytics fields above so the two never entangle.
+    var globalFilterProjectId: String? = nil  // nil = all projects
+    var globalFilterRange: AnalyticsTimeRange = .all
+    var globalFilterCustomFrom: Date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+    var globalFilterCustomTo: Date = Date()
     var isLoading: Bool = true
     /// True while the background reconcile pass diffs disk against the summary
     /// cache and re-parses changed files. Gates cost-alert evaluation (alerts
@@ -205,6 +213,71 @@ final class SessionStore {
             }
         }
         return result
+    }
+
+    var globalFilterActive: Bool {
+        globalFilterProjectId != nil || globalFilterRange != .all
+    }
+
+    private var globalFilterDateBounds: (from: Date?, to: Date?) {
+        globalFilterRange.dateRange(customFrom: globalFilterCustomFrom, customTo: globalFilterCustomTo)
+    }
+
+    private func withinGlobalFilterDateBounds(_ date: Date?) -> Bool {
+        let bounds = globalFilterDateBounds
+        guard bounds.from != nil || bounds.to != nil else { return true }
+        guard let date else { return false }
+        if let from = bounds.from, date < from { return false }
+        if let to = bounds.to, date >= to { return false }
+        return true
+    }
+
+    /// Projects and sessions narrowed by the global filter. Sessions/Tools
+    /// sidebars read these instead of `projects`/`sessionsByProject` directly;
+    /// the base collections stay untouched so the popover is unaffected.
+    var filteredProjects: [Project] {
+        guard globalFilterActive else { return projects }
+        return projects.filter { project in
+            (globalFilterProjectId == nil || globalFilterProjectId == project.id) &&
+            !(filteredSessionsByProject[project.id] ?? []).isEmpty
+        }
+    }
+
+    var filteredSessionsByProject: [String: [SessionSummary]] {
+        guard globalFilterActive else { return sessionsByProject }
+        var result: [String: [SessionSummary]] = [:]
+        for (projectId, sessions) in sessionsByProject {
+            if let selected = globalFilterProjectId, selected != projectId { continue }
+            let kept = sessions.filter { withinGlobalFilterDateBounds(ISO8601.parse($0.lastTimestamp)) }
+            if !kept.isEmpty { result[projectId] = kept }
+        }
+        return result
+    }
+
+    var filteredPlans: [PlanSummary] {
+        guard globalFilterActive else { return plans }
+        let selectedProjectName = globalFilterProjectId.flatMap { id in
+            projects.first(where: { $0.id == id })?.name
+        }
+        return plans.filter { plan in
+            if let selectedProjectName {
+                guard let hint = plan.projectHint,
+                      hint.localizedCaseInsensitiveContains(selectedProjectName) else { return false }
+            }
+            return withinGlobalFilterDateBounds(plan.createdAt)
+        }
+    }
+
+    var filteredTimelineEntries: [HistoryEntry] {
+        guard globalFilterActive else { return timelineEntries }
+        return timelineEntries.filter { entry in
+            if let selected = globalFilterProjectId {
+                let matchesProjectId = entry.projectId == selected
+                let matchesProjectPath = entry.project?.localizedCaseInsensitiveContains(selected) ?? false
+                guard matchesProjectId || matchesProjectPath else { return false }
+            }
+            return withinGlobalFilterDateBounds(entry.timestamp)
+        }
     }
 
     /// Today's sessions (CLI + Cowork; Cowork rows carry isCowork = true)

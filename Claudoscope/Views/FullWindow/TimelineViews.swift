@@ -5,6 +5,7 @@ import SwiftUI
 struct TimelineSidebarContent: View {
     let filterText: String
     let entries: [HistoryEntry]
+    let globalFilterActive: Bool
     @Binding var selectedDay: String?
     var onSelect: ((HistoryEntry) -> Void)?
 
@@ -49,7 +50,7 @@ struct TimelineSidebarContent: View {
                 Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                     .font(.system(size: 24))
                     .foregroundStyle(.quaternary)
-                Text("No history found")
+                Text(globalFilterActive ? "No results for this filter" : "No history found")
                     .font(Typography.body)
                     .foregroundStyle(.tertiary)
                 Spacer()

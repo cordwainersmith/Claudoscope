@@ -23,8 +23,20 @@ struct SidebarView: View {
     @Binding var selectedPluginId: String?
     @State private var filterText = ""
 
+    private var showsGlobalFilter: Bool {
+        switch rail {
+        case .sessions, .tools, .timeline, .plans: return true
+        default: return false
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
+            if showsGlobalFilter {
+                GlobalFilterBar(store: store)
+                Divider()
+            }
+
             // Filter field
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
@@ -45,17 +57,19 @@ struct SidebarView: View {
                 switch rail {
                 case .sessions:
                     SessionsSidebarContent(
-                        projects: store.projects,
-                        sessionsByProject: store.sessionsByProject,
+                        projects: store.filteredProjects,
+                        sessionsByProject: store.filteredSessionsByProject,
                         filterText: filterText,
+                        globalFilterActive: store.globalFilterActive,
                         selectedSessionId: $selectedSessionId,
                         selectedProjectId: $selectedProjectId
                     )
                 case .tools:
                     ToolsSidebarContent(
-                        projects: store.projects,
-                        sessionsByProject: store.sessionsByProject,
+                        projects: store.filteredProjects,
+                        sessionsByProject: store.filteredSessionsByProject,
                         filterText: filterText,
+                        globalFilterActive: store.globalFilterActive,
                         selectedSessionId: $selectedSessionId,
                         selectedProjectId: $selectedProjectId
                     )
@@ -76,13 +90,15 @@ struct SidebarView: View {
                 case .plans:
                     PlansSidebarContent(
                         filterText: filterText,
-                        plans: store.plans,
+                        plans: store.filteredPlans,
+                        globalFilterActive: store.globalFilterActive,
                         selectedPlanFilename: $selectedPlanFilename
                     )
                 case .timeline:
                     TimelineSidebarContent(
                         filterText: filterText,
-                        entries: store.timelineEntries,
+                        entries: store.filteredTimelineEntries,
+                        globalFilterActive: store.globalFilterActive,
                         selectedDay: $selectedTimelineDay
                     )
                 case .cowork:
@@ -168,12 +184,123 @@ struct SidebarView: View {
     }
 }
 
+// MARK: - Global Filter Bar
+
+/// Persistent project + date lens shown above the per-rail text filter on the
+/// sessions/tools/timeline/plans rails. Backed by `SessionStore`'s
+/// `globalFilter*` state so the scope survives switching between those rails,
+/// unlike the text filter which resets per rail.
+private struct GlobalFilterBar: View {
+    let store: SessionStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Menu {
+                    Button("All projects") { store.globalFilterProjectId = nil }
+                    if !store.projects.isEmpty {
+                        Divider()
+                        ForEach(store.projects) { project in
+                            Button(project.name) { store.globalFilterProjectId = project.id }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 10))
+                        Text(selectedProjectLabel)
+                            .lineLimit(1)
+                    }
+                    .font(Typography.caption)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+
+                Menu {
+                    ForEach(AnalyticsTimeRange.allCases, id: \.self) { range in
+                        Button(range.rawValue.capitalized) { store.globalFilterRange = range }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "calendar")
+                            .font(.system(size: 10))
+                        Text(store.globalFilterRange.rawValue.capitalized)
+                            .lineLimit(1)
+                    }
+                    .font(Typography.caption)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+
+                Spacer()
+
+                if store.globalFilterActive {
+                    Button {
+                        store.globalFilterProjectId = nil
+                        store.globalFilterRange = .all
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear filter")
+                }
+            }
+
+            if store.globalFilterRange == .custom {
+                HStack(spacing: 8) {
+                    DatePicker("", selection: Binding(
+                        get: { store.globalFilterCustomFrom },
+                        set: { store.globalFilterCustomFrom = $0 }
+                    ), displayedComponents: .date)
+                        .labelsHidden()
+                    Text("to")
+                        .font(Typography.caption)
+                        .foregroundStyle(.secondary)
+                    DatePicker("", selection: Binding(
+                        get: { store.globalFilterCustomTo },
+                        set: { store.globalFilterCustomTo = $0 }
+                    ), displayedComponents: .date)
+                        .labelsHidden()
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
+    private var selectedProjectLabel: String {
+        guard let id = store.globalFilterProjectId else { return "All projects" }
+        return store.projects.first(where: { $0.id == id })?.name ?? "All projects"
+    }
+}
+
+/// Shown in a rail's sidebar when the global project/date filter has narrowed
+/// the list down to nothing. Not `private` so the other rail files can reuse it.
+struct GlobalFilterEmptyRow: View {
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 20))
+                .foregroundStyle(.tertiary)
+            Text("No results for this filter")
+                .font(Typography.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+    }
+}
+
 // MARK: - Sessions Sidebar
 
 private struct SessionsSidebarContent: View {
     let projects: [Project]
     let sessionsByProject: [String: [SessionSummary]]
     let filterText: String
+    let globalFilterActive: Bool
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
 
@@ -188,17 +315,21 @@ private struct SessionsSidebarContent: View {
     }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(filteredProjects) { project in
-                ProjectGroup(
-                    project: project,
-                    sessions: filteredSessions(for: project),
-                    selectedSessionId: $selectedSessionId,
-                    selectedProjectId: $selectedProjectId
-                )
+        if globalFilterActive && filteredProjects.isEmpty {
+            GlobalFilterEmptyRow()
+        } else {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(filteredProjects) { project in
+                    ProjectGroup(
+                        project: project,
+                        sessions: filteredSessions(for: project),
+                        selectedSessionId: $selectedSessionId,
+                        selectedProjectId: $selectedProjectId
+                    )
+                }
             }
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 4)
     }
 
     // Subagents are hidden from the sidebar — their UUID titles add noise and
