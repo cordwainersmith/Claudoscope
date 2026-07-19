@@ -117,4 +117,41 @@ final class SessionNotificationEngineTests: XCTestCase {
             SessionNotificationService.composeLabel(title: nil, folder: "Claudoscope", sessionId: sid),
             "Claudoscope")
     }
+
+    // MARK: - folderName (click-to-focus needle)
+
+    func testFolderNamePrefersDecodedProjectId() {
+        // The decoded projectId wins over the cwd basename (they normally agree).
+        XCTAssertEqual(
+            SessionNotificationService.folderName(
+                projectId: "-Users-liranb-projects-Claudoscope", cwd: "/tmp/whatever"),
+            "Claudoscope")
+    }
+
+    func testFolderNameFallsBackToCwdBasename() {
+        XCTAssertEqual(
+            SessionNotificationService.folderName(projectId: nil, cwd: "/Users/x/dev/my-proj"),
+            "my-proj")
+        // An empty projectId is treated as absent.
+        XCTAssertEqual(
+            SessionNotificationService.folderName(projectId: "", cwd: "/Users/x/dev/my-proj"),
+            "my-proj")
+    }
+
+    func testFolderNameDefaultsWhenNothingAvailable() {
+        XCTAssertEqual(SessionNotificationService.folderName(projectId: nil, cwd: nil), "a session")
+        XCTAssertEqual(SessionNotificationService.folderName(projectId: "", cwd: ""), "a session")
+    }
+
+    // MARK: - TerminalFocuser.escape
+
+    func testEscapeNeutralizesQuotesAndBackslashes() {
+        XCTAssertEqual(TerminalFocuser.escape("plain"), "plain")
+        // A double quote is escaped so it can't close the AppleScript literal.
+        XCTAssertEqual(TerminalFocuser.escape("wei\"rd"), "wei\\\"rd")
+        // A backslash is doubled.
+        XCTAssertEqual(TerminalFocuser.escape("back\\slash"), "back\\\\slash")
+        // Backslash-then-quote: backslash is escaped first, so \" -> \\\".
+        XCTAssertEqual(TerminalFocuser.escape("a\\\"b"), "a\\\\\\\"b")
+    }
 }

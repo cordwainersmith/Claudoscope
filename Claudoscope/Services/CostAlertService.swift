@@ -30,6 +30,14 @@ final class CostAlertService {
 
     var onOpenDashboard: (() -> Void)?
 
+    /// Set by the app to route session-notification taps (identifier prefix
+    /// "claudoscope-") to `SessionNotificationService`. This service owns the
+    /// app's single shared notification-center delegate, so it is not
+    /// cost-alert-only. Called off the main thread; the handler dispatches itself.
+    var onSessionNotificationTap: (([AnyHashable: Any]) -> Void)? {
+        didSet { notificationDelegate.onSessionTap = onSessionNotificationTap }
+    }
+
     @ObservationIgnored private var firedState: CostAlertFiredState
     @ObservationIgnored private var ledger = SpendLedger()
     @ObservationIgnored private let notificationDelegate = CostAlertNotificationDelegate()
@@ -190,6 +198,9 @@ final class CostAlertService {
 
 private final class CostAlertNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     var onTap: (@MainActor () -> Void)?
+    /// Session-notification taps (identifier prefix "claudoscope-"). Called
+    /// synchronously off the main thread; the handler must dispatch itself.
+    var onSessionTap: (([AnyHashable: Any]) -> Void)?
 
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -204,9 +215,12 @@ private final class CostAlertNotificationDelegate: NSObject, UNUserNotificationC
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if response.notification.request.identifier.hasPrefix("costAlert-") {
+        let identifier = response.notification.request.identifier
+        if identifier.hasPrefix("costAlert-") {
             let onTap = onTap
             Task { @MainActor in onTap?() }
+        } else if identifier.hasPrefix("claudoscope-") {
+            onSessionTap?(response.notification.request.content.userInfo)
         }
         completionHandler()
     }

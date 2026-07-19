@@ -13,10 +13,12 @@ import UserNotifications
 /// `Stop` hook (fires once when a turn ends). No timers and no per-session
 /// delivery state, so nothing can re-fire hours later.
 ///
-/// Deliberately sets NO `UNUserNotificationCenter` delegate: `CostAlertService`
-/// already installs one whose `willPresent` presents every notification, and we
-/// want no tap action, so relying on it keeps a single delegate. Construct this
-/// service AFTER `CostAlertService` so that delegate exists.
+/// Installs NO `UNUserNotificationCenter` delegate of its own: `CostAlertService`
+/// owns the single shared delegate whose `willPresent` presents every
+/// notification. Taps on our notifications are routed back here via
+/// `CostAlertService.onSessionNotificationTap` -> `handleNotificationTap`, which
+/// focuses the originating terminal (the classic session-notify.sh click action).
+/// Construct this service AFTER `CostAlertService` so that delegate exists.
 @MainActor @Observable
 final class SessionNotificationService {
 
@@ -133,7 +135,8 @@ final class SessionNotificationService {
 
         let projectId = event.transcriptPath.flatMap { Self.projectId(forTranscriptPath: $0) }
         guard shouldDeliver(projectId: projectId) else { return }
-        let label = notificationLabel(sessionId: event.sessionId, projectId: projectId, cwd: event.cwd)
+        let folder = Self.folderName(projectId: projectId, cwd: event.cwd)
+        let label = Self.composeLabel(title: sessionLabels[event.sessionId], folder: folder, sessionId: event.sessionId)
 
         if event.hookEventName == "Stop" {
             guard config.notifyOnYourTurn else { return }
@@ -142,7 +145,8 @@ final class SessionNotificationService {
                 sessionId: event.sessionId,
                 title: "Claude is ready",
                 subtitle: label,
-                body: "Your turn."
+                body: "Your turn.",
+                focusNeedle: folder
             )
         } else {
             // Notification hook: fire on real blocks, drop the passive idle prompt.
@@ -155,9 +159,20 @@ final class SessionNotificationService {
                 sessionId: event.sessionId,
                 title: "Claude needs you",
                 subtitle: label,
-                body: event.message ?? "Waiting for your input."
+                body: event.message ?? "Waiting for your input.",
+                focusNeedle: folder
             )
         }
+    }
+
+    /// A session notification was tapped: focus the terminal tab whose title
+    /// contains the session's project folder (the classic session-notify.sh click
+    /// action). Routed here from the shared notification-center delegate, which
+    /// calls this off the main thread; `nonisolated` because it touches no
+    /// main-actor state and `TerminalFocuser` does its own dispatching.
+    nonisolated func handleNotificationTap(userInfo: [AnyHashable: Any]) {
+        guard let needle = userInfo["focusNeedle"] as? String, !needle.isEmpty else { return }
+        TerminalFocuser.focus(matchingTitle: needle)
     }
 
     /// Record a session's display title so notifications can show "Title (folder)".
@@ -177,13 +192,15 @@ final class SessionNotificationService {
         return true
     }
 
-    private func postNotification(kind: Kind, sessionId: String, title: String, subtitle: String?, body: String) {
+    private func postNotification(kind: Kind, sessionId: String, title: String, subtitle: String?, body: String, focusNeedle: String) {
         guard let center = notificationCenter else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         if let subtitle, !subtitle.isEmpty { content.subtitle = subtitle }
         content.body = body
         content.sound = config.soundEnabled ? Self.sound(for: kind) : nil
+        // Carried to the tap handler so clicking focuses the originating terminal.
+        content.userInfo = ["focusNeedle": focusNeedle]
         // Stable identifier: a repeat for the same (kind, session) replaces the
         // existing banner in Notification Center rather than stacking.
         let request = UNNotificationRequest(
@@ -237,15 +254,15 @@ final class SessionNotificationService {
 
     // MARK: - Labels
 
-    /// Notification subtitle: the project/repo folder name (same decoder the
-    /// sidebar uses), with a meaningful session title overlaid as "Title (folder)".
-    /// The raw 8-char session-id fallback is never shown. Everything comes from
-    /// the hook payload, so it reads the same across any terminal.
-    private func notificationLabel(sessionId: String, projectId: String?, cwd: String?) -> String {
-        let folder = projectId.flatMap { $0.isEmpty ? nil : Self.projectLabel(fromProjectId: $0) }
+    /// The project/repo folder name for a session (same decoder the sidebar
+    /// uses). Used both as the notification subtitle base (overlaid with a
+    /// meaningful title as "Title (folder)" via `composeLabel`) and as the
+    /// click-to-focus needle matched against terminal tab titles. Everything
+    /// comes from the hook payload, so it reads the same across any terminal.
+    nonisolated static func folderName(projectId: String?, cwd: String?) -> String {
+        projectId.flatMap { $0.isEmpty ? nil : projectLabel(fromProjectId: $0) }
             ?? cwd.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0).lastPathComponent }
             ?? "a session"
-        return Self.composeLabel(title: sessionLabels[sessionId], folder: folder, sessionId: sessionId)
     }
 
     /// "Title (folder)" when the session has a real title, else just the folder.

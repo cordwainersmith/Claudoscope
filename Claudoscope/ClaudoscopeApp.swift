@@ -36,6 +36,10 @@ struct ClaudoscopeApp: App {
             guard let store else { return }
             MainWindowController.shared.open(store: store)
         }
+        // Tapping a session notification focuses the terminal running that session.
+        costAlertService.onSessionNotificationTap = { [weak sessionNotificationService] userInfo in
+            sessionNotificationService?.handleNotificationTap(userInfo: userInfo)
+        }
 
         MainWindowController.shared.setUpdateService(updateService)
         MainWindowController.shared.setLoginItemService(loginItemService)

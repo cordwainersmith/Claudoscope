@@ -23,6 +23,7 @@ targets:
         excludes:
           - Info.plist
           - Resources/HardeningBaseline
+          - .claude
       - path: Claudoscope/Resources/HardeningBaseline
         type: folder
         buildPhase: resources
@@ -37,6 +38,7 @@ targets:
         CFBundleName: Claudoscope
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSAppleEventsUsageDescription: "Claudoscope focuses your terminal window when you click a session notification."
     dependencies:
       - package: swift-collections
         product: OrderedCollections
@@ -47,6 +49,7 @@ targets:
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.files.user-selected.read-only: true
+        com.apple.security.automation.apple-events: true
     settings:
       base:
         MARKETING_VERSION: "0.9.0"
