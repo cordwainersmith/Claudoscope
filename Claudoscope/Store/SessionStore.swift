@@ -232,6 +232,16 @@ final class SessionStore {
         return true
     }
 
+    /// Sessions of one project narrowed by the global filter. Shared by
+    /// `filteredProjects` and `filteredSessionsByProject` so each project's
+    /// sessions are only ever scanned once per access, not once per project
+    /// per access (the latter made a prior version of this O(projects × sessions)).
+    private func filteredSessions(inProject projectId: String) -> [SessionSummary] {
+        guard let sessions = sessionsByProject[projectId] else { return [] }
+        if let selected = globalFilterProjectId, selected != projectId { return [] }
+        return sessions.filter { withinGlobalFilterDateBounds(ISO8601.parse($0.lastTimestamp)) }
+    }
+
     /// Projects and sessions narrowed by the global filter. Sessions/Tools
     /// sidebars read these instead of `projects`/`sessionsByProject` directly;
     /// the base collections stay untouched so the popover is unaffected.
@@ -239,16 +249,15 @@ final class SessionStore {
         guard globalFilterActive else { return projects }
         return projects.filter { project in
             (globalFilterProjectId == nil || globalFilterProjectId == project.id) &&
-            !(filteredSessionsByProject[project.id] ?? []).isEmpty
+            !filteredSessions(inProject: project.id).isEmpty
         }
     }
 
     var filteredSessionsByProject: [String: [SessionSummary]] {
         guard globalFilterActive else { return sessionsByProject }
         var result: [String: [SessionSummary]] = [:]
-        for (projectId, sessions) in sessionsByProject {
-            if let selected = globalFilterProjectId, selected != projectId { continue }
-            let kept = sessions.filter { withinGlobalFilterDateBounds(ISO8601.parse($0.lastTimestamp)) }
+        for projectId in sessionsByProject.keys {
+            let kept = filteredSessions(inProject: projectId)
             if !kept.isEmpty { result[projectId] = kept }
         }
         return result

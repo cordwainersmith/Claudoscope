@@ -120,4 +120,36 @@ final class GlobalFilterTests: XCTestCase {
 
         XCTAssertEqual(store.filteredTimelineEntries.map(\.id), ["1"])
     }
+
+    /// Regression guard for a real bug: `filteredProjects` once called the
+    /// whole-dictionary `filteredSessionsByProject` getter once PER PROJECT,
+    /// making a single sidebar render O(projects x total sessions). At a
+    /// real-world scale (74 projects, ~3087 sessions) that pinned the app at
+    /// 100% CPU. Both accessors must stay linear in total session count.
+    func testFilteringManyProjectsStaysLinearNotQuadratic() {
+        let projectCount = 74
+        let sessionsPerProject = 42
+        var projects: [Project] = []
+        var sessionsByProject: [String: [SessionSummary]] = [:]
+        for p in 0..<projectCount {
+            let projectId = "proj-\(p)"
+            projects.append(Project(id: projectId, name: "Project \(p)", path: "/\(p)", sessionCount: sessionsPerProject))
+            sessionsByProject[projectId] = (0..<sessionsPerProject).map { s in
+                makeSession(id: "\(projectId)-s\(s)", lastTimestamp: "2026-07-\(String(format: "%02d", (s % 28) + 1))T00:00:00Z")
+            }
+        }
+        store.projects = projects
+        store.sessionsByProject = sessionsByProject
+        store.globalFilterRange = .sevenDays
+
+        let start = CFAbsoluteTimeGetCurrent()
+        _ = store.filteredProjects
+        _ = store.filteredSessionsByProject
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+        // Linear-time budget for ~3100 total sessions. The O(projects x
+        // sessions) regression took multiple seconds at this scale; this
+        // threshold is generous but well below that.
+        XCTAssertLessThan(elapsed, 0.5, "filteredProjects/filteredSessionsByProject took \(elapsed)s — check for an O(projects x sessions) regression")
+    }
 }
