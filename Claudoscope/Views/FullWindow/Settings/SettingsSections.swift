@@ -92,6 +92,20 @@ extension SettingsMainPanelView {
                 }
             }
             .padding(12)
+
+            Divider().padding(.horizontal, 12)
+
+            VStack(alignment: .leading, spacing: 4) {
+                @Bindable var store = store
+                Toggle("Monochrome menu bar icon", isOn: $store.monochromeMenuBarIcon)
+                    .toggleStyle(.checkbox)
+                    .font(Typography.body)
+
+                Text("Use a solid black/white icon that adapts to the menu bar, instead of full color.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
         }
     }
 

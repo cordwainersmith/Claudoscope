@@ -192,6 +192,14 @@ final class SessionStore {
     // Appearance
     var appearance: AppAppearance = .system
 
+    var monochromeMenuBarIcon: Bool = false {
+        didSet {
+            UserDefaults.standard.set(monochromeMenuBarIcon, forKey: Self.monochromeMenuBarIconKey)
+        }
+    }
+
+    private static let monochromeMenuBarIconKey = "monochromeMenuBarIcon"
+
     // Pricing configuration
     var pricingProvider: PricingProvider = .anthropic
     var pricingRegion: VertexRegion = .global
@@ -437,6 +445,7 @@ final class SessionStore {
         } else {
             self.realtimeSecretScanEnabled = defaults.bool(forKey: Self.realtimeSecretScanKey)
         }
+        self.monochromeMenuBarIcon = defaults.bool(forKey: Self.monochromeMenuBarIconKey)
 
         setupWatcher()
         setupCoworkWatcher()

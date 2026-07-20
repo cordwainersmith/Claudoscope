@@ -29,6 +29,7 @@ let package = Package(
                 .process("Resources/claude-avatar.png"),
                 .process("Resources/logo-c-t.png"),
                 .process("Resources/menu-bar-icon.png"),
+                .process("Resources/menu-bar-icon-mono.png"),
             ]
         ),
         .executableTarget(

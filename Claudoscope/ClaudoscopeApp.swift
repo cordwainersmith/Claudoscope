@@ -104,7 +104,8 @@ struct ClaudoscopeApp: App {
         } label: {
             MenuBarIcon(
                 hasUpdate: updateService.updateAvailable != nil,
-                hasCostAlert: costAlertService.hasUnseen
+                hasCostAlert: costAlertService.hasUnseen,
+                monochrome: store.monochromeMenuBarIcon
             )
         }
         .menuBarExtraStyle(.window)
@@ -184,15 +185,17 @@ private struct UpdateTriggerView: View {
 struct MenuBarIcon: View {
     var hasUpdate: Bool = false
     var hasCostAlert: Bool = false
+    var monochrome: Bool = false
 
     var body: some View {
-        if let url = Bundle.main.url(forResource: "menu-bar-icon", withExtension: "png"),
+        let resourceName = monochrome ? "menu-bar-icon-mono" : "menu-bar-icon"
+        if let url = Bundle.main.url(forResource: resourceName, withExtension: "png"),
            let nsImage = NSImage(contentsOf: url) {
-            nsImage.isTemplate = false
+            nsImage.isTemplate = monochrome
             return AnyView(
                 ZStack(alignment: .topTrailing) {
                     Image(nsImage: nsImage)
-                        .renderingMode(.original)
+                        .renderingMode(monochrome ? .template : .original)
                     if hasCostAlert {
                         Circle()
                             .fill(.red)
