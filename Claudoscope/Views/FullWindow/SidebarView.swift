@@ -150,7 +150,7 @@ struct SidebarView: View {
                 case .canon:
                     CanonSidebarContent(
                         filterText: filterText,
-                        projects: store.projects,
+                        projects: store.canonRailProjects,
                         detectedProjectIds: store.canonDetectedProjectIds,
                         selectedProjectId: $selectedCanonProjectId
                     )

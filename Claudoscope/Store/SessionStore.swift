@@ -84,7 +84,26 @@ final class SessionStore {
     // session-event piggyback know which project's canon to refresh live.
     var canonData: CanonData?
     var canonDetectedProjectIds: Set<String> = []
+    /// Canon install eligibility per project id (containers/subdirs are not their
+    /// own install targets). Refreshed by `refreshCanonDetection`.
+    private(set) var canonClassification: [String: CanonTargetKind] = [:]
     private var canonLoadedProjectId: String?
+
+    /// Ids whose classification is `.installable` — the only projects the Canon
+    /// rail offers canon on. Non-git leaf folders qualify; containers and repo
+    /// subdirs do not.
+    var canonEligibleProjectIds: Set<String> {
+        Set(canonClassification.compactMap { id, kind in
+            if case .installable = kind { return id } else { return nil }
+        })
+    }
+
+    /// Projects shown in the Canon rail: one clean row per installable canonical
+    /// root. Other rails keep using the full `projects` list.
+    var canonRailProjects: [Project] {
+        let eligible = canonEligibleProjectIds
+        return projects.filter { eligible.contains($0.id) }
+    }
 
     // Cowork data (Claude desktop app's agentic mode, separate from Claude Code)
     var coworkAvailability: CoworkAvailability = .unknown
@@ -1122,12 +1141,29 @@ final class SessionStore {
         self.canonLoadedProjectId = projectId
     }
 
-    /// Recompute which known projects have canon artifacts on disk. Drives the
-    /// Canon sidebar's "detected on disk" indicator.
+    /// Recompute canon install eligibility + which known projects have canon
+    /// artifacts on disk. Drives the Canon sidebar (eligible rows + "detected on
+    /// disk" indicator) and self-heals opt-in state predating the eligibility
+    /// guard: a container or repo-subdir project can never be canon-enabled, so
+    /// drop any stale opt-in for it. `.directoryMissing` opt-ins are kept — an
+    /// unmounted repo must not be silently forgotten.
     func refreshCanonDetection() async {
         let ids = projects.map(\.id)
+        let classification = await configService.canonClassifications(ids)
         let detected = await configService.detectCanonProjects(projectIds: ids)
+        self.canonClassification = classification
         self.canonDetectedProjectIds = detected
+
+        if let canonService {
+            for (id, kind) in classification {
+                switch kind {
+                case .container, .foldedInto:
+                    if canonService.isOptedIn(id) { canonService.forgetOptIn(id) }
+                case .installable, .directoryMissing:
+                    break
+                }
+            }
+        }
     }
 
     /// Install canon into one project and record the opt-in. Resolves the real
@@ -1135,10 +1171,20 @@ final class SessionStore {
     @discardableResult
     func enableCanon(projectId: String) async throws -> CanonInstallResult {
         guard let canonService else { throw CanonInstallError.io("Canon service unavailable") }
-        guard let realPath = await configService.realProjectPath(projectId) else {
+        let kind = await configService.classifyCanonTarget(projectId, allProjectIds: projects.map(\.id))
+        let installRoot: String
+        switch kind {
+        case .installable(let root):
+            installRoot = root
+        case .container(let nested):
+            let n = nested.count
+            throw CanonInstallError.io("This folder contains \(n) other project\(n == 1 ? "" : "s"); canon here would apply to all of them. Enable canon on the specific project instead.")
+        case .foldedInto:
+            throw CanonInstallError.io("This folder is inside a repository; enable canon on the repository root instead.")
+        case .directoryMissing:
             throw CanonInstallError.io("Project directory not found on disk")
         }
-        let result = try await canonService.enable(projectId: projectId, projectPath: realPath)
+        let result = try await canonService.enable(projectId: projectId, projectPath: installRoot)
         if canonLoadedProjectId == projectId { await loadCanon(projectId: projectId) }
         await refreshCanonDetection()
         return result
@@ -1157,23 +1203,28 @@ final class SessionStore {
         await refreshCanonDetection()
     }
 
-    /// Bulk-enable canon across every known project. Projects whose repo path no
-    /// longer exists on disk are skipped. Refreshes viewer + detection once at
-    /// the end.
+    /// Bulk-enable canon across every eligible project. Installs only at canonical
+    /// roots (git repo roots + standalone non-git folders); containers and repo
+    /// subdirs are counted as `skippedIneligible`, and projects whose repo path is
+    /// gone as `skipped`. Refreshes viewer + detection once at the end.
     func enableCanonForAllProjects() async -> CanonBulkResult {
         guard let canonService else { return CanonBulkResult() }
         var result = CanonBulkResult()
+        let classification = await configService.canonClassifications(projects.map(\.id))
         for project in projects {
-            guard let realPath = await configService.realProjectPath(project.id) else {
+            switch classification[project.id] ?? .directoryMissing {
+            case .installable(let root):
+                do {
+                    _ = try await canonService.enable(projectId: project.id, projectPath: root)
+                    result.succeeded += 1
+                } catch {
+                    result.failed += 1
+                    result.failedNames.append(project.name)
+                }
+            case .container, .foldedInto:
+                result.skippedIneligible += 1
+            case .directoryMissing:
                 result.skipped += 1
-                continue
-            }
-            do {
-                _ = try await canonService.enable(projectId: project.id, projectPath: realPath)
-                result.succeeded += 1
-            } catch {
-                result.failed += 1
-                result.failedNames.append(project.name)
             }
         }
         if let pid = canonLoadedProjectId { await loadCanon(projectId: pid) }

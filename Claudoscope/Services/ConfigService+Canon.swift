@@ -68,4 +68,29 @@ extension ConfigService {
     func realProjectPath(_ projectId: String) -> String? {
         decodeProjectPath(projectId)
     }
+
+    /// Classify every project id for canon install eligibility, resolved against
+    /// the full set (an id is a "container" only relative to the others). Decodes
+    /// each id once; ids that no longer resolve on disk map to `.directoryMissing`.
+    /// See `CanonEligibility` for the rules.
+    func canonClassifications(_ projectIds: [String]) -> [String: CanonTargetKind] {
+        var dirById: [String: String] = [:]
+        for id in projectIds {
+            if let dir = decodeProjectPath(id) { dirById[id] = dir }
+        }
+        let allDirs = Array(dirById.values)
+        let exists: (String) -> Bool = { self.fm.fileExists(atPath: $0) }
+
+        var out: [String: CanonTargetKind] = [:]
+        for id in projectIds {
+            guard let dir = dirById[id] else { out[id] = .directoryMissing; continue }
+            out[id] = CanonEligibility.classify(dir: dir, allDirs: allDirs, fileExists: exists)
+        }
+        return out
+    }
+
+    /// Canon classification for a single project id, resolved against the full set.
+    func classifyCanonTarget(_ projectId: String, allProjectIds: [String]) -> CanonTargetKind {
+        canonClassifications(allProjectIds)[projectId] ?? .directoryMissing
+    }
 }

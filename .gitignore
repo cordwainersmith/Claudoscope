@@ -45,5 +45,8 @@ ClaudoscopeTests/SecretDetectionTests.swift
 claudoscope-diag-*.tar.gz
 claudoscope-diag-*/
 
-# xcode 
+# xcode
 .build-xcode/
+
+# stray screenshots dropped in repo root
+image (*).png

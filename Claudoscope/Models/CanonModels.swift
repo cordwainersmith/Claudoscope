@@ -72,6 +72,9 @@ struct CanonBulkResult: Sendable, Equatable {
     var succeeded: Int = 0
     /// Projects whose real repo path could not be resolved on disk (skipped).
     var skipped: Int = 0
+    /// Projects skipped because they are containers of other projects or repo
+    /// subdirs — installing canon there would cascade or duplicate.
+    var skippedIneligible: Int = 0
     var failed: Int = 0
     var failedNames: [String] = []
 }

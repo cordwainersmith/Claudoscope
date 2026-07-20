@@ -433,8 +433,8 @@ struct CanonSettingsSectionContent: View {
     @State private var showEnableAllConfirm = false
     @State private var showDisableAllConfirm = false
 
-    private var projectCount: Int { store.projects.count }
-    private var enabledCount: Int { store.projects.filter { canonService.isOptedIn($0.id) }.count }
+    private var eligibleCount: Int { store.canonEligibleProjectIds.count }
+    private var enabledCount: Int { store.canonEligibleProjectIds.filter { canonService.isOptedIn($0) }.count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -443,13 +443,13 @@ struct CanonSettingsSectionContent: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("\(enabledCount) of \(projectCount) known projects enabled")
+            Text("\(enabledCount) of \(eligibleCount) eligible projects enabled")
                 .font(.system(size: 12, weight: .medium))
 
             HStack(spacing: 8) {
                 Button("Enable Canon for all projects") { showEnableAllConfirm = true }
                     .buttonStyle(.borderedProminent)
-                    .disabled(busy || projectCount == 0)
+                    .disabled(busy || eligibleCount == 0)
                 Button("Disable for all") { showDisableAllConfirm = true }
                     .buttonStyle(.bordered)
                     .tint(.red)
@@ -465,14 +465,14 @@ struct CanonSettingsSectionContent: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
         .confirmationDialog(
-            "Enable Canon for all \(projectCount) projects?",
+            "Enable Canon for all \(eligibleCount) projects?",
             isPresented: $showEnableAllConfirm,
             titleVisibility: .visible
         ) {
             Button("Enable for all") { runEnableAll() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Writes .claude/rules/canon.md and seeds .claude/canon.md into every known project's repository. Existing records are never overwritten. Projects whose folder no longer exists on disk are skipped.")
+            Text("Writes .claude/rules/canon.md and seeds .claude/canon.md into every eligible project (git repo roots and standalone folders). Container folders and repo subdirectories are skipped so canon never cascades into nested projects. Existing records are never overwritten.")
         }
         .confirmationDialog(
             "Disable Canon for all \(enabledCount) enabled projects?",
@@ -488,6 +488,7 @@ struct CanonSettingsSectionContent: View {
 
     private func resultRow(_ r: CanonBulkResult) -> some View {
         var parts = ["\(resultIsEnable ? "Enabled" : "Disabled") \(r.succeeded) project(s)"]
+        if r.skippedIneligible > 0 { parts.append("skipped \(r.skippedIneligible) (containers/subdirs)") }
         if r.skipped > 0 { parts.append("skipped \(r.skipped) (folder not found)") }
         if r.failed > 0 { parts.append("\(r.failed) failed") }
         let summary = parts.joined(separator: ", ") + "."
