@@ -1,115 +1,76 @@
 # Agent Install Guide: Claudoscope
 
-This file is written for an AI coding agent (e.g. Claude Code) acting on a
-user's request to install Claudoscope. A human can follow it manually too, but
-the steps are ordered and gated the way an agent should execute them: gather
-facts first, confirm the plan with the user, then act.
+Written for an AI coding agent acting on a user's request to install
+Claudoscope. Gather facts, confirm the plan with the user, then act. A human
+can follow it manually too.
 
-Scope: this document covers installing/updating/removing the **Claudoscope
-app itself** via Homebrew. It does not cover registering the Claudoscope MCP
-server or installing the Hardening baseline into `~/.claude/` — those already
-have safer, reversible flows built into the app itself (see "Out of scope"
-below). Do not improvise those from this file.
+Scope: installing/updating/removing the **Claudoscope app itself**. MCP
+server registration and the Hardening baseline already have safer, reversible
+flows built into the app (see "Out of scope").
 
-## Step 1 — Preflight (read-only, do not install anything yet)
-
-Run these checks and note the results. Nothing here should write to disk.
+## Preflight (read-only)
 
 ```bash
-sw_vers -productVersion   # must be 14.0 (Sonoma) or later
-uname -m                  # must be arm64 (Apple Silicon); Intel is not supported
-command -v brew           # Homebrew must already be installed
-brew tap                  # check whether cordwainersmith/claudoscope is present
-brew list --cask claudoscope   # installed version, or "No such keg" / not found
-ls /Applications/Claudoscope.app 2>/dev/null   # does an app bundle already exist?
+uname -m                        # must be arm64 — Intel Macs are not supported
+command -v brew                 # is Homebrew available?
+brew list --cask claudoscope    # already installed? which version?
+ls /Applications/Claudoscope.app 2>/dev/null   # app bundle already present?
 ```
 
-Interpret the results:
+If `/Applications/Claudoscope.app` exists but `brew list --cask claudoscope`
+says it isn't installed, that's a manual (DMG) install Homebrew doesn't track.
+`brew install --cask` will refuse to overwrite it without `--force` — don't
+pass that flag unless the user asks for it.
 
-- If `sw_vers` is below 14.0, or `uname -m` is not `arm64`: stop. Claudoscope
-  does not support this machine.
-- If `brew` is not found: stop and tell the user to install Homebrew
-  themselves first (https://brew.sh). Installing a package manager on the
-  user's behalf is out of scope for this doc.
-- If `/Applications/Claudoscope.app` exists but `brew list --cask claudoscope`
-  reports it is not installed: this is a **manual-install conflict** — a
-  DMG-dragged install (per the README's "Manual install" section) that
-  Homebrew doesn't know about. `brew install --cask` will refuse to overwrite
-  it without `--force`. Flag this to the user; do not pass `--force` silently.
-- Otherwise, classify the target state as one of: fresh install, upgrade
-  (older version installed), or already up to date.
+## Confirm with the user
 
-## Step 2 — Approval gate
+State what you found (fresh install / upgrade / already up to date / manual
+install present) and what you're about to run. Wait for a yes before doing
+anything below.
 
-Before running anything that changes system state, present the user a short
-summary of what Step 1 found and what you intend to run, for example:
+## Install
 
-| Action | Current state | Resulting state |
-|---|---|---|
-| Tap `cordwainersmith/claudoscope` | not tapped | tapped |
-| Install cask `claudoscope` | not installed | v0.9.0 installed |
-
-Wait for explicit confirmation before proceeding to Step 3. If Step 1 found a
-manual-install conflict, the confirmation must include how the user wants to
-resolve it (move the existing app aside themselves, or explicitly consent to
-`--force`).
-
-## Step 3 — Apply
+**Homebrew available (recommended):**
 
 ```bash
 brew tap cordwainersmith/claudoscope   # no-op if already tapped
+brew install --cask claudoscope        # or: brew upgrade --cask claudoscope
 ```
 
-Then, branching on the Step 1 classification:
-
-- **Fresh install, no conflict:**
-  ```bash
-  brew install --cask claudoscope
-  ```
-- **Upgrade (older version installed):**
-  ```bash
-  brew upgrade --cask claudoscope
-  ```
-- **Already up to date:** skip, report to the user that no action was needed.
-- **Manual-install conflict:** do not run `--force` unless the user explicitly
-  asked for it in Step 2. Otherwise, ask them to move
-  `/Applications/Claudoscope.app` aside first.
-
-## Step 4 — Verify
+**Homebrew not available:** install the DMG directly from the latest GitHub
+release:
 
 ```bash
-brew list --cask claudoscope
+URL=$(curl -fsSL https://api.github.com/repos/cordwainersmith/Claudoscope/releases/latest \
+  | grep browser_download_url | grep '\.dmg"' | cut -d '"' -f4)
+curl -fL -o /tmp/Claudoscope.dmg "$URL"
+hdiutil attach /tmp/Claudoscope.dmg -nobrowse -quiet
+cp -R /Volumes/Claudoscope/Claudoscope.app /Applications/
+hdiutil detach /Volumes/Claudoscope -quiet
+rm /tmp/Claudoscope.dmg
+```
+
+## Verify
+
+```bash
 ls /Applications/Claudoscope.app
+brew list --cask claudoscope 2>/dev/null   # shows version if brew-managed
 ```
 
-Confirm the cask is registered and the app bundle exists, then report the
-installed version back to the user. Do not auto-launch the app
-(`open -a Claudoscope`) as part of install — mention it as an optional next
-step the user can ask for separately.
+Report the result to the user. Don't auto-launch the app as part of install.
 
-## Uninstall (mirror of install, for symmetry)
+## Uninstall
 
-```bash
-brew uninstall --cask claudoscope
-```
+- Brew-managed: `brew uninstall --cask claudoscope` (ask before also running
+  `brew untap cordwainersmith/claudoscope`).
+- DMG-managed: move `/Applications/Claudoscope.app` to the Trash.
 
-Ask before also running `brew untap cordwainersmith/claudoscope` — untapping
-removes the ability to reinstall or update without re-adding the tap.
-
-This does **not** remove:
-- `~/Library/Application Support/Claudoscope/` (parsed-session cache,
-  Hardening backups)
-- Any Hardening baseline previously installed into `~/.claude/`
-
-Those are removed via the app's own Hardening rail "Uninstall" action, not by
-this doc.
+Neither removes `~/Library/Application Support/Claudoscope/` or a previously
+installed Hardening baseline — those go through the app's own Hardening rail.
 
 ## Out of scope
 
-- **MCP server registration.** Claudoscope's Settings already has a one-click
-  flow that runs `claude mcp add -s user` / `claude mcp remove -s user` on the
-  user's behalf. Don't attempt to register the MCP server by editing Claude
-  Code's config files directly.
-- **Hardening baseline.** The Hardening rail installs a security baseline into
-  `~/.claude/` with its own backup/revert/uninstall lifecycle. Don't attempt
-  to replicate that from this doc.
+- **MCP server registration** — use Claudoscope's Settings, which runs
+  `claude mcp add -s user` / `claude mcp remove -s user` for you.
+- **Hardening baseline** — use the app's Hardening rail, which has its own
+  backup/revert/uninstall lifecycle.
