@@ -10,6 +10,7 @@ struct SidebarView: View {
     @Binding var selectedHookEventId: String?
     @Binding var selectedCommandName: String?
     @Binding var selectedSkillName: String?
+    @Binding var selectedAgentName: String?
     @Binding var selectedMcpName: String?
     @Binding var selectedMemoryId: String?
     @Binding var selectedMemoryProjectId: String?
@@ -126,6 +127,12 @@ struct SidebarView: View {
                         filterText: filterText,
                         skills: store.skills,
                         selectedSkillName: $selectedSkillName
+                    )
+                case .agents:
+                    AgentsSidebarContent(
+                        filterText: filterText,
+                        agents: store.agents,
+                        selectedAgentName: $selectedAgentName
                     )
                 case .plugins:
                     PluginsSidebarContent(

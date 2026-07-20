@@ -87,6 +87,50 @@ struct SkillEntry: Identifiable, Sendable {
     var disallowedTools: [String]? = nil   // frontmatter disallowed-tools (CC 2.1.152)
 }
 
+// MARK: - Agent Models
+
+enum AgentSource: Sendable, Equatable {
+    case user
+    case project(name: String)
+    case plugin(name: String)
+
+    var isUser: Bool { if case .user = self { return true }; return false }
+
+    var label: String {
+        switch self {
+        case .user:           return "user"
+        case .project(let n): return "project: \(n)"
+        case .plugin(let n):  return "plugin: \(n)"
+        }
+    }
+}
+
+struct AgentEntry: Identifiable, Sendable {
+    var id: String { displayName }
+    let name: String                    // frontmatter `name` (filename fallback)
+    let displayName: String             // unique; source suffix for plugin/project
+    let description: String?
+    let metadata: [String: String]      // normalized: model, effort, tools, disallowed-tools, maxTurns, skills, ...
+    let body: String
+    let sizeBytes: Int
+    let source: AgentSource
+
+    /// Core routing roles from the user's agent-routing convention. Only
+    /// user-scoped agents qualify (a plugin/project "builder" is not the routing builder).
+    static let routingNames: Set<String> = [
+        "recon", "explore", "routine", "builder", "checker",
+        "security-review", "security-build",
+    ]
+    static let routingOrder: [String] = [
+        "recon", "explore", "routine", "builder", "checker",
+        "security-review", "security-build",
+    ]
+
+    var isRoutingAgent: Bool {
+        source.isUser && Self.routingNames.contains(name.lowercased())
+    }
+}
+
 // MARK: - Memory Models
 
 struct MemoryFile: Identifiable, Sendable {

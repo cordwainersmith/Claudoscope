@@ -242,9 +242,11 @@ struct SkillToolRestrictionsView: View {
 
 struct SkillMetadataCard: View {
     let metadata: [String: String]
+    // Keys to display with nice labels and icons. Defaults to skill keys; the
+    // Agents rail passes its own set (model/effort/etc.).
+    var knownKeys: [(key: String, label: String, icon: String)] = SkillMetadataCard.defaultKnownKeys
 
-    // Keys to display with nice labels and icons
-    private static let knownKeys: [(key: String, label: String, icon: String)] = [
+    static let defaultKnownKeys: [(key: String, label: String, icon: String)] = [
         ("author", "Author", "person"),
         ("version", "Version", "tag"),
         ("mcp-server", "MCP Server", "point.3.connected.trianglepath.dotted"),
@@ -257,7 +259,7 @@ struct SkillMetadataCard: View {
         var seen: Set<String> = []
 
         // Known keys first, in order
-        for known in Self.knownKeys {
+        for known in knownKeys {
             if let value = metadata[known.key] {
                 entries.append((known.label, known.icon, value))
                 seen.insert(known.key)

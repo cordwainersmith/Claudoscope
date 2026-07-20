@@ -14,6 +14,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     case commands
     case mcps
     case skills
+    case agents
     case plugins
     case memory
     case canon
@@ -36,6 +37,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .commands:  return "terminal"
         case .mcps:      return "point.3.connected.trianglepath.dotted"
         case .skills:    return "star"
+        case .agents:    return "person.2"
         case .plugins:   return "puzzlepiece.extension"
         case .memory:       return "brain"
         case .canon:        return "building.columns"
@@ -58,6 +60,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .commands:  return "Commands"
         case .mcps:      return "MCPs"
         case .skills:    return "Skills"
+        case .agents:    return "Agents"
         case .plugins:   return "Plugins"
         case .memory:       return "Memory"
         case .canon:        return "Canon"
@@ -76,5 +79,5 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     }
 
     static var primaryItems: [RailItem] { [.analytics, .sessions, .tools, .plans, .timeline, .cowork] }
-    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .plugins, .memory, .canon, .configHealth, .hardening, .agentRouting] }
+    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .agents, .plugins, .memory, .canon, .configHealth, .hardening, .agentRouting] }
 }

@@ -72,6 +72,7 @@ final class SessionStore {
     var hookGroups: [HookEventGroup] = []
     var commands: [CommandEntry] = []
     var skills: [SkillEntry] = []
+    var agents: [AgentEntry] = []
     var mcpServers: [McpServerEntry] = []
     var memoryFiles: [MemoryFile] = []
     var extendedConfig: ExtendedConfig?
@@ -1347,6 +1348,7 @@ final class SessionStore {
         let hooks = await configService.loadHooks(projectPaths: projectPaths)
         let cmds = await configService.loadCommands()
         let skls = await configService.loadSkills()
+        let agts = await configService.loadAgents(projectIds: projects.map { $0.id })
         let projectPath = projectId.flatMap { id in projects.first(where: { $0.id == id })?.path }
         let mcps = await configService.loadMcpServers(projectPath: projectPath)
         let memory = await configService.loadMemoryFiles(projectId: projectId)
@@ -1356,6 +1358,7 @@ final class SessionStore {
         self.hookGroups = hooks
         self.commands = cmds
         self.skills = skls
+        self.agents = agts
         self.mcpServers = mcps
         self.memoryFiles = memory
         self.extendedConfig = extended

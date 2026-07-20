@@ -12,6 +12,7 @@ struct MainPanelView: View {
     let selectedHookEventId: String?
     @Binding var selectedCommandName: String?
     @Binding var selectedSkillName: String?
+    @Binding var selectedAgentName: String?
     let selectedMcpName: String?
     @Binding var selectedMemoryId: String?
     let selectedCanonProjectId: String?
@@ -93,6 +94,11 @@ struct MainPanelView: View {
                 SkillsMainPanelView(
                     skills: store.skills,
                     selectedSkillName: $selectedSkillName
+                )
+            case .agents:
+                AgentsMainPanelView(
+                    agents: store.agents,
+                    selectedAgentName: $selectedAgentName
                 )
             case .plugins:
                 PluginsMainPanelView(

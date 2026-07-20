@@ -14,6 +14,7 @@ struct FullWindowView: View {
     @State private var selectedHookEventId: String?
     @State private var selectedCommandName: String?
     @State private var selectedSkillName: String?
+    @State private var selectedAgentName: String?
     @State private var selectedMcpName: String?
     @State private var selectedMemoryId: String?
     @State private var selectedMemoryProjectId: String? // nil = global
@@ -138,6 +139,7 @@ struct FullWindowView: View {
                 selectedHookEventId: $selectedHookEventId,
                 selectedCommandName: $selectedCommandName,
                 selectedSkillName: $selectedSkillName,
+                selectedAgentName: $selectedAgentName,
                 selectedMcpName: $selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
                 selectedMemoryProjectId: $selectedMemoryProjectId,
@@ -159,6 +161,7 @@ struct FullWindowView: View {
                 selectedHookEventId: selectedHookEventId,
                 selectedCommandName: $selectedCommandName,
                 selectedSkillName: $selectedSkillName,
+                selectedAgentName: $selectedAgentName,
                 selectedMcpName: selectedMcpName,
                 selectedMemoryId: $selectedMemoryId,
                 selectedCanonProjectId: selectedCanonProjectId,
@@ -223,7 +226,7 @@ struct FullWindowView: View {
                 await store.loadConfig(projectId: selectedProjectId)
                 // Surface PLG dependency findings in the plugin detail panel.
                 await store.runConfigLintIfNeeded(projectId: selectedProjectId)
-            case .hooks, .commands, .mcps, .skills, .settings:
+            case .hooks, .commands, .mcps, .skills, .agents, .settings:
                 await store.loadConfig(projectId: selectedProjectId)
             case .cowork:
                 await store.loadCowork()
