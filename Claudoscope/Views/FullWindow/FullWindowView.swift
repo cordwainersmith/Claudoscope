@@ -217,7 +217,7 @@ struct FullWindowView: View {
             case .canon:
                 await store.refreshCanonDetection()
                 await store.loadCanon(projectId: selectedCanonProjectId)
-            case .configHealth, .hardening:
+            case .configHealth, .hardening, .agentRouting:
                 await store.runConfigLintIfNeeded(projectId: selectedProjectId)
             case .plugins:
                 await store.loadConfig(projectId: selectedProjectId)

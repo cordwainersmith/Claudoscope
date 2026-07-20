@@ -139,6 +139,17 @@ struct MainPanelView: View {
                         }
                     }
                 )
+            case .agentRouting:
+                RoutingMainPanelView(
+                    lintResults: store.lintResults,
+                    isLoading: store.lintLoading,
+                    selectedResultId: $selectedLintResultId,
+                    onRescan: {
+                        Task {
+                            await store.runConfigLint(projectId: selectedProjectId)
+                        }
+                    }
+                )
             case .settings:
                 SettingsMainPanelView(selectedSection: $selectedSettingsSection)
             }

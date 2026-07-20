@@ -267,6 +267,34 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Model allowlist not enforced",
         hint: "availableModels lists models but enforceAvailableModels is not enabled, so the default model is not constrained to the allowlist. In managed/team setups, set enforceAvailableModels to true (and consider requiredMinimumVersion / requiredMaximumVersion to pin the Claude Code version range)."
     ),
+    .RTG001: RuleMetadata(
+        displayName: "Routing agent file missing",
+        hint: "An agent file the routing stack installed is missing from ~/.claude/agents/. Reinstall the agent routing stack to restore it."
+    ),
+    .RTG002: RuleMetadata(
+        displayName: "Routing agent file drifted",
+        hint: "This agent file no longer matches what the routing stack installed or its current bundled version. If you edited it intentionally, no action is needed; otherwise reinstall to refresh it."
+    ),
+    .RTG003: RuleMetadata(
+        displayName: "Routing policy block missing or drifted",
+        hint: "The orchestration policy block in ~/.claude/CLAUDE.md is missing or no longer matches the installed baseline. Reinstall the agent routing stack to restore it."
+    ),
+    .RTG004: RuleMetadata(
+        displayName: "Routing policy/agents inconsistency",
+        hint: "The policy block's references to security roles don't match which agent groups are actually installed. Reinstall the agent routing stack to resynchronize them."
+    ),
+    .RTG005: RuleMetadata(
+        displayName: "Routing fallbackModel changed",
+        hint: "The fallbackModel value the routing stack set in settings.json has since been changed or removed. This is informational only; Claudoscope will not overwrite a value you've since edited."
+    ),
+    .RTG006: RuleMetadata(
+        displayName: "ANTHROPIC_MODEL overrides routing tiers",
+        hint: "settings.json env.ANTHROPIC_MODEL pins every session to one model, overriding the per-agent model tiers the routing stack configured. Claudoscope will not edit environment variables for you; remove or scope this override yourself if it's unintentional."
+    ),
+    .RTG007: RuleMetadata(
+        displayName: "CLAUDE_CODE_SUBAGENT_MODEL flattens routing tiers",
+        hint: "settings.json env.CLAUDE_CODE_SUBAGENT_MODEL forces every subagent onto one model, defeating the routing stack's haiku/sonnet/opus tiering. Claudoscope will not edit environment variables for you; remove or scope this override yourself if it's unintentional."
+    ),
     .HOOK001: RuleMetadata(
         displayName: "Hook matcher matches no tool",
         hint: "This matcher names an MCP server but has no tool segment, so it matches nothing. Since Claude Code 2.1.195, matchers like \"mcp__server\" (and hyphenated names like \"mcp__brave-search\") are compared exactly and never match real tool names, which are \"mcp__server__tool\". Append \"__.*\" to match all of the server's tools."

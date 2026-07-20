@@ -26,8 +26,12 @@ targets:
         excludes:
           - Info.plist
           - Resources/HardeningBaseline
+          - Resources/RoutingStack
           - .claude
       - path: Claudoscope/Resources/HardeningBaseline
+        type: folder
+        buildPhase: resources
+      - path: Claudoscope/Resources/RoutingStack
         type: folder
         buildPhase: resources
       - path: CHANGELOG.md

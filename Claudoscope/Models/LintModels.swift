@@ -90,6 +90,15 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case HRD012  // autoMode present but missing hard_deny baseline
     case HRD013  // availableModels listed but not enforced
 
+    // Agent routing stack checks
+    case RTG001  // installed agent file missing
+    case RTG002  // installed agent file drifted from payload
+    case RTG003  // policy block missing or drifted from expected assembly
+    case RTG004  // policy/agents inconsistency (security fragment vs installed groups)
+    case RTG005  // fallbackModel we set was changed or removed
+    case RTG006  // env ANTHROPIC_MODEL overrides per-agent model tiers
+    case RTG007  // env CLAUDE_CODE_SUBAGENT_MODEL flattens subagent model tiers
+
     // Plugin checks
     case PLG001  // unsatisfied or missing plugin dependency
     case PLG002  // plugin dependency cycle

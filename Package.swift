@@ -23,6 +23,7 @@ let package = Package(
             exclude: ["Info.plist", "Claudoscope.entitlements"],
             resources: [
                 .copy("Resources/HardeningBaseline"),
+                .copy("Resources/RoutingStack"),
                 .process("Resources/app-icon-rounded.png"),
                 .process("Resources/app-icon.png"),
                 .process("Resources/AppIcon.icns"),

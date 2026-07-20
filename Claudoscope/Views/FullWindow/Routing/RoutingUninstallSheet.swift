@@ -2,10 +2,12 @@ import SwiftUI
 
 // MARK: - Uninstall Sheet
 
-/// Destructive confirmation sheet that surgically removes every Claudoscope
-/// hardening artifact. Optionally also deletes all backup directories.
-struct HardeningUninstallSheet: View {
-    let installer: HardeningInstaller?
+/// Destructive confirmation sheet that removes routing stack artifacts.
+/// Conservative by design: an agent file the user edited after install is
+/// left in place and reported rather than overwritten. Optionally also
+/// deletes all backup directories.
+struct RoutingUninstallSheet: View {
+    let installer: RoutingStackInstaller?
     let claudeDirURL: URL
     var onCompleted: (ActionResult) -> Void
 
@@ -15,6 +17,7 @@ struct HardeningUninstallSheet: View {
     @State private var errorMessage: String?
     @State private var deleteBackups: Bool = false
     @State private var backupSummary: BackupSummary = .empty
+    @State private var report: RoutingUninstallReport?
 
     enum Phase {
         case review
@@ -56,7 +59,7 @@ struct HardeningUninstallSheet: View {
             Image(systemName: "xmark.shield.fill")
                 .font(.system(size: 18))
                 .foregroundStyle(.red)
-            Text("Uninstall Hardening Baseline")
+            Text("Uninstall Agent Routing Stack")
                 .font(Typography.panelTitle)
             Spacer()
         }
@@ -68,19 +71,15 @@ struct HardeningUninstallSheet: View {
     private var reviewBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("This removes every Claudoscope hardening artifact regardless of marker state. User-authored hooks, skills, and unrelated settings.json entries are left untouched.")
+                Text("This removes routing stack artifacts. Agent files you've edited since install are kept in place and reported, never overwritten or deleted.")
                     .font(Typography.body)
                     .foregroundStyle(.secondary)
 
                 section(title: "What will be removed") {
-                    bullet("Bundled permissions.deny entries from settings.json")
-                    bullet("Bundled sandbox baseline entries (filesystem + network) from settings.json")
-                    bullet("All claudoscope-*.sh hook scripts under ~/.claude/hooks/")
-                    bullet("Hook registrations in settings.json that target claudoscope-*.sh")
-                    bullet("autoMode block in settings.json (only if byte-equal to baseline)")
-                    bullet("Governance block between BEGIN/END markers in ~/.claude/CLAUDE.md")
-                    bullet("~/.claude/skills/claudoscope-security-awareness.md")
-                    bullet("~/.claude/\(HardeningInstaller.markerFileName)")
+                    bullet("Installed agent files under ~/.claude/agents/ that match what was installed")
+                    bullet("Orchestration policy block between BEGIN/END markers in ~/.claude/CLAUDE.md")
+                    bullet("fallbackModel in settings.json (only if this stack set it and it hasn't changed)")
+                    bullet("~/.claude/\(RoutingStackInstaller.markerFileName)")
                 }
 
                 if backupSummary.count > 0 {
@@ -90,7 +89,7 @@ struct HardeningUninstallSheet: View {
                                 .font(Typography.body)
                         }
                         .toggleStyle(.checkbox)
-                        Text("Backups live under ~/.claude/.claudoscope-hardening-backup-* and let Revert restore the pre-install state. Default: keep them.")
+                        Text("Backups live under ~/.claude/.claudoscope-routing-backup-* and let Revert restore the pre-install state. Default: keep them.")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     }
@@ -106,7 +105,7 @@ struct HardeningUninstallSheet: View {
         VStack(spacing: 12) {
             Spacer()
             ProgressView().controlSize(.large)
-            Text("Removing baseline...")
+            Text("Removing routing stack...")
                 .font(Typography.bodyMedium)
             Spacer()
         }
@@ -117,19 +116,34 @@ struct HardeningUninstallSheet: View {
     // MARK: Success
 
     private var successBody: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.green)
-                Text("Hardening baseline removed")
-                    .font(Typography.bodyMedium)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(.green)
+                    Text("Routing stack removed")
+                        .font(Typography.bodyMedium)
+                }
+
+                if let report {
+                    if !report.removedFiles.isEmpty {
+                        section(title: "Removed") {
+                            ForEach(report.removedFiles, id: \.self) { bullet($0) }
+                        }
+                    }
+                    if !report.keptUserEditedFiles.isEmpty {
+                        section(title: "Kept (edited since install)") {
+                            ForEach(report.keptUserEditedFiles, id: \.self) { bullet($0) }
+                        }
+                    }
+                    Text("Policy block: \(report.policyBlockRemoved ? "removed" : "not present"). fallbackModel: \(report.fallbackModelRemoved ? "removed" : "left as is"). \(deleteBackups ? "All backup directories were deleted." : "Backup directories are preserved.")")
+                        .font(Typography.body)
+                        .foregroundStyle(.secondary)
+                }
             }
-            Text("settings.json and CLAUDE.md have been cleaned up. \(deleteBackups ? "All backup directories were deleted." : "Backup directories are preserved.")")
-                .font(Typography.body)
-                .foregroundStyle(.secondary)
+            .padding(Spacing.lg)
         }
-        .padding(Spacing.lg)
     }
 
     // MARK: Error
@@ -176,7 +190,7 @@ struct HardeningUninstallSheet: View {
                     .disabled(true)
             case .success:
                 Button("Close") {
-                    onCompleted(ActionResult(message: "Hardening baseline removed.", isError: false))
+                    onCompleted(ActionResult(message: "Agent routing stack removed.", isError: false))
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
@@ -208,8 +222,9 @@ struct HardeningUninstallSheet: View {
         let alsoDeleteBackups = deleteBackups
         Task {
             do {
-                try await installer.uninstall(deleteBackups: alsoDeleteBackups)
+                let result = try await installer.uninstall(deleteBackups: alsoDeleteBackups)
                 await MainActor.run {
+                    self.report = result
                     self.phase = .success
                 }
             } catch {
@@ -222,7 +237,10 @@ struct HardeningUninstallSheet: View {
     }
 
     private func loadBackupSummary() async {
-        let summary = HardeningBackupListing.summarize(claudeDirURL: claudeDirURL)
+        let dirs = InstallerFileOps.backupDirectories(in: claudeDirURL, prefix: RoutingStackInstaller.backupPrefix)
+        var total: Int64 = 0
+        for url in dirs { total += InstallerFileOps.sizeOf(directory: url) }
+        let summary = BackupSummary(count: dirs.count, totalBytes: total)
         await MainActor.run { self.backupSummary = summary }
     }
 
@@ -249,40 +267,5 @@ struct HardeningUninstallSheet: View {
                 .textSelection(.enabled)
         }
         .padding(.leading, 4)
-    }
-}
-
-// MARK: - Backup summary helpers (shared with HardeningBackupsSheet)
-
-struct BackupSummary {
-    let count: Int
-    let totalBytes: Int64
-
-    static let empty = BackupSummary(count: 0, totalBytes: 0)
-
-    var formattedSize: String {
-        let bcf = ByteCountFormatter()
-        bcf.allowedUnits = [.useKB, .useMB, .useGB]
-        bcf.countStyle = .file
-        return bcf.string(fromByteCount: totalBytes)
-    }
-}
-
-enum HardeningBackupListing {
-    static func directories(in claudeDirURL: URL) -> [URL] {
-        InstallerFileOps.backupDirectories(in: claudeDirURL, prefix: ".claudoscope-hardening-backup-")
-    }
-
-    static func summarize(claudeDirURL: URL) -> BackupSummary {
-        let dirs = directories(in: claudeDirURL)
-        var total: Int64 = 0
-        for url in dirs {
-            total += sizeOf(directory: url)
-        }
-        return BackupSummary(count: dirs.count, totalBytes: total)
-    }
-
-    static func sizeOf(directory: URL) -> Int64 {
-        InstallerFileOps.sizeOf(directory: directory)
     }
 }

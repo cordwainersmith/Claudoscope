@@ -268,6 +268,37 @@ final class HardeningInstallerTests: XCTestCase {
         }
     }
 
+    func testUninstallBacksUpBeforeStripping() async throws {
+        let settingsURL = tempDir.appendingPathComponent("settings.json")
+        try writeJSON(["permissions": ["deny": ["Read(my/secret/**)"]]], to: settingsURL)
+
+        let claudeMdURL = tempDir.appendingPathComponent("CLAUDE.md")
+        try writeText("""
+        # User
+
+        \(HardeningInstaller.governanceBeginMarker)
+        body
+        \(HardeningInstaller.governanceEndMarker)
+        """, to: claudeMdURL)
+
+        try await installer.uninstall(deleteBackups: false)
+
+        // Live CLAUDE.md was stripped in place...
+        XCTAssertFalse(try String(contentsOf: claudeMdURL, encoding: .utf8)
+            .contains(HardeningInstaller.governanceBeginMarker))
+
+        // ...but a backup captured the pre-uninstall state first.
+        let prefix = ".claudoscope-hardening-backup-"
+        let backups = InstallerFileOps.backupDirectories(in: tempDir, prefix: prefix)
+        XCTAssertFalse(backups.isEmpty, "uninstall must leave a safety backup before stripping")
+        let captured = backups.contains { dir in
+            let md = try? String(contentsOf: dir.appendingPathComponent("CLAUDE.md"), encoding: .utf8)
+            let hasSettings = FileManager.default.fileExists(atPath: dir.appendingPathComponent("settings.json").path)
+            return hasSettings && (md?.contains(HardeningInstaller.governanceBeginMarker) ?? false)
+        }
+        XCTAssertTrue(captured, "backup must contain the pre-uninstall settings.json + CLAUDE.md")
+    }
+
     func testUninstallIdempotency() async throws {
         // Set up a CLAUDE.md with the governance block + a couple of hooks, then
         // run uninstall twice. The second call must not throw and must leave the

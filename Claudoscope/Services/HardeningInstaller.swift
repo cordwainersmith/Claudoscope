@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 // MARK: - Public Types
 
@@ -275,6 +274,14 @@ actor HardeningInstaller {
         let markerURL = claudeDir.appendingPathComponent(Self.markerFileName)
         let marker = try? readMarker(at: markerURL)
 
+        // Back up settings.json, CLAUDE.md, and hooks before any strip write.
+        // Tolerant: a failed safety backup must not block the user's explicit uninstall.
+        // Skip when there's nothing to touch, so an empty-dir uninstall stays a no-op.
+        let backupSources = ["settings.json", "CLAUDE.md", "hooks"]
+        if backupSources.contains(where: { fm.fileExists(atPath: claudeDir.appendingPathComponent($0).path) }) {
+            _ = try? createBackup()
+        }
+
         // 1. settings.json: read once, strip our entries, write once
         let settingsURL = claudeDir.appendingPathComponent("settings.json")
         if fm.fileExists(atPath: settingsURL.path) {
@@ -380,129 +387,58 @@ actor HardeningInstaller {
     /// (fresh install). Throws `malformedSettingsJson` on parse failure rather
     /// than silently overwriting the user's hand-edited file.
     private func readSettingsJSON(at url: URL) throws -> [String: Any] {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return [:] }
-        do {
-            let data = try Data(contentsOf: url)
-            // Empty file is a degenerate but valid case
-            if data.isEmpty { return [:] }
-            guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw HardeningInstallError.malformedSettingsJson
-            }
-            return dict
-        } catch let e as HardeningInstallError {
-            throw e
-        } catch {
-            throw HardeningInstallError.malformedSettingsJson
-        }
+        try mapped { try InstallerFileOps.readSettingsJSON(at: url) }
     }
 
     /// Write a dict as pretty-printed JSON with deterministic key ordering.
     /// Uses staging file + fsync + `replaceItemAt(...)` to ensure FSEvents only
     /// observes the final, complete file.
     private func atomicWriteJSON(dict: [String: Any], to url: URL) throws {
-        let data: Data
-        do {
-            data = try JSONSerialization.data(
-                withJSONObject: dict,
-                options: [.prettyPrinted, .sortedKeys]
-            )
-        } catch {
-            throw HardeningInstallError.io("JSON serialization failed: \(error.localizedDescription)")
-        }
-        try atomicWrite(data: data, to: url)
+        try mapped { try InstallerFileOps.atomicWriteJSON(dict: dict, to: url) }
     }
 
     /// Atomic file write helper used by both JSON and text content. Stages to
     /// `<final>.tmp-<uuid>`, fsyncs, then `replaceItemAt(...)`.
     private func atomicWrite(data: Data, to url: URL) throws {
-        let fm = FileManager.default
-        try? fm.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        let tmpName = "\(url.lastPathComponent).tmp-\(UUID().uuidString)"
-        let tmpURL = url.deletingLastPathComponent().appendingPathComponent(tmpName)
-
-        do {
-            try data.write(to: tmpURL, options: [.atomic])
-        } catch {
-            throw HardeningInstallError.io("failed to write staging file \(tmpURL.path): \(error.localizedDescription)")
-        }
-
-        // Best-effort fsync: open the file and call fsync on the descriptor.
-        // We don't fail the install if fsync fails — Data.write(.atomic) above
-        // already handles the durability concern most of the time.
-        if let handle = try? FileHandle(forUpdating: tmpURL) {
-            try? handle.synchronize()
-            try? handle.close()
-        }
-
-        // replaceItemAt requires the destination to exist; if not, just rename.
-        if fm.fileExists(atPath: url.path) {
-            do {
-                _ = try fm.replaceItemAt(url, withItemAt: tmpURL)
-            } catch {
-                try? fm.removeItem(at: tmpURL)
-                throw HardeningInstallError.io("failed to replace \(url.path): \(error.localizedDescription)")
-            }
-        } else {
-            do {
-                try fm.moveItem(at: tmpURL, to: url)
-            } catch {
-                try? fm.removeItem(at: tmpURL)
-                throw HardeningInstallError.io("failed to install \(url.path): \(error.localizedDescription)")
-            }
-        }
+        try mapped { try InstallerFileOps.atomicWrite(data: data, to: url) }
     }
 
     /// Replace a file by copying source contents over. Used by revert.
     private func replaceFile(at dst: URL, withContentsOf src: URL) throws {
-        let data = try Data(contentsOf: src)
-        try atomicWrite(data: data, to: dst)
+        try mapped { try InstallerFileOps.replaceFile(at: dst, withContentsOf: src) }
+    }
+
+    /// Translate `InstallerFileOpsError` into the equivalent `HardeningInstallError`
+    /// case so callers and their `.description` output are unaffected by the
+    /// underlying helper extraction.
+    private func mapped<T>(_ body: () throws -> T) throws -> T {
+        do {
+            return try body()
+        } catch InstallerFileOpsError.malformedSettingsJson {
+            throw HardeningInstallError.malformedSettingsJson
+        } catch InstallerFileOpsError.io(let detail) {
+            throw HardeningInstallError.io(detail)
+        }
     }
 
     // MARK: - Internal: backup
 
     private func createBackup() throws -> URL {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd-HHmmss"
-        formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        let stamp = formatter.string(from: Date())
-
-        let backupDir = claudeDir.appendingPathComponent(".claudoscope-hardening-backup-\(stamp)")
-        let fm = FileManager.default
-        do {
-            try fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
-        } catch {
-            throw HardeningInstallError.io("failed to create backup dir \(backupDir.path): \(error.localizedDescription)")
+        try mapped {
+            try InstallerFileOps.createBackup(
+                claudeDir: claudeDir,
+                prefix: ".claudoscope-hardening-backup-",
+                files: [
+                    (claudeDir.appendingPathComponent("settings.json"), "settings.json"),
+                    (claudeDir.appendingPathComponent("CLAUDE.md"), "CLAUDE.md"),
+                    (claudeDir.appendingPathComponent("hooks"), "hooks"),
+                ]
+            )
         }
-
-        let settingsSrc = claudeDir.appendingPathComponent("settings.json")
-        if fm.fileExists(atPath: settingsSrc.path) {
-            try? fm.copyItem(at: settingsSrc, to: backupDir.appendingPathComponent("settings.json"))
-        }
-
-        let claudeMdSrc = claudeDir.appendingPathComponent("CLAUDE.md")
-        if fm.fileExists(atPath: claudeMdSrc.path) {
-            try? fm.copyItem(at: claudeMdSrc, to: backupDir.appendingPathComponent("CLAUDE.md"))
-        }
-
-        let hooksSrc = claudeDir.appendingPathComponent("hooks")
-        if fm.fileExists(atPath: hooksSrc.path) {
-            try? fm.copyItem(at: hooksSrc, to: backupDir.appendingPathComponent("hooks"))
-        }
-
-        return backupDir
     }
 
     private func deleteAllBackupDirectories() throws {
-        let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(at: claudeDir, includingPropertiesForKeys: nil) else { return }
-        for entry in entries where entry.lastPathComponent.hasPrefix(".claudoscope-hardening-backup-") {
-            try? fm.removeItem(at: entry)
-        }
+        InstallerFileOps.deleteAllBackupDirectories(claudeDir: claudeDir, prefix: ".claudoscope-hardening-backup-")
     }
 
     // MARK: - Internal: Layer 1 permissions
@@ -797,12 +733,12 @@ actor HardeningInstaller {
             existing = text
         }
 
-        let stripped = stripGovernance(from: existing)
-
-        // Compose: stripped (trimmed of trailing newlines) + blank line + block
-        let trimmed = stripped.trimmingCharacters(in: .newlines)
-        let block = "\n\n\(Self.governanceBeginMarker)\n\(bundleBody)\n\(Self.governanceEndMarker)\n"
-        let final = trimmed + block
+        let final = InstallerFileOps.appendMarkerBlock(
+            to: existing,
+            body: bundleBody,
+            begin: Self.governanceBeginMarker,
+            end: Self.governanceEndMarker
+        )
 
         guard let data = final.data(using: .utf8) else {
             throw HardeningInstallError.io("UTF-8 encoding of CLAUDE.md failed")
@@ -825,29 +761,7 @@ actor HardeningInstaller {
     /// Remove the marker-wrapped block from a CLAUDE.md body, including the
     /// markers themselves and one leading newline if present.
     func stripGovernance(from text: String) -> String {
-        let begin = Self.governanceBeginMarker
-        let end = Self.governanceEndMarker
-
-        guard let beginRange = text.range(of: begin),
-              let endRange = text.range(of: end, range: beginRange.upperBound..<text.endIndex) else {
-            return text
-        }
-
-        // Extend the start back to consume the leading blank lines we inserted
-        var start = beginRange.lowerBound
-        while start > text.startIndex {
-            let prev = text.index(before: start)
-            if text[prev] == "\n" { start = prev } else { break }
-        }
-        // Extend the end forward over a trailing newline if present
-        var stop = endRange.upperBound
-        if stop < text.endIndex, text[stop] == "\n" {
-            stop = text.index(after: stop)
-        }
-
-        var result = text
-        result.removeSubrange(start..<stop)
-        return result
+        InstallerFileOps.stripMarkerBlock(from: text, begin: Self.governanceBeginMarker, end: Self.governanceEndMarker)
     }
 
     // MARK: - Internal: skill
@@ -915,7 +829,7 @@ actor HardeningInstaller {
 
         if fm.fileExists(atPath: url.path), let existing = try? readMarker(at: url) {
             if let prior = existing["installedAt"] as? String,
-               let parsed = isoFormatter.date(from: prior) {
+               let parsed = InstallerFileOps.isoDate(from: prior) {
                 effectiveInstalledAt = parsed
             }
             if let prior = existing["backupPath"] as? String {
@@ -930,7 +844,7 @@ actor HardeningInstaller {
 
         var marker: [String: Any] = [
             "version": "1",
-            "installedAt": isoFormatter.string(from: effectiveInstalledAt),
+            "installedAt": InstallerFileOps.isoString(from: effectiveInstalledAt),
             "backupPath": effectiveBackupPath.path,
             "layersApplied": layersApplied,
             "skillInstalled": skillInstalled,
@@ -946,42 +860,19 @@ actor HardeningInstaller {
     }
 
     private func readMarker(at url: URL) throws -> [String: Any] {
-        let data = try Data(contentsOf: url)
-        guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw HardeningInstallError.io("marker file is not a JSON object: \(url.path)")
-        }
-        return dict
+        try mapped { try InstallerFileOps.readMarkerJSON(at: url) }
     }
 
     // MARK: - Internal: helpers
 
     func sha256(file url: URL) throws -> String {
-        let data = try Data(contentsOf: url)
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
+        try InstallerFileOps.sha256(file: url)
     }
 
     /// Parse a `shasum -a 256` sidecar: lines of the form
     /// `<hex>  <filename>` (two spaces). Tolerates blank lines and CRLF.
     func parseChecksumSidecar(content: String) -> [String: String] {
-        var out: [String: String] = [:]
-        for raw in content.split(whereSeparator: { $0 == "\n" || $0 == "\r" }) {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
-            // Match "<hex> <maybe-asterisk><filename>"
-            let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            guard parts.count >= 2 else { continue }
-            let hex = String(parts[0])
-            // shasum format places "*" before the name in binary mode; strip it
-            var name = String(parts[1...].joined(separator: " "))
-            if name.hasPrefix("*") { name.removeFirst() }
-            // strip any leading "./"
-            if name.hasPrefix("./") { name = String(name.dropFirst(2)) }
-            // strip a path prefix and keep only the basename for matching
-            let basename = (name as NSString).lastPathComponent
-            out[basename] = hex
-        }
-        return out
+        InstallerFileOps.parseChecksumSidecar(content: content)
     }
 
     func parseChecksumSidecar(at url: URL) throws -> [String: String] {
@@ -990,46 +881,17 @@ actor HardeningInstaller {
     }
 
     private func unionStringArray(existing: [String], additions: [String]) -> [String] {
-        var seen = Set(existing)
-        var result = existing
-        for a in additions where !seen.contains(a) {
-            result.append(a)
-            seen.insert(a)
-        }
-        return result
+        InstallerFileOps.unionStringArray(existing: existing, additions: additions)
     }
 
     /// Recursive equality on [String: Any] dicts using JSONSerialization data
     /// comparison with sorted keys. Cheap, deterministic, and tolerant of
     /// numeric/boolean type variation.
     private func dictsEqual(_ a: [String: Any], _ b: [String: Any]) -> Bool {
-        guard let dataA = try? JSONSerialization.data(withJSONObject: a, options: [.sortedKeys]),
-              let dataB = try? JSONSerialization.data(withJSONObject: b, options: [.sortedKeys]) else {
-            return false
-        }
-        return dataA == dataB
+        InstallerFileOps.dictsEqual(a, b)
     }
 
     private func moveOrReplace(from src: URL, to dst: URL) throws {
-        let fm = FileManager.default
-        if fm.fileExists(atPath: dst.path) {
-            do {
-                _ = try fm.replaceItemAt(dst, withItemAt: src)
-            } catch {
-                throw HardeningInstallError.io("failed to replace \(dst.path): \(error.localizedDescription)")
-            }
-        } else {
-            do {
-                try fm.moveItem(at: src, to: dst)
-            } catch {
-                throw HardeningInstallError.io("failed to install \(dst.path): \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private var isoFormatter: ISO8601DateFormatter {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
+        try mapped { try InstallerFileOps.moveOrReplace(from: src, to: dst) }
     }
 }

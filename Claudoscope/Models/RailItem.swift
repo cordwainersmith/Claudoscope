@@ -19,6 +19,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     case canon
     case configHealth
     case hardening
+    case agentRouting
 
     // Pinned bottom
     case settings
@@ -40,6 +41,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .canon:        return "building.columns"
         case .configHealth: return "checkmark.shield"
         case .hardening:    return "lock.shield"
+        case .agentRouting: return "arrow.triangle.branch"
         case .settings:     return "gear"
         }
     }
@@ -61,6 +63,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .canon:        return "Canon"
         case .configHealth: return "Health"
         case .hardening:    return "Hardening"
+        case .agentRouting: return "Routing"
         case .settings:     return "Settings"
         }
     }
@@ -73,5 +76,5 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     }
 
     static var primaryItems: [RailItem] { [.analytics, .sessions, .tools, .plans, .timeline, .cowork] }
-    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .plugins, .memory, .canon, .configHealth, .hardening] }
+    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .plugins, .memory, .canon, .configHealth, .hardening, .agentRouting] }
 }

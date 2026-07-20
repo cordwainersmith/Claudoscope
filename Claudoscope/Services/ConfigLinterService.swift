@@ -91,6 +91,10 @@ actor ConfigLinterService {
         // Hardening baseline checks (HRD001-HRD011)
         results.append(contentsOf: lintHardening(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))
 
+        // Agent routing stack checks (RTG001-RTG007)
+        let routingPayload = try? RoutingStackPayloadLoader.loadFromBundle()
+        results.append(contentsOf: lintRouting(globalClaudeDir: globalClaudeDir, payload: routingPayload))
+
         // Plugin inventory checks (PLG001-PLG003)
         let configService = ConfigService(claudeDir: globalClaudeDir)
         let plugins = await configService.loadPlugins()
