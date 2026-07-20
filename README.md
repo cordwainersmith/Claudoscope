@@ -60,6 +60,8 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
 
 ## Installation
 
+> Using an AI coding agent? Point it at [`AGENT-INSTALL.md`](AGENT-INSTALL.md) and it will handle the Homebrew install for you.
+
 ### Homebrew (recommended)
 
 ```bash
