@@ -21,6 +21,7 @@ struct SettingsSidebarContent: View {
         ("costAlerts", "bell.badge", "Cost Alerts"),
         ("notifications", "bell", "Notifications"),
         ("canon", "building.columns", "Canon"),
+        ("mcpServer", "point.3.connected.trianglepath.dotted", "MCP Server"),
         ("updates", "arrow.triangle.2.circlepath", "Updates"),
     ]
 

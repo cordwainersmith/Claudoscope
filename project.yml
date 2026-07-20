@@ -13,6 +13,9 @@ packages:
   GRDB:
     url: https://github.com/groue/GRDB.swift.git
     exactVersion: "7.11.1"
+  MCP:
+    url: https://github.com/modelcontextprotocol/swift-sdk.git
+    exactVersion: "0.12.1"
 
 targets:
   Claudoscope:
@@ -44,6 +47,13 @@ targets:
         product: OrderedCollections
       - package: GRDB
         product: GRDB
+      - package: MCP
+        product: MCP
+      - target: ClaudoscopeMcpShim
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
     entitlements:
       path: Claudoscope/Claudoscope.entitlements
       properties:
@@ -69,6 +79,23 @@ targets:
       configs:
         Release:
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: false
+
+  ClaudoscopeMcpShim:
+    type: tool
+    platform: macOS
+    sources:
+      - path: McpShim
+    settings:
+      base:
+        PRODUCT_NAME: claudoscope-mcp
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Developer ID Application"
+        DEVELOPMENT_TEAM: "DN8M2CQ4D2"
+        ENABLE_HARDENED_RUNTIME: true
+        OTHER_CODE_SIGN_FLAGS: "--timestamp"
+        SKIP_INSTALL: true
 
   ClaudoscopeTests:
     type: bundle.unit-test

@@ -22,6 +22,7 @@ final class PersistentWindow: NSWindow {
     private var costAlertService: CostAlertService?
     private var sessionNotificationService: SessionNotificationService?
     private var canonService: CanonService?
+    private var mcpServerService: McpServerService?
 
     func setUpdateService(_ service: UpdateService) {
         self.updateService = service
@@ -43,6 +44,10 @@ final class PersistentWindow: NSWindow {
         self.canonService = service
     }
 
+    func setMcpServerService(_ service: McpServerService) {
+        self.mcpServerService = service
+    }
+
     func open(store: SessionStore, updateService: UpdateService? = nil) {
         if let updateService { self.updateService = updateService }
 
@@ -61,6 +66,7 @@ final class PersistentWindow: NSWindow {
         precondition(self.costAlertService != nil, "MainWindowController.open requires setCostAlertService first")
         precondition(self.sessionNotificationService != nil, "MainWindowController.open requires setSessionNotificationService first")
         precondition(self.canonService != nil, "MainWindowController.open requires setCanonService first")
+        precondition(self.mcpServerService != nil, "MainWindowController.open requires setMcpServerService first")
         let contentView = FullWindowView()
             .environment(store)
             .environment(self.updateService!)
@@ -68,6 +74,7 @@ final class PersistentWindow: NSWindow {
             .environment(self.costAlertService!)
             .environment(self.sessionNotificationService!)
             .environment(self.canonService!)
+            .environment(self.mcpServerService!)
             .frame(minWidth: 900, minHeight: 600)
 
         let hostingView = NSHostingView(rootView: contentView)

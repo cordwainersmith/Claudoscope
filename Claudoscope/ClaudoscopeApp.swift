@@ -8,6 +8,7 @@ struct ClaudoscopeApp: App {
     @State private var costAlertService: CostAlertService
     @State private var sessionNotificationService: SessionNotificationService
     @State private var canonService: CanonService
+    @State private var mcpServerService: McpServerService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     init() {
@@ -22,12 +23,17 @@ struct ClaudoscopeApp: App {
             setInstallInProgress: { [weak store] value in store?.setInstallInProgress(value) }
         )
         let canonService = CanonService()
+        let mcpServerService = McpServerService()
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
         _loginItemService = State(initialValue: loginItemService)
         _costAlertService = State(initialValue: costAlertService)
         _sessionNotificationService = State(initialValue: sessionNotificationService)
         _canonService = State(initialValue: canonService)
+        _mcpServerService = State(initialValue: mcpServerService)
+
+        mcpServerService.attach(store: store, canonService: canonService)
+        Task { await mcpServerService.startIfEnabled() }
 
         store.costAlertService = costAlertService
         store.sessionNotificationService = sessionNotificationService
@@ -46,6 +52,7 @@ struct ClaudoscopeApp: App {
         MainWindowController.shared.setCostAlertService(costAlertService)
         MainWindowController.shared.setSessionNotificationService(sessionNotificationService)
         MainWindowController.shared.setCanonService(canonService)
+        MainWindowController.shared.setMcpServerService(mcpServerService)
 
         store.onSecretAlert = { [weak store] alert in
             guard let store else { return }

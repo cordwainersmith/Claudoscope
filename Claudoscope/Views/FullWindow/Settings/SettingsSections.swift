@@ -883,6 +883,15 @@ extension SettingsMainPanelView {
         }
     }
 
+    // MARK: - MCP Server Section
+
+    @ViewBuilder
+    func mcpServerSection() -> some View {
+        settingsSection(id: "mcpServer", icon: "point.3.connected.trianglepath.dotted", title: "MCP Server") {
+            McpServerSectionContent()
+        }
+    }
+
     // MARK: - Updates Section
 
     @ViewBuilder
