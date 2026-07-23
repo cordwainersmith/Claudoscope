@@ -19,6 +19,9 @@ struct ModelPricing: Sendable {
     let cacheRead: Double
     let cacheCreation5m: Double
     let cacheCreation1h: Double
+    // USD per web_search server-tool request; 0 = not priced. Default 0 so a
+    // family added to a table later is never silently billed a fee it may not incur.
+    var webSearchRequestFee: Double = 0
     var isUnknown: Bool = false
 
     static let unknown = ModelPricing(
@@ -28,32 +31,32 @@ struct ModelPricing: Sendable {
 
 struct PricingTables {
     static let anthropic: [String: ModelPricing] = [
-        "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20),
-        "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10),
-        "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30),
-        "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6),
-        "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation5m: 1.25,   cacheCreation1h: 2),
-        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation5m: 0.30,   cacheCreation1h: 0.50),
+        "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
+        "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10,   webSearchRequestFee: 0.01),
+        "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30,   webSearchRequestFee: 0.01),
+        "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6,    webSearchRequestFee: 0.01),
+        "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation5m: 1.25,   cacheCreation1h: 2,    webSearchRequestFee: 0.01),
+        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation5m: 0.30,   cacheCreation1h: 0.50, webSearchRequestFee: 0.01),
     ]
 
     static let vertexGlobal: [String: ModelPricing] = [
         // Fable on Vertex is provisional: assumes Anthropic-mirrored rates, not yet bill-validated.
-        "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20),
-        "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10),
-        "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30),
-        "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6),
-        "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation5m: 1.25,   cacheCreation1h: 2),
-        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation5m: 0.30,   cacheCreation1h: 0.50),
+        "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
+        "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10,   webSearchRequestFee: 0.01),
+        "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30,   webSearchRequestFee: 0.01),
+        "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6,    webSearchRequestFee: 0.01),
+        "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation5m: 1.25,   cacheCreation1h: 2,    webSearchRequestFee: 0.01),
+        "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation5m: 0.30,   cacheCreation1h: 0.50, webSearchRequestFee: 0.01),
     ]
 
     static let vertexRegional: [String: ModelPricing] = [
         // Fable on Vertex is provisional: assumes Anthropic rate x1.1 regional, not yet bill-validated.
-        "fable":  ModelPricing(input: 11,    output: 55,     cacheRead: 1.10,   cacheCreation5m: 13.75,   cacheCreation1h: 22),
-        "opus":   ModelPricing(input: 5.50,  output: 27.50,  cacheRead: 0.55,   cacheCreation5m: 6.875,   cacheCreation1h: 11),
-        "opus4":  ModelPricing(input: 16.50, output: 82.50,  cacheRead: 1.65,   cacheCreation5m: 20.625,  cacheCreation1h: 33),
-        "sonnet": ModelPricing(input: 3.30,  output: 16.50,  cacheRead: 0.33,   cacheCreation5m: 4.125,   cacheCreation1h: 6.60),
-        "haiku":  ModelPricing(input: 1.10,  output: 5.50,   cacheRead: 0.11,   cacheCreation5m: 1.375,   cacheCreation1h: 2.20),
-        "haiku3": ModelPricing(input: 0.275, output: 1.375,  cacheRead: 0.033,  cacheCreation5m: 0.33,    cacheCreation1h: 0.55),
+        "fable":  ModelPricing(input: 11,    output: 55,     cacheRead: 1.10,   cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
+        "opus":   ModelPricing(input: 5.50,  output: 27.50,  cacheRead: 0.55,   cacheCreation5m: 6.875,   cacheCreation1h: 11,   webSearchRequestFee: 0.011),
+        "opus4":  ModelPricing(input: 16.50, output: 82.50,  cacheRead: 1.65,   cacheCreation5m: 20.625,  cacheCreation1h: 33,   webSearchRequestFee: 0.011),
+        "sonnet": ModelPricing(input: 3.30,  output: 16.50,  cacheRead: 0.33,   cacheCreation5m: 4.125,   cacheCreation1h: 6.60, webSearchRequestFee: 0.011),
+        "haiku":  ModelPricing(input: 1.10,  output: 5.50,   cacheRead: 0.11,   cacheCreation5m: 1.375,   cacheCreation1h: 2.20, webSearchRequestFee: 0.011),
+        "haiku3": ModelPricing(input: 0.275, output: 1.375,  cacheRead: 0.033,  cacheCreation5m: 0.33,    cacheCreation1h: 0.55, webSearchRequestFee: 0.011),
     ]
 
     static func table(provider: PricingProvider, region: VertexRegion) -> [String: ModelPricing] {
@@ -81,7 +84,7 @@ struct PricingTables {
         var canonical = ""
         for key in table.keys.sorted() {
             let p = table[key]!
-            canonical += "\(key):\(p.input),\(p.output),\(p.cacheRead),\(p.cacheCreation5m),\(p.cacheCreation1h);"
+            canonical += "\(key):\(p.input),\(p.output),\(p.cacheRead),\(p.cacheCreation5m),\(p.cacheCreation1h),\(p.webSearchRequestFee);"
         }
         canonical += "fast:\(fastMultiplier)"
         let digest = SHA256.hash(data: Data(canonical.utf8))
@@ -147,4 +150,13 @@ func estimateCostFromTokens(
          + (Double(cacheCreation5mTokens) / 1e6) * p.cacheCreation5m
          + (Double(cacheCreation1hTokens) / 1e6) * p.cacheCreation1h
     return base * speedMultiplier
+}
+
+/// Flat web-search request fee for a table. Uniform across families by
+/// construction (all rows carry the same fee), so this returns the max priced
+/// value; 0 if no family in the table is priced. The web-search count comes
+/// from ToolUseResultRaw.searchCount, not from token usage, so the fee is added
+/// separately from estimateCostFromTokens.
+func webSearchFee(table: [String: ModelPricing]) -> Double {
+    table.values.map(\.webSearchRequestFee).max() ?? 0
 }

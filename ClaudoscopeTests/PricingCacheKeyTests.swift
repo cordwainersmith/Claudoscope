@@ -32,6 +32,7 @@ final class PricingCacheKeyTests: XCTestCase {
             ("cacheRead", ModelPricing(input: 5, output: 25, cacheRead: 0.55, cacheCreation5m: 6.25, cacheCreation1h: 10)),
             ("cacheCreation5m", ModelPricing(input: 5, output: 25, cacheRead: 0.5, cacheCreation5m: 6.875, cacheCreation1h: 10)),
             ("cacheCreation1h", ModelPricing(input: 5, output: 25, cacheRead: 0.5, cacheCreation5m: 6.25, cacheCreation1h: 11)),
+            ("webSearchRequestFee", ModelPricing(input: 5, output: 25, cacheRead: 0.5, cacheCreation5m: 6.25, cacheCreation1h: 10, webSearchRequestFee: 0.01)),
         ]
         for (field, variant) in variants {
             XCTAssertNotEqual(

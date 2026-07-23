@@ -500,6 +500,19 @@ enum CoworkStats {
             perModel[model] = entry
         }
 
+        // Web-search request fee: same source and dedup as SessionParser
+        // (toolUseResult.searchCount on WebSearch tool-result records), so the
+        // rail, Analytics, and popover bill web search identically to parseMetadata.
+        let perSearchFee = webSearchFee(table: pricingTable)
+        if perSearchFee > 0 {
+            var seenSearchUUIDs = Set<String>()
+            for record in records {
+                guard let searchCount = record.toolUseResult?.searchCount, searchCount > 0 else { continue }
+                if let uuid = record.uuid, !seenSearchUUIDs.insert(uuid).inserted { continue }
+                t.cost += Double(searchCount) * perSearchFee
+            }
+        }
+
         t.modelBreakdown = perModel
             .map { ModelRow(model: $0.key, messageCount: $0.value.msgs, cost: $0.value.cost, isUnknown: $0.value.isUnknown) }
             .sorted { $0.cost > $1.cost }

@@ -39,7 +39,7 @@ actor SessionParser {
     ///  (c) getModelFamily detection regexes (they steer pricing lookup)
     /// Pricing rate-table edits do NOT need a bump: rates are hashed into the
     /// cache's pricing key. See docs/sqlite-persistence-roadmap.md, section 9.
-    static let parserVersion: Int = 1
+    static let parserVersion: Int = 2
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -494,6 +494,13 @@ actor SessionParser {
         var hasWorktreeTool = false
         var recordTimestamps: [String] = []
 
+        // Web-search request fee: the count lives on WebSearch tool-result records
+        // (toolUseResult.searchCount), NOT in token usage. Billed at the table's
+        // flat per-request rate, attributed to the model that issued the search.
+        let perSearchFee = webSearchFee(table: pricingTable)
+        var lastBilledFamily: String?
+        var localSeenSearchUUIDs = Set<String>()
+
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         let isoFormatterNoFrac = ISO8601DateFormatter()
@@ -662,6 +669,9 @@ actor SessionParser {
                         m.estimatedCost += msgCost
                         m.turnCount += 1
                         day.model[family] = m
+                        // Web-search fees (billed on the following tool-result record)
+                        // attribute to the model that issued the search.
+                        lastBilledFamily = family
                     }
                     dayAccs[dayKey] = day
 
@@ -749,6 +759,26 @@ actor SessionParser {
 
             if let childId = raw.toolUseResult?.childAgentId, !childId.isEmpty {
                 spawnedAgentIds.insert(ObservabilityAnalyzer.normalizeAgentId(childId))
+            }
+
+            // Web-search request fee. Dedup by record uuid so a streaming/replayed
+            // tool-result is billed once. Fee lands on the day it occurred and on
+            // the model family of the assistant that issued the search, keeping the
+            // lump == sum(contributions) and per-family reconciliation intact.
+            if perSearchFee > 0, let searchCount = raw.toolUseResult?.searchCount, searchCount > 0 {
+                let isDuplicate = raw.uuid.map { !localSeenSearchUUIDs.insert($0).inserted } ?? false
+                if !isDuplicate {
+                    let dayKey = lastSeenDay ?? "1970-01-01"
+                    var day = dayAccs[dayKey] ?? DayAcc()
+                    let fee = Double(searchCount) * perSearchFee
+                    day.estimatedCost += fee
+                    if let family = lastBilledFamily {
+                        var m = day.model[family] ?? ModelDayAcc()
+                        m.estimatedCost += fee
+                        day.model[family] = m
+                    }
+                    dayAccs[dayKey] = day
+                }
             }
 
             if let ts = raw.timestamp { recordTimestamps.append(ts) }

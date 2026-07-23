@@ -304,6 +304,11 @@ struct ToolUseResultRaw: Decodable, Sendable {
     // tool call spawned a subagent. agentId is the bare hex id of the child.
     let childAgentId: String?
     let childAgentType: String?
+    // Number of billed web searches on a WebSearch tool-result record. This is
+    // the only place the count is recorded in Claude Code transcripts;
+    // usage.server_tool_use.web_search_requests is always 0 (verified on Vertex),
+    // so the web-search request fee is billed from here. See ConfigCanon note.
+    let searchCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case toolUseId = "tool_use_id"
@@ -311,6 +316,7 @@ struct ToolUseResultRaw: Decodable, Sendable {
         case isError = "is_error"
         case childAgentId = "agentId"
         case childAgentType = "agentType"
+        case searchCount
     }
 }
 
