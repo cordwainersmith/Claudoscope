@@ -317,17 +317,6 @@ struct RoutingAgentEntry: Identifiable {
 
     var id: String { fileName }
 
-    /// `parseFrontmatter` treats the first `---` as the END of frontmatter, so a
-    /// file that OPENS with a `---` fence (as agent .md files do) must have that
-    /// opener removed before parsing. Leaves fence-less content untouched.
-    private static func stripLeadingFence(_ content: String) -> String {
-        let lines = content.components(separatedBy: "\n")
-        guard let first = lines.first, first.trimmingCharacters(in: .whitespaces) == "---" else {
-            return content
-        }
-        return lines.dropFirst().joined(separator: "\n")
-    }
-
     static func load(payload: RoutingStackPayload, agentsDir: URL) -> [RoutingAgentEntry] {
         let fm = FileManager.default
         return payload.agentFiles.map { file in
@@ -348,7 +337,7 @@ struct RoutingAgentEntry: Identifiable {
                 source = .bundledOnly
             }
 
-            let parsed = parseFrontmatter(stripLeadingFence(content))
+            let parsed = parseFrontmatter(content)
             let tools = (parsed.metadata["tools"] ?? "")
                 .split(separator: ",")
                 .map { $0.trimmingCharacters(in: .whitespaces) }
