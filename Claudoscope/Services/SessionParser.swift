@@ -39,7 +39,7 @@ actor SessionParser {
     ///  (c) getModelFamily detection regexes (they steer pricing lookup)
     /// Pricing rate-table edits do NOT need a bump: rates are hashed into the
     /// cache's pricing key. See docs/sqlite-persistence-roadmap.md, section 9.
-    static let parserVersion: Int = 2
+    static let parserVersion: Int = 3
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()

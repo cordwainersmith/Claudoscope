@@ -92,20 +92,21 @@ struct PricingTables {
     }
 }
 
-/// Parse version from a model ID like "claude-opus-4-5-20250120".
+/// Parse version from a model ID like "claude-opus-4-5-20250120" or "claude-opus-5".
 /// Returns true if version is 4.5+ (major >= 5, or major == 4 and minor >= 5).
 private func isVersion45OrHigher(_ model: String) -> Bool {
-    // Match digits after family name, e.g. "opus-4-5" or "haiku-3-5"
-    guard let range = model.range(of: #"(?:opus|haiku|sonnet)-(\d+)-(\d+)"#, options: .regularExpression) else {
+    // Minor is optional: "opus-5" is a one-part version, "opus-4-8" a two-part one.
+    // Version components are capped at two digits and followed by a non-digit so a
+    // legacy datestamp ("claude-3-opus-20240229") is not read as major version 20240229.
+    guard let range = model.range(
+        of: #"(?:opus|haiku|sonnet)-(\d{1,2})(?:-(\d{1,2}))?(?![0-9])"#,
+        options: .regularExpression
+    ) else {
         return false
     }
-    let matched = String(model[range])
-    let parts = matched.split(separator: "-")
-    guard parts.count >= 3,
-          let major = Int(parts[parts.count - 2]),
-          let minor = Int(parts[parts.count - 1]) else {
-        return false
-    }
+    let parts = model[range].split(separator: "-").compactMap { Int($0) }
+    guard let major = parts.first else { return false }
+    let minor = parts.count > 1 ? parts[1] : 0
     return major >= 5 || (major == 4 && minor >= 5)
 }
 

@@ -82,6 +82,44 @@ final class PricingFamilyTests: XCTestCase {
         XCTAssertEqual(s.estimatedCost, 0.11, accuracy: 1e-9)
     }
 
+    // MARK: - Opus 5
+
+    // Opus 5 (`claude-opus-5`) is a one-part version, unlike every prior opus id.
+    // It bills at the same rate as Opus 4.8, so it must land in the `opus` family,
+    // not the legacy `opus4` row ($15/$75) it fell through to before this fix.
+
+    func testOpus5ResolvesToOpusFamily() {
+        XCTAssertEqual(getModelFamily("claude-opus-5"), "opus")
+    }
+
+    func testOpus5LongContextVariantResolvesToOpusFamily() {
+        XCTAssertEqual(getModelFamily("claude-opus-5[1m]"), "opus")
+    }
+
+    func testLegacyOpus3ResolvesToOpus4Family() {
+        // Guards the datestamp trap: an unbounded version match would read
+        // "20240229" as major version 20240229 and misprice this as modern opus.
+        XCTAssertEqual(getModelFamily("claude-3-opus-20240229"), "opus4")
+    }
+
+    func testOpus5AnthropicPricing() {
+        let p = getModelPricing("claude-opus-5", table: PricingTables.anthropic)
+        XCTAssertEqual(p.input, 5.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 25.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.50, accuracy: 1e-9)
+    }
+
+    func testOpus5SessionParsesAtOpusRate() async throws {
+        let parser = SessionParser()
+        let rec = "{\"type\":\"assistant\",\"uuid\":\"u1\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-07-26T10:00:00.000Z\",\"message\":{\"role\":\"assistant\",\"id\":\"m1\",\"stop_reason\":\"end_turn\",\"model\":\"claude-opus-5\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":2000,\"service_tier\":\"standard\"}}}"
+        let url = try writeTempFile([rec])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let s = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: PricingTables.anthropic)
+        // 1000 input * $5/MTok + 2000 output * $25/MTok = 0.005 + 0.050 = 0.055
+        XCTAssertEqual(s.estimatedCost, 0.055, accuracy: 1e-9)
+    }
+
     // MARK: - Sonnet 5
 
     // Sonnet 5 (`claude-sonnet-5`) needs no dedicated table row: its rate has
