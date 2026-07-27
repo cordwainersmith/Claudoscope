@@ -167,6 +167,9 @@ struct WhatsNewView: View {
     var isLoading: Bool = false
     let onDismiss: () -> Void
 
+    /// Scoped to the exact version so the milestone header retires itself on 1.0.1.
+    private static let milestoneVersion = "1.0.0"
+
     var body: some View {
         VStack(spacing: 16) {
             if let nsImage = loadAppIcon() {
@@ -177,8 +180,18 @@ struct WhatsNewView: View {
                     .frame(width: 48, height: 48)
             }
 
-            Text("Release Notes")
-                .font(.system(size: 15, weight: .semibold))
+            if highlightVersion == Self.milestoneVersion {
+                VStack(spacing: 4) {
+                    Text("Claudoscope 1.0 🎉")
+                        .font(.system(size: 17, weight: .semibold))
+                    Text("Thanks for being here early.")
+                        .font(Typography.body)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Release Notes")
+                    .font(.system(size: 15, weight: .semibold))
+            }
 
             if isLoading {
                 ProgressView()

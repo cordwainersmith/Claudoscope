@@ -22,7 +22,7 @@
 
 ---
 
-Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and Claude Cowork sessions from the Claude desktop app, then surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation, analytics, plan browsing, timeline history, configuration health checks, [**a 1-click security hardening baseline that locks down your Claude Code environment**](#hardening), and [**secret scanning that detects leaked credentials in your session history with real-time alerts**](#secret-scanning), all without sending any data off your machine.
+Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and Claude Cowork sessions from the Claude desktop app, then surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation with [**spend alerts**](#notifications-and-cost-alerts), analytics, per-file diffs of everything Claude changed, plan browsing, timeline history, configuration health checks, [**a 1-click security hardening baseline that locks down your Claude Code environment**](#hardening), and [**secret scanning that detects leaked credentials in your session history with real-time alerts**](#secret-scanning), all without sending any data off your machine.
 
 ## Table of Contents
 
@@ -32,6 +32,7 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
 - [Secret Scanning](#secret-scanning)
 - [Hardening](#hardening)
 - [Menu Bar Widget](#menu-bar-widget)
+- [Notifications and Cost Alerts](#notifications-and-cost-alerts)
 - [Dashboard Window](#dashboard-window)
   - [Analytics](#analytics)
   - [Sessions](#sessions)
@@ -41,11 +42,14 @@ Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) a
   - [Cowork](#cowork)
   - [Hooks](#hooks)
   - [Commands](#commands)
-  - [Skills](#skills)
   - [MCPs](#mcps)
+  - [Skills](#skills)
+  - [Agents](#agents)
   - [Plugins](#plugins)
   - [Memory](#memory)
+  - [Canon](#canon)
   - [Config Health](#config-health)
+  - [Agent Routing](#agent-routing)
   - [Settings](#settings)
 - [Command Palette](#command-palette)
 - [Cost Estimation](#cost-estimation)
@@ -89,9 +93,11 @@ Download the latest `Claudoscope.dmg` from the [Releases](https://github.com/cor
 
 Claudoscope monitors `~/.claude/projects/` using macOS FSEvents for near-instant detection of changes to JSONL session files. Updates parse incrementally and surface in the UI in real time. No polling, no server process, no network requests, everything runs locally.
 
-On launch, a one-time scan builds the initial project and session index. After that, only changed files are re-parsed, and parsed sessions are held in an LRU cache (capacity 20) for instant re-access.
+Parsed session summaries persist in a local SQLite index, so launching paints the dashboard from disk immediately (sub-second on a ~3,000-file corpus) instead of re-reading every transcript. A background pass then re-parses only the files that actually changed. The index is a pure derivative of your session files: change the parser, the pricing tables, the provider, or your timezone and it rebuilds itself in the background. Delete it and nothing is lost. Fully parsed sessions are additionally held in an in-memory LRU cache for instant re-access while you browse.
 
 The app runs as an accessory process (`LSUIElement = true`) and lives in your menu bar without a permanent Dock presence. The Dock icon appears only while the dashboard window is open.
+
+Optionally, Claudoscope can expose its own data back to Claude Code through a read-only MCP server (off by default, see [Settings](#settings)), so you can ask Claude about your own usage.
 
 ## Secret Scanning
 
@@ -149,12 +155,25 @@ At-a-glance Claude Code activity without leaving what you are working on.
 - **Stats strip**: today's session count, total tokens, estimated cost, and active project count
 - **Sparkline chart**: compact daily usage trend
 - **Active session card**: the live session (active in the last 60 seconds) with title, model, and token count
-- **Recent sessions**: the three most recently active sessions across all projects
+- **Recent sessions**: the three most recently active sessions, excluding any already shown as active
 - **Dashboard shortcut**: opens the full dashboard window (Cmd+O)
+- **Settings shortcut**: opens preferences directly from the popover
+
+The menu bar icon can be switched to a monochrome glyph in Settings > Appearance, which adapts to light, dark, and tinted menu bars. A red dot on the icon means a cost alert has fired.
+
+## Notifications and Cost Alerts
+
+Both are opt-in and off by default.
+
+**Session notifications** tell you when a session needs you. Enabling them in Settings > Notifications installs Claude Code `Notification` and `Stop` hooks and delivers two independently toggleable banners: "Claude needs you" when a session is genuinely blocked on a permission, plan, or MCP prompt, and a "your turn" banner when Claude finishes. Both are event-driven, so neither nags on a timer. Tapping a banner focuses the terminal tab running that session (Ghostty, iTerm2, and Terminal.app). Includes per-project mute, daily quiet hours, and a sound toggle.
+
+**Cost alerts** watch spend against four thresholds: a single-session cap, a rolling window (5 minutes to 4 hours, which doubles as runaway-burn detection), a daily total, and a monthly total. Alerts re-fire at each doubling (X, 2X, 4X) rather than repeating, arrive as a notification plus a red menu bar dot, and stay in the popover until dismissed. All figures are estimates.
 
 ## Dashboard Window
 
 A three-column layout: a narrow icon rail on the left for navigation, a sidebar in the middle for lists and filtering, and a main content panel on the right.
+
+A global project and date lens sits above the sidebar filter and scopes the Sessions, Tools, Timeline, and Plans rails at once, persisting as you move between them.
 
 ### Analytics
 
@@ -180,6 +199,9 @@ The chat view renders the complete conversation thread with:
 - Tool result content (file reads, bash output, search results)
 - Error indicators on sessions or tool calls that encountered failures
 - In-conversation search across messages, thinking blocks, tool inputs, and tool results, with auto-expansion of matching collapsed blocks
+- A **Focus** toggle that hides thinking blocks and tool/MCP activity so you can read just the conversation. Filtering is display-only, so tokens and cost stay computed on the full transcript.
+
+**Files tab.** Every session also has a Files tab listing each file Claude edited or wrote, with a chronological diff for every individual edit reconstructed from the transcript. Edits made by subagents are merged in with a badge and anchored to the call that spawned them. Each entry offers open, reveal in Finder, copy patch, and jump to the matching point in the chat, and files that changed on disk after the session touched them are flagged.
 
 ### Tools
 
@@ -214,15 +236,19 @@ All registered Claude Code hooks merged from five sources (user, project, projec
 
 All custom slash commands defined in your Claude Code configuration. Selecting a command renders its full markdown definition with the prompt template.
 
+### MCPs
+
+All configured MCP (Model Context Protocol) servers from your Claude Code settings, with server name, command, arguments, and environment variables. Remote servers also show a best-effort auth state derived from local files only, so no tokens are ever read.
+
 ### Skills
 
 ![Skills View](screenshots/skills.png)
 
 All installed Claude Code skills, with name and trigger description. Selecting a skill renders its full definition and documentation.
 
-### MCPs
+### Agents
 
-All configured MCP (Model Context Protocol) servers from your Claude Code settings, with server name, command, arguments, and environment variables.
+A read-only inventory of every agent definition installed on your machine, merged from your user directory, each project's `.claude/agents/`, and any plugins that ship agents. Agents installed by Claudoscope's [Agent Routing](#agent-routing) rail are grouped into a pinned section with a badge, so it is always clear which ones came from the app and which are yours.
 
 ### Plugins
 
@@ -233,6 +259,14 @@ The rail also runs three dependency checks: a plugin that declares a dependency 
 ### Memory
 
 All `CLAUDE.md` and memory files Claude Code uses for persistent context: the global `~/.claude/CLAUDE.md`, project-level `CLAUDE.md` files, and auto-memory files. Selecting a file renders its markdown content.
+
+### Canon
+
+Memory files are per-machine. Canon is the opposite: a per-project record of settled engineering decisions that lives in the repo and is committed with the code, so everyone (and every agent) working on it shares the same context.
+
+Enabling Canon for a project installs a protocol rule and a seeded records file into that project's working tree, after which Claude Code appends decisions as they get settled. The rail itself is a reader: records appear as structured cards with a kind filter and a hide-superseded toggle. Claudoscope installs and displays canon, it never writes records.
+
+Opt-in is per project, with bulk enable and disable available in Settings. A CAN lint family reports drift (missing protocol, gitignored records, malformed records, an outdated protocol, or a supersede pointing at nothing) in [Config Health](#config-health).
 
 ### Config Health
 
@@ -262,13 +296,19 @@ Each session triggers at most one check (the most severe), capped at 10 results.
 
 **Settings validation** (**CFG** rules) checks your `settings.json` for misconfigurations: sandbox enabled without lock files, contradictory filesystem permissions, bare mode conflicting with hooks/MCP, missing subprocess environment scrubbing, and skill shell execution without restriction.
 
+### Agent Routing
+
+Claude Code will happily use its most expensive model for a task that a cheaper one would finish just as well. This rail installs a set of role-scoped subagents into `~/.claude/agents/` so work gets routed by what it actually needs: `recon` and `Explore` for read-only lookups and sweeps, `routine` for fully-specified mechanical edits, `builder` for work requiring judgment, `checker` for fresh-context verification, plus `security-review` and `security-build` for security-sensitive work.
+
+Installing also appends a marker-delimited orchestration policy to your global `CLAUDE.md` and sets a fallback model if you do not already have one. Install, reinstall, revert, and uninstall work the same way as the [Hardening](#hardening) rail: every write is preceded by a timestamped, owner-only backup, and uninstall deliberately leaves behind any agent file you have edited yourself. An RTG lint family reports drift from the installed baseline.
+
 ### Settings
 
 ![Settings](screenshots/settings.png)
 
 Reads your `~/.claude/settings.json` and presents each configuration section in an organized layout:
 
-- **Appearance**: System, Light, or Dark theme, applied to the dashboard immediately
+- **Appearance**: System, Light, or Dark theme applied to the dashboard immediately, plus the monochrome menu bar icon toggle
 - **Model**: currently configured default model
 - **Permissions**: permission rules and denied file patterns for read and edit operations
 - **Security**: YOLO mode status, dangerous permission prompt handling, weaker sandbox settings, skill shell execution status, plus a toggle for real-time secret scanning alerts
@@ -278,6 +318,10 @@ Reads your `~/.claude/settings.json` and presents each configuration section in 
 - **General**: transcript retention period, auto-memory toggle, and other preferences
 - **Environment**: environment-level configuration values
 - **Pricing**: Anthropic API or Vertex AI pricing with region selection (Global, us-east5, europe-west1, asia-southeast1). Changing the pricing configuration recalculates all cost estimates across the app.
+- **Notifications** and **Cost Alerts**: see [Notifications and Cost Alerts](#notifications-and-cost-alerts)
+- **MCP Server**: enables the read-only MCP server (off by default) and registers it with Claude Code, so you can query your own usage data from a session
+- **Canon**: bulk enable or disable canon across projects
+- **Updates**: automatic update checks, with an option to turn them off entirely
 
 ## Command Palette
 

@@ -92,32 +92,24 @@ struct PricingTables {
     }
 }
 
-/// Parse version from a model ID like "claude-opus-4-5-20250120" or "claude-opus-5".
-/// Returns true if version is 4.5+ (major >= 5, or major == 4 and minor >= 5).
-private func isVersion45OrHigher(_ model: String) -> Bool {
-    // Minor is optional: "opus-5" is a one-part version, "opus-4-8" a two-part one.
-    // Version components are capped at two digits and followed by a non-digit so a
-    // legacy datestamp ("claude-3-opus-20240229") is not read as major version 20240229.
-    guard let range = model.range(
-        of: #"(?:opus|haiku|sonnet)-(\d{1,2})(?:-(\d{1,2}))?(?![0-9])"#,
-        options: .regularExpression
-    ) else {
-        return false
-    }
-    let parts = model[range].split(separator: "-").compactMap { Int($0) }
-    guard let major = parts.first else { return false }
-    let minor = parts.count > 1 ? parts[1] : 0
-    return major >= 5 || (major == 4 && minor >= 5)
+/// Model generations that billed at the pre-4.5 rate. Closed lists rather than a
+/// version comparison: an id nobody anticipated prices at the current rate instead
+/// of inheriting the 3x legacy one, which is how claude-opus-5 was mispriced.
+private let legacyOpusMarkers = ["claude-3-opus", "opus-4-0", "opus-4-1"]
+private let legacyHaikuMarkers = ["claude-3-haiku", "claude-3-5-haiku"]
+
+private func matchesAny(_ model: String, _ markers: [String]) -> Bool {
+    markers.contains { model.contains($0) }
 }
 
 func getModelFamily(_ model: String?) -> String {
     guard let model = model?.lowercased() else { return "unknown" }
     if model.contains("fable") { return "fable" }
     if model.contains("opus") {
-        return isVersion45OrHigher(model) ? "opus" : "opus4"
+        return matchesAny(model, legacyOpusMarkers) ? "opus4" : "opus"
     }
     if model.contains("haiku") {
-        return isVersion45OrHigher(model) ? "haiku" : "haiku3"
+        return matchesAny(model, legacyHaikuMarkers) ? "haiku3" : "haiku"
     }
     if model.contains("sonnet") { return "sonnet" }
     return "unknown"

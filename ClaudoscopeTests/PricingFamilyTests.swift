@@ -82,11 +82,11 @@ final class PricingFamilyTests: XCTestCase {
         XCTAssertEqual(s.estimatedCost, 0.11, accuracy: 1e-9)
     }
 
-    // MARK: - Opus 5
+    // MARK: - Opus 5 and legacy-allowlist detection
 
-    // Opus 5 (`claude-opus-5`) is a one-part version, unlike every prior opus id.
-    // It bills at the same rate as Opus 4.8, so it must land in the `opus` family,
-    // not the legacy `opus4` row ($15/$75) it fell through to before this fix.
+    // Family detection is an explicit allowlist of the pre-4.5 generations, so an
+    // unrecognized id resolves to the current rate. The inverse (a version match
+    // that fell through to the legacy $15/$75 row) is what mispriced Opus 5 at 3x.
 
     func testOpus5ResolvesToOpusFamily() {
         XCTAssertEqual(getModelFamily("claude-opus-5"), "opus")
@@ -96,10 +96,39 @@ final class PricingFamilyTests: XCTestCase {
         XCTAssertEqual(getModelFamily("claude-opus-5[1m]"), "opus")
     }
 
-    func testLegacyOpus3ResolvesToOpus4Family() {
-        // Guards the datestamp trap: an unbounded version match would read
-        // "20240229" as major version 20240229 and misprice this as modern opus.
+    func testUnrecognizedOpusIDsFailSafeToCurrentRate() {
+        // The regression guard for the whole change: ids that do not exist yet must
+        // never inherit legacy pricing just because detection failed to parse them.
+        XCTAssertEqual(getModelFamily("claude-opus-6"), "opus")
+        XCTAssertEqual(getModelFamily("claude-opus-7-2"), "opus")
+        XCTAssertEqual(getModelFamily("claude-opus-next"), "opus")
+    }
+
+    func testLegacyOpusIDsResolveToOpus4Family() {
         XCTAssertEqual(getModelFamily("claude-3-opus-20240229"), "opus4")
+        XCTAssertEqual(getModelFamily("claude-opus-4-0"), "opus4")
+        XCTAssertEqual(getModelFamily("claude-opus-4-1"), "opus4")
+    }
+
+    func testModernOpusIDsResolveToOpusFamily() {
+        XCTAssertEqual(getModelFamily("claude-opus-4-5-20251101"), "opus")
+        XCTAssertEqual(getModelFamily("claude-opus-4-6"), "opus")
+        XCTAssertEqual(getModelFamily("claude-opus-4-7"), "opus")
+    }
+
+    // MARK: - Haiku legacy allowlist
+
+    // Haiku carries the same failure mode: a future `claude-haiku-5` would have
+    // priced at the $0.25 `haiku3` row under version-based detection.
+
+    func testLegacyHaikuIDsResolveToHaiku3Family() {
+        XCTAssertEqual(getModelFamily("claude-3-haiku-20240307"), "haiku3")
+        XCTAssertEqual(getModelFamily("claude-3-5-haiku-20241022"), "haiku3")
+    }
+
+    func testModernAndUnrecognizedHaikuIDsResolveToHaikuFamily() {
+        XCTAssertEqual(getModelFamily("claude-haiku-4-5-20251001"), "haiku")
+        XCTAssertEqual(getModelFamily("claude-haiku-5"), "haiku")
     }
 
     func testOpus5AnthropicPricing() {
