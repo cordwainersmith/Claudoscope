@@ -20,12 +20,36 @@
   <a href="https://www.producthunt.com/products/claudoscope?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-claudoscope" target="_blank" rel="noopener noreferrer"><img alt="Claudoscope - Browse, search &amp; track costs across Claude Code sessions | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1112495&theme=light&t=1775035320571"></a>
 </p>
 
+<p align="center">
+  <strong>🎉 Claudoscope 1.0 is here</strong>
+</p>
+
+<p align="center">
+  Sessions now persist between launches, with cost alerts, notifications, and per-file diffs.<br />
+  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v1.0.0">See what's new</a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">Full changelog</a>
+</p>
+
 ---
 
 Claudoscope reads your local Claude Code session files (`~/.claude/projects/`) and Claude Cowork sessions from the Claude desktop app, then surfaces them through a compact menu bar widget and a full-featured dashboard window. It provides real-time session tracking, cost estimation with [**spend alerts**](#notifications-and-cost-alerts), analytics, per-file diffs of everything Claude changed, plan browsing, timeline history, configuration health checks, [**a 1-click security hardening baseline that locks down your Claude Code environment**](#hardening), and [**secret scanning that detects leaked credentials in your session history with real-time alerts**](#secret-scanning), all without sending any data off your machine.
 
+## Why Claudoscope
+
+The first version displayed one number: roughly what I had spent in Claude Code that day. Then I wanted to know which session the number came from, then which project, then whether the expensive one was expensive because it did a lot or because it got stuck in a loop and burned cache on the same context forty times. Every feature since has been a version of the same question: what is Claude Code actually doing when I am not watching it?
+
+The catch is that most of the answers are time-sensitive. A session going sideways is worth knowing about while it is going sideways. A leaked credential in a transcript matters most in the minutes after it lands. Claude sitting on a permission prompt while you read something in another window is pure dead time. A dashboard you have to remember to open has already failed at the part that mattered.
+
+So Claudoscope works in both directions. It comes to you through [session notifications](#notifications-and-cost-alerts), [cost alerts](#notifications-and-cost-alerts), real-time [secret scanning](#secret-scanning), and an [MCP server](#settings) that lets Claude Code answer questions about your own usage without opening anything. And when you do want to dig, the [dashboard](#dashboard-window) has the full history: every session, every file Claude touched, every plan, and a [config linter](#config-health) for the setup underneath it all.
+
+Everything runs locally. No telemetry, no account, no network calls beyond checking for updates.
+
+Full version history is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Table of Contents
 
+- [Why Claudoscope](#why-claudoscope)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [How It Works](#how-it-works)
@@ -198,6 +222,7 @@ The chat view renders the complete conversation thread with:
 - Inline cost estimates per message
 - Tool result content (file reads, bash output, search results)
 - Error indicators on sessions or tool calls that encountered failures
+- Blocked and denied actions, collapsed into their own group and classified as destructive git, infra destroy, permission denied, or user rejected, so you can see what Claude tried to do and was stopped from doing
 - In-conversation search across messages, thinking blocks, tool inputs, and tool results, with auto-expansion of matching collapsed blocks
 - A **Focus** toggle that hides thinking blocks and tool/MCP activity so you can read just the conversation. Filtering is display-only, so tokens and cost stay computed on the full transcript.
 
@@ -270,7 +295,7 @@ Opt-in is per project, with bulk enable and disable available in Settings. A CAN
 
 ### Config Health
 
-Runs 44 lint rules across your Claude Code configuration, sessions, and security posture, grouped into four categories: Security, Session Performance, Skills & Hooks, and Configuration. Eleven additional hardening-baseline drift checks (HRD001 through HRD011) live in the dedicated [Hardening](#hardening) rail.
+Runs 62 lint rules across your Claude Code configuration, sessions, and security posture, grouped into six categories: Security, Session Performance, Skills & Hooks, Configuration, Plugins, and Canon. Two further families live in their own rails: seven Agent Routing drift checks (RTG) in [Agent Routing](#agent-routing), and thirteen hardening-baseline drift checks (HRD001 through HRD013) in [Hardening](#hardening).
 
 - **Health score**: weighted summary (Excellent / Good / Fair / Poor) from error and warning counts
 - **Severity filters**: click any stat card (Errors, Warnings, Info) to toggle on or off
@@ -279,7 +304,7 @@ Runs 44 lint rules across your Claude Code configuration, sessions, and security
 - **Rescan**: re-run all checks without switching tabs
 - **Skill display names**: skills identified by directory name (e.g. "animate", "context7") instead of the repeated "SKILL.md" filename
 
-Rule families: CLAUDE.md size and structure (**CMD**), rules YAML frontmatter and glob validation (**RUL**), skill metadata completeness and naming conventions (**SKL**), cross-cutting token budget estimates (**XCT**), and settings validation (**CFG**).
+Rule families: CLAUDE.md size and structure (**CMD**), rules YAML frontmatter and glob validation (**RUL**), skill metadata completeness and naming conventions (**SKL**), hook matcher validity (**HOOK**), plugin dependency integrity (**PLG**), canon protocol and record health (**CAN**), cross-cutting token budget estimates (**XCT**), and settings validation (**CFG**).
 
 **Secret detection** (**SEC** rules) scans session JSONL files for accidentally leaked credentials across ten patterns, with a multi-stage false-positive filter and real-time alerts on new matches. See [Secret Scanning](#secret-scanning) for the full feature.
 
@@ -315,7 +340,7 @@ Reads your `~/.claude/settings.json` and presents each configuration section in 
 - **Attribution**: attribution and credit configuration
 - **Plugins**: installed plugins, source marketplaces, and any extra marketplace sources
 - **Account**: startup count, last release notes version, onboarding status, key bindings
-- **General**: transcript retention period, auto-memory toggle, and other preferences
+- **General**: an "Open Claudoscope at login" toggle (with a prompt to re-enable it if macOS Login Items has it blocked), transcript retention period, auto-memory toggle, and other preferences
 - **Environment**: environment-level configuration values
 - **Pricing**: Anthropic API or Vertex AI pricing with region selection (Global, us-east5, europe-west1, asia-southeast1). Changing the pricing configuration recalculates all cost estimates across the app.
 - **Notifications** and **Cost Alerts**: see [Notifications and Cost Alerts](#notifications-and-cost-alerts)
@@ -331,13 +356,19 @@ Press **Cmd+K** to open the command palette for quick navigation between rails a
 
 Claudoscope estimates session costs from raw token counts stored in JSONL session files. These are informational estimates based on published API pricing, not actual billing data.
 
-For each assistant response, the JSONL parser accumulates four counters from the `usage` field: input tokens, output tokens, cache read tokens, and cache creation tokens. The model ID (e.g. `claude-opus-4-6-20250313`) maps to a pricing family, since Opus 4.5+ and Haiku 4.5+ price differently from earlier versions. Fable 5 is recognized as its own family, so Fable sessions are costed rather than shown as unknown. Three pricing tables are built in (dollars per million tokens):
+For each assistant response, the JSONL parser accumulates four counters from the `usage` field: input tokens, output tokens, cache read tokens, and cache creation tokens. Cache creation is split across the 5-minute and 1-hour TTL tiers, which bill at different rates.
+
+The model ID (e.g. `claude-opus-4-6-20250313`) maps to a pricing family. Detection matches an explicit closed list of the generations that actually billed at older rates (Claude 3 Opus, Opus 4 and 4.1, Haiku 3 and 3.5); everything else prices at current rates. This direction is deliberate: a model ID Claudoscope has never seen is far more likely to be new than ancient, so an unknown ID fails safe to the current rate instead of silently inheriting a legacy one. Fable 5 is recognized as its own family rather than being shown as unknown.
+
+Three pricing tables are built in (dollars per million tokens):
 
 - **Anthropic API (direct)**: standard published rates including cache creation charges
 - **Vertex AI (Global)**: same input/output rates as Anthropic, cache creation is free
 - **Vertex AI (Regional)**: 10% surcharge over global rates on input, output, and cache read
 
 Per-session cost is `(input + output + cache_read + cache_creation) / 1M`, each multiplied by its model rate.
+
+**Web search requests** are billed on top of tokens at $0.01 per search. Claude Code records the count in `toolUseResult.searchCount` on the tool-result record rather than in the documented `usage.server_tool_use.web_search_requests` field, which is always zero in transcripts, so the fee is read from there, deduped by record, and attributed to the day and model that issued it.
 
 **Caveat**: actual billed amounts depend on factors Claudoscope cannot observe, such as batch vs. real-time pricing tiers, committed-use discounts, or billing adjustments.
 
