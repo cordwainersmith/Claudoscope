@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FullWindowView: View {
     @Environment(SessionStore.self) private var store
+    @Environment(UpdateService.self) private var updateService
     @State private var selectedRail: RailItem = .analytics
     @State private var selectedProjectId: String?
     @State private var selectedSessionId: String?
@@ -50,9 +51,32 @@ struct FullWindowView: View {
     @AppStorage("sidebarWidth") private var sidebarWidth: Double = 240
     @State private var dragStartWidth: CGFloat?
 
+    // Milestone banner: stores the version dismissed, not a boolean
+    @AppStorage("dismissedMilestoneVersion") private var dismissedMilestoneVersion: String = ""
+
     var body: some View {
         ZStack {
-            threeColumnLayout
+            VStack(spacing: 0) {
+                if MilestoneBanner.shouldShow(dismissedVersion: dismissedMilestoneVersion) {
+                    MilestoneBanner(
+                        onSeeWhatsNew: {
+                            updateService.whatsNewInfo = .init(
+                                version: updateService.currentVersion,
+                                releaseNotes: nil
+                            )
+                            updateService.onOpenWhatsNew?()
+                        },
+                        onDismiss: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                dismissedMilestoneVersion = MilestoneBanner.version
+                            }
+                        }
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                threeColumnLayout
+            }
             commandPaletteLayer
         }
         .overlay(alignment: .top) {
