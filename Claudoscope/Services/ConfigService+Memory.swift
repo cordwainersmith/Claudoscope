@@ -73,27 +73,47 @@ extension ConfigService {
             // Tolerate both the object form and a plain string-array form.
             var credentials: SandboxCredentials? = nil
             if let credDict = sandboxDict["credentials"] as? [String: Any] {
+                var modes: [String: String] = [:]
                 let files: [String]
                 if let arr = credDict["files"] as? [[String: Any]] {
                     files = arr.compactMap { $0["path"] as? String }
+                    for entry in arr {
+                        if let path = entry["path"] as? String, let mode = entry["mode"] as? String {
+                            modes[path] = mode
+                        }
+                    }
                 } else {
                     files = credDict["files"] as? [String] ?? []
                 }
                 let envVars: [String]
                 if let arr = credDict["envVars"] as? [[String: Any]] {
                     envVars = arr.compactMap { $0["name"] as? String }
+                    for entry in arr {
+                        if let name = entry["name"] as? String, let mode = entry["mode"] as? String {
+                            modes[name] = mode
+                        }
+                    }
                 } else {
                     envVars = credDict["envVars"] as? [String] ?? []
                 }
-                credentials = SandboxCredentials(files: files, envVars: envVars)
+                credentials = SandboxCredentials(files: files, envVars: envVars, modes: modes)
             }
             let allowAppleEvents = sandboxDict["allowAppleEvents"] as? Bool ?? false
+            let filesystemDisabled = (sandboxDict["filesystem"] as? [String: Any])?["disabled"] as? Bool ?? false
+            var binaryOverrides: [String: String] = [:]
+            for key in ["bwrapPath", "socatPath", "ripgrep"] {
+                if let value = sandboxDict[key] as? String { binaryOverrides[key] = value }
+            }
             sandbox = SandboxConfig(
                 unsandboxedCommands: cmds,
                 enableWeakerNestedSandbox: weaker,
                 deniedDomains: denied,
                 credentials: credentials,
-                allowAppleEvents: allowAppleEvents
+                allowAppleEvents: allowAppleEvents,
+                filesystemDisabled: filesystemDisabled,
+                strictAllowlist: network?["strictAllowlist"] as? Bool ?? false,
+                tlsTerminate: network?["tlsTerminate"] as? Bool ?? false,
+                binaryOverrides: binaryOverrides
             )
         } else {
             sandbox = nil
@@ -136,6 +156,12 @@ extension ConfigService {
         let enforceAvailableModels = settings["enforceAvailableModels"] as? Bool ?? false
         let requiredMinimumVersion = settings["requiredMinimumVersion"] as? String
         let requiredMaximumVersion = settings["requiredMaximumVersion"] as? String
+        let crossSessionInbound = settings["crossSessionInbound"] as? String
+        let dialogExpiry = settings["dialogExpiry"] as? Int
+        let workflowSizeGuideline = settings["workflowSizeGuideline"] as? String
+        let spellcheck = settings["spellcheck"] as? Bool
+        let emojiCompletionEnabled = settings["emojiCompletionEnabled"] as? Bool
+        let defaultModel = (settings["env"] as? [String: Any])?["ANTHROPIC_DEFAULT_MODEL"] as? String
 
         // Plugins
         var plugins: [PluginInfo] = []
@@ -160,13 +186,21 @@ extension ConfigService {
 
         // Marketplaces
         var marketplaces: [MarketplaceSource] = []
-        if let extraDict = settings["extraKnownMarketplaces"] as? [String: Any] {
+        // CC 2.1.232 accepts `additionalMarketplaces` as an alias; a config using the
+        // newer spelling looked like it had no extra marketplaces at all.
+        let extraMarketplaces = (settings["extraKnownMarketplaces"] as? [String: Any])
+            ?? (settings["additionalMarketplaces"] as? [String: Any])
+        if let extraDict = extraMarketplaces {
             for (name, value) in extraDict.sorted(by: { $0.key < $1.key }) {
                 if let info = value as? [String: Any] {
                     let sourceType = info["type"] as? String ?? "unknown"
+                    // `url` covers the archive source (CC 2.1.224), `command` the
+                    // locally-resolved one (CC 2.1.229); both showed a blank detail.
                     let detail = (info["repo"] as? String)
                         ?? (info["package"] as? String)
                         ?? (info["directory"] as? String)
+                        ?? (info["url"] as? String)
+                        ?? (info["command"] as? String)
                         ?? ""
                     marketplaces.append(MarketplaceSource(name: name, sourceType: sourceType, detail: detail))
                 } else if let str = value as? String {
@@ -224,7 +258,13 @@ extension ConfigService {
             availableModels: availableModels,
             enforceAvailableModels: enforceAvailableModels,
             requiredMinimumVersion: requiredMinimumVersion,
-            requiredMaximumVersion: requiredMaximumVersion
+            requiredMaximumVersion: requiredMaximumVersion,
+            crossSessionInbound: crossSessionInbound,
+            dialogExpiry: dialogExpiry,
+            workflowSizeGuideline: workflowSizeGuideline,
+            spellcheck: spellcheck,
+            emojiCompletionEnabled: emojiCompletionEnabled,
+            defaultModel: defaultModel
         )
     }
 

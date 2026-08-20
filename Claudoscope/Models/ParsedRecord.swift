@@ -25,6 +25,7 @@ enum RecordType: String, Codable, Sendable {
     case result
     case fileHistorySnapshot = "file-history-snapshot"
     case progress
+    case attachment
 }
 
 // MARK: - Raw JSONL Record (lenient Decodable)
@@ -48,6 +49,17 @@ struct ParsedRecordRaw: Decodable, Sendable {
     let content: String?
     let compactMetadata: CompactMetadataRaw?
     let logicalParentUuid: String?
+
+    // system records with subtype "stop_hook_summary": the CLI's summary of
+    // the Stop-hook batch it just ran. Decoded in both modes because lite
+    // aggregates them into SessionSummary.hookRunStats.
+    let hookCount: Int?
+    let hookInfos: [HookInfoRaw]?
+    let hookErrors: [String]?
+    let preventedContinuation: Bool?
+
+    // type:"attachment" records; hook_success payloads feed hookRunStats.
+    let attachment: AttachmentRaw?
 
     // tool_result records
     let toolUseResult: ToolUseResultRaw?
@@ -74,6 +86,16 @@ struct ParsedRecordRaw: Decodable, Sendable {
     // CLI version stamps a session title, deriveTitle() prefers it over slug.
     let title: String?
 
+    // Provenance records Claude Code writes at the top level of the transcript:
+    // type:"ai-title" (the auto-generated session name), type:"worktree-state"
+    // (a --worktree or /fork session's checkout), and type:"pr-link" (the PR or
+    // GitLab MR opened from the session). Decoded in both modes because they feed
+    // the session list, not the chat view.
+    let aiTitle: String?
+    let worktreeSession: WorktreeStateRaw?
+    let prNumber: Int?
+    let prUrl: String?
+
     // Captures the raw `type` string when it doesn't match a known RecordType,
     // so a future telemetry layer can surface unrecognized record types instead
     // of silently dropping them.
@@ -97,6 +119,11 @@ struct ParsedRecordRaw: Decodable, Sendable {
         subtype = try container.decodeIfPresent(String.self, forKey: .subtype)
         content = try container.decodeIfPresent(String.self, forKey: .content)
         compactMetadata = try container.decodeIfPresent(CompactMetadataRaw.self, forKey: .compactMetadata)
+        hookCount = try container.decodeIfPresent(Int.self, forKey: .hookCount)
+        hookInfos = try container.decodeIfPresent([HookInfoRaw].self, forKey: .hookInfos)
+        hookErrors = try container.decodeIfPresent([String].self, forKey: .hookErrors)
+        preventedContinuation = try container.decodeIfPresent(Bool.self, forKey: .preventedContinuation)
+        attachment = try container.decodeIfPresent(AttachmentRaw.self, forKey: .attachment)
         toolUseResult = try container.decodeIfPresent(ToolUseResultRaw.self, forKey: .toolUseResult)
         isSnapshotUpdate = try container.decodeIfPresent(Bool.self, forKey: .isSnapshotUpdate)
         messageId = try container.decodeIfPresent(String.self, forKey: .messageId)
@@ -107,6 +134,10 @@ struct ParsedRecordRaw: Decodable, Sendable {
         customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
         agentName = try container.decodeIfPresent(String.self, forKey: .agentName)
         title = try container.decodeIfPresent(String.self, forKey: .title)
+        aiTitle = try container.decodeIfPresent(String.self, forKey: .aiTitle)
+        worktreeSession = try container.decodeIfPresent(WorktreeStateRaw.self, forKey: .worktreeSession)
+        prNumber = try container.decodeIfPresent(Int.self, forKey: .prNumber)
+        prUrl = try container.decodeIfPresent(String.self, forKey: .prUrl)
         if mode == .full {
             parentUuid = try container.decodeIfPresent(String.self, forKey: .parentUuid)
             cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
@@ -126,7 +157,67 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case toolUseResult, isCompactSummary, isVisibleInTranscriptOnly
         case customTitle, agentName, isSidechain, title
         case snapshot, isSnapshotUpdate, messageId
+        case aiTitle, worktreeSession, prNumber, prUrl
+        case hookCount, hookInfos, hookErrors, preventedContinuation, attachment
     }
+}
+
+/// One entry of a stop_hook_summary's `hookInfos` array. durationMs is absent
+/// when the hook failed before it could be timed.
+struct HookInfoRaw: Decodable, Sendable {
+    let command: String?
+    let durationMs: Int?
+}
+
+/// Payload of a `type:"attachment"` record. Only hook payloads are consumed
+/// today (attachment.type == "hook_success"). Lite mode decodes the slim
+/// fields the metadata fold needs; stdout/stderr/content are full-only,
+/// mirroring ContentBlockRaw.
+struct AttachmentRaw: Decodable, Sendable {
+    let type: String?
+    let hookName: String?
+    let hookEvent: String?
+    let toolUseID: String?
+    let command: String?
+    let durationMs: Int?
+    let exitCode: Int?
+    let content: String?
+    let stdout: String?
+    let stderr: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, hookName, hookEvent, toolUseID, command, durationMs, exitCode
+        case content, stdout, stderr
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        type = try container.decodeIfPresent(String.self, forKey: .type)
+        hookName = try container.decodeIfPresent(String.self, forKey: .hookName)
+        hookEvent = try container.decodeIfPresent(String.self, forKey: .hookEvent)
+        toolUseID = try container.decodeIfPresent(String.self, forKey: .toolUseID)
+        command = try container.decodeIfPresent(String.self, forKey: .command)
+        durationMs = try container.decodeIfPresent(Int.self, forKey: .durationMs)
+        exitCode = try container.decodeIfPresent(Int.self, forKey: .exitCode)
+        if decoder.decodeMode == .full {
+            content = try container.decodeIfPresent(String.self, forKey: .content)
+            stdout = try container.decodeIfPresent(String.self, forKey: .stdout)
+            stderr = try container.decodeIfPresent(String.self, forKey: .stderr)
+        } else {
+            content = nil
+            stdout = nil
+            stderr = nil
+        }
+    }
+}
+
+/// Payload of a `type:"worktree-state"` record: where a `--worktree` or `/fork`
+/// session's checkout lives and which branch it was cut from.
+struct WorktreeStateRaw: Decodable, Sendable {
+    let worktreeName: String?
+    let worktreeBranch: String?
+    let worktreePath: String?
+    let originalBranch: String?
 }
 
 // MARK: - Message

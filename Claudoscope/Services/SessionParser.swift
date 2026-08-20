@@ -38,8 +38,9 @@ actor SessionParser {
     ///      reparse; the bump makes the wipe explicit)
     ///  (c) getModelFamily detection regexes (they steer pricing lookup)
     /// Pricing rate-table edits do NOT need a bump: rates are hashed into the
-    /// cache's pricing key. See docs/sqlite-persistence-roadmap.md, section 9.
-    static let parserVersion: Int = 4
+    /// cache's pricing key, as are the dated-rate windows. See
+    /// docs/sqlite-persistence-roadmap.md, section 9.
+    static let parserVersion: Int = 7
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -473,7 +474,12 @@ actor SessionParser {
         var hasError = false
         var slug: String?
         var customTitle: String?
+        var aiTitle: String?
         var recordTitle: String?
+        var worktreeName: String?
+        var worktreeBranch: String?
+        var prNumber: Int?
+        var prUrl: String?
         var isFirstRecord = true
         var parentSessionId: String? = nil
         var firstTimestamp = ""
@@ -494,6 +500,23 @@ actor SessionParser {
         var hasWorktreeTool = false
         var recordTimestamps: [String] = []
 
+        // Hook runtime aggregation, keyed hookName|command. Only this bounded
+        // aggregate lands on SessionSummary; per-event data is never stored.
+        var hookAgg: [String: (hookName: String, command: String, fires: Int, errors: Int, totalMs: Int, maxMs: Int)] = [:]
+        var stopHookRuns = 0
+        var preventedContinuationCount = 0
+        func foldHookRun(hookName: String, command: String, durationMs: Int?, isError: Bool) {
+            let key = hookName + "|" + command
+            var entry = hookAgg[key] ?? (hookName, command, 0, 0, 0, 0)
+            entry.fires += 1
+            if isError { entry.errors += 1 }
+            if let ms = durationMs {
+                entry.totalMs += ms
+                entry.maxMs = max(entry.maxMs, ms)
+            }
+            hookAgg[key] = entry
+        }
+
         // Web-search request fee: the count lives on WebSearch tool-result records
         // (toolUseResult.searchCount), NOT in token usage. Billed at the table's
         // flat per-request rate, attributed to the model that issued the search.
@@ -506,16 +529,10 @@ actor SessionParser {
         let isoFormatterNoFrac = ISO8601DateFormatter()
         isoFormatterNoFrac.formatOptions = [.withInternetDateTime]
 
-        // LOCAL calendar day (YYYY-MM-DD) for per-day cost attribution. Local (not
-        // UTC) so it matches Calendar.current.startOfDay used by the "today" filter
-        // in SessionStore and AnalyticsTimeRange.
-        let localDayFormatter = DateFormatter()
-        localDayFormatter.dateFormat = "yyyy-MM-dd"
-        localDayFormatter.locale = Locale(identifier: "en_US_POSIX")
-        func localDayKey(_ ts: String) -> String? {
-            guard let date = ISO8601.parse(ts) else { return nil }
-            return localDayFormatter.string(from: date)
-        }
+        // LOCAL calendar day (YYYY-MM-DD) for per-day cost attribution and dated
+        // rate lookups. Local (not UTC) so it matches Calendar.current.startOfDay
+        // used by the "today" filter in SessionStore and AnalyticsTimeRange.
+        func localDayKey(_ ts: String) -> String? { ISO8601.localDayKey(ts) }
 
         // Phase 3: replay the buffered records using the original accumulation
         // logic. Identical semantics to the previous streaming version: the
@@ -552,6 +569,23 @@ actor SessionParser {
             // Session-level title (forward-compatible; nil for all current records).
             if let t = raw.title, !t.isEmpty {
                 recordTitle = t
+            }
+            // type:"ai-title" — Claude Code's own generated session name. Ranks below
+            // a user /rename but above the slug. Last wins; the CLI regenerates it as
+            // the session's subject becomes clearer.
+            if let t = raw.aiTitle, !t.isEmpty {
+                aiTitle = t
+            }
+            // type:"worktree-state" / type:"pr-link" — where the session ran and what
+            // it opened. Last wins: a session can be relocated, and a re-pushed branch
+            // restamps the PR.
+            if let w = raw.worktreeSession {
+                if let name = w.worktreeName, !name.isEmpty { worktreeName = name }
+                if let branch = w.worktreeBranch, !branch.isEmpty { worktreeBranch = branch }
+            }
+            if let url = raw.prUrl, !url.isEmpty {
+                prUrl = url
+                prNumber = raw.prNumber
             }
 
             // Track user timestamps for turn duration computation
@@ -631,7 +665,19 @@ actor SessionParser {
                     let isFastMode = speed != nil && speed != "standard"
                     let speedMultiplier = isFastMode ? fastModeRateMultiplier : 1.0
 
-                    // Cost per-message using each message's actual model.
+                    // The LOCAL day this message landed on. lastSeenDay tracks the most
+                    // recent timestamped record (updated at the top of the loop), so a
+                    // billable record missing its own timestamp falls back to that day.
+                    // The "1970-01-01" sentinel only applies to a file with no parseable
+                    // timestamp anywhere, which keeps the derived lump == sum(contributions)
+                    // invariant intact (that day never matches a real date window); it
+                    // sorts below every dated rate cutoff, so such a file bills at
+                    // introductory rates where one applies.
+                    let dayKey = lastSeenDay ?? "1970-01-01"
+
+                    // Cost per-message using each message's actual model, priced at the
+                    // rate in effect on that message's own day, so historical cost does
+                    // not shift when a dated rate window closes.
                     let msgCost = estimateCostFromTokens(
                         model: raw.message?.model,
                         inputTokens: msgInput,
@@ -640,17 +686,10 @@ actor SessionParser {
                         cacheCreation5mTokens: msgCache5m,
                         cacheCreation1hTokens: msgCache1h,
                         table: pricingTable,
+                        on: dayKey,
                         speedMultiplier: speedMultiplier
                     )
 
-                    // Attribute to the LOCAL day this message landed on. lastSeenDay
-                    // tracks the most recent timestamped record (updated at the top of
-                    // the loop), so a billable record missing its own timestamp falls
-                    // back to that day. The "1970-01-01" sentinel only applies to a file
-                    // with no parseable timestamp anywhere, which keeps the derived
-                    // lump == sum(contributions) invariant intact (that day never
-                    // matches a real date window).
-                    let dayKey = lastSeenDay ?? "1970-01-01"
                     var day = dayAccs[dayKey] ?? DayAcc()
                     day.inputTokens += msgInput
                     day.outputTokens += msgOutput
@@ -757,6 +796,34 @@ actor SessionParser {
                 turnsSinceLastCompaction = 0
             }
 
+            if raw.type == .attachment, let att = raw.attachment,
+               att.type?.hasPrefix("hook_") == true {
+                foldHookRun(
+                    hookName: att.hookName ?? att.hookEvent ?? "unknown",
+                    command: att.command ?? "",
+                    durationMs: att.durationMs,
+                    isError: (att.exitCode ?? 0) != 0
+                )
+            }
+
+            if raw.type == .system && raw.subtype == "stop_hook_summary" {
+                stopHookRuns += 1
+                if raw.preventedContinuation == true { preventedContinuationCount += 1 }
+                // hookErrors is a flat string array with no per-command linkage,
+                // so errors are attributed to the batch's first command.
+                var stopErrorsLeft = raw.hookErrors?.count ?? 0
+                for info in raw.hookInfos ?? [] {
+                    let isError = stopErrorsLeft > 0
+                    if isError { stopErrorsLeft -= 1 }
+                    foldHookRun(
+                        hookName: "Stop",
+                        command: info.command ?? "",
+                        durationMs: info.durationMs,
+                        isError: isError
+                    )
+                }
+            }
+
             if let childId = raw.toolUseResult?.childAgentId, !childId.isEmpty {
                 spawnedAgentIds.insert(ObservabilityAnalyzer.normalizeAgentId(childId))
             }
@@ -784,7 +851,7 @@ actor SessionParser {
             if let ts = raw.timestamp { recordTimestamps.append(ts) }
         }
 
-        let title = deriveTitle(title: recordTitle, customTitle: customTitle, slug: slug, firstLine: firstLine, sessionId: sessionId)
+        let title = deriveTitle(title: recordTitle, customTitle: customTitle, aiTitle: aiTitle, slug: slug, firstLine: firstLine, sessionId: sessionId)
         let primaryModel = modelOutputTokens.max(by: { $0.value < $1.value })?.key
 
         // Derive the lump totals, the per-family modelBreakdown, and the immutable
@@ -855,6 +922,30 @@ actor SessionParser {
         // Compute idle gap detection from collected timestamps
         let idleGapResult = ObservabilityAnalyzer.detectIdleGaps(timestamps: recordTimestamps)
 
+        let hookRunStats: HookRunStats?
+        if hookAgg.isEmpty && stopHookRuns == 0 {
+            hookRunStats = nil
+        } else {
+            let perCommand = hookAgg.values
+                .map { HookCommandRunStats(
+                    hookName: $0.hookName,
+                    command: $0.command,
+                    fireCount: $0.fires,
+                    errorCount: $0.errors,
+                    totalDurationMs: $0.totalMs,
+                    maxDurationMs: $0.maxMs
+                ) }
+                .sorted {
+                    if $0.fireCount != $1.fireCount { return $0.fireCount > $1.fireCount }
+                    return $0.id < $1.id
+                }
+            hookRunStats = HookRunStats(
+                perCommand: perCommand,
+                stopHookRuns: stopHookRuns,
+                preventedContinuationCount: preventedContinuationCount
+            )
+        }
+
         // Compute session observability
         let observability = ObservabilityAnalyzer.computeObservability(
             turnDurations: turnDurations,
@@ -890,7 +981,12 @@ actor SessionParser {
             isSubagent: isSubagentFile,
             dailyContributions: dailyContributions,
             agentId: isSubagentFile ? ObservabilityAnalyzer.normalizeAgentId(sessionId) : nil,
-            spawnedAgentIds: Array(spawnedAgentIds)
+            spawnedAgentIds: Array(spawnedAgentIds),
+            worktreeName: worktreeName,
+            worktreeBranch: worktreeBranch,
+            prNumber: prNumber,
+            prUrl: prUrl,
+            hookRunStats: hookRunStats
         )
     }
 
@@ -902,12 +998,16 @@ actor SessionParser {
         return "unknown"
     }
 
-    private func deriveTitle(title: String?, customTitle: String?, slug: String?, firstLine: String, sessionId: String) -> String {
+    private func deriveTitle(title: String?, customTitle: String?, aiTitle: String?, slug: String?, firstLine: String, sessionId: String) -> String {
         // A session-level `title` (if the CLI ever stamps one) wins outright.
         // Then /rename (writes a custom-title record) takes precedence over the
         // slug, since the slug field is never updated when the user renames a session.
+        // Claude Code's own generated name (ai-title) sits between the two: chosen by
+        // the CLI rather than the user, but rewritten as the session's subject firms
+        // up, so it beats the slug, which is stamped once at creation.
         if let title { return title }
         if let customTitle { return customTitle }
+        if let aiTitle { return aiTitle }
         if let slug { return slug }
 
         if let data = firstLine.data(using: .utf8),

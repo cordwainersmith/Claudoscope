@@ -191,10 +191,36 @@ extension ConfigLinterService {
 
     // MARK: - Tool Restriction Validation
 
-    /// Built-in tools known to Claude Code. Any name starting with "mcp__" is also valid.
+    /// Built-in tools known to Claude Code. Any name starting with "mcp__" is also
+    /// valid. Err on the side of inclusion: an extra name here means a genuinely
+    /// misspelled tool goes unflagged, while a missing one warns about working
+    /// config, which is what a 12-entry version of this list did for every skill
+    /// that named Agent, Skill, ToolSearch, or any Task* tool.
     static let knownTools: Set<String> = [
-        "Bash", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep",
-        "WebFetch", "WebSearch", "Task", "NotebookEdit", "TodoWrite"
+        // File and shell
+        "Bash", "BashOutput", "KillShell", "Read", "Write", "Edit", "MultiEdit",
+        "Glob", "Grep", "NotebookEdit",
+        // Web
+        "WebFetch", "WebSearch",
+        // Agents and delegation
+        "Agent", "Task", "Explore", "Workflow", "SendMessage", "ListAgents",
+        // Task/todo tracking (off by default on Opus 5 and newer, see SKL014)
+        "TodoWrite", "TaskCreate", "TaskGet", "TaskUpdate", "TaskList",
+        "TaskOutput", "TaskStop",
+        // Session and planning
+        "Skill", "SlashCommand", "AskUserQuestion", "ToolSearch",
+        "EnterPlanMode", "ExitPlanMode", "EnterWorktree", "ExitWorktree",
+        "ReportFindings", "Monitor", "ScheduleWakeup",
+        "CronCreate", "CronDelete", "CronList",
+        // MCP plumbing
+        "WaitForMcpServers", "ListMcpResourcesTool", "ReadMcpResourceTool",
+        "ReadMcpResourceDirTool",
+    ]
+
+    /// Task-tracking tools, removed from Opus 4.8, Sonnet 5, Fable 5, Mythos 5, and
+    /// newer models in CC 2.1.233 unless `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` is set.
+    static let todoTools: Set<String> = [
+        "TodoWrite", "TaskCreate", "TaskGet", "TaskUpdate", "TaskList"
     ]
 
     func lintSkillToolRestrictions(content: String, filePath: String, displayPath: String) -> [LintResult] {
@@ -213,11 +239,25 @@ extension ConfigLinterService {
                     severity: .warning,
                     checkId: .SKL013,
                     filePath: filePath,
-                    message: "Unknown tool name \"\(tool)\" in skill tool restrictions. Valid names: \(Self.knownTools.sorted().joined(separator: ", ")), or any mcp__* name.",
+                    message: "Unknown tool name \"\(tool)\" in skill tool restrictions.",
                     fix: "Correct the tool name or remove it from allowed-tools / disallowed-tools.",
                     displayPath: displayPath
                 ))
             }
+        }
+
+        // SKL014: a skill allowed ONLY todo tools has nothing to run on a current
+        // model. Restricting to them alongside other tools is fine — the skill just
+        // loses the tracking, not its ability to work.
+        if let allowed, !allowed.isEmpty, allowedSet.isSubset(of: Self.todoTools) {
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .SKL014,
+                filePath: filePath,
+                message: "allowed-tools is limited to \(allowed.sorted().joined(separator: ", ")), which Claude Code removed from Opus 4.8, Sonnet 5, Fable 5, Mythos 5, and newer models.",
+                fix: "Widen allowed-tools, or set CLAUDE_CODE_ENABLE_TODO_TOOLS=1 to restore the todo tools.",
+                displayPath: displayPath
+            ))
         }
 
         // Check for tools listed in both allowed and disallowed (contradictory)

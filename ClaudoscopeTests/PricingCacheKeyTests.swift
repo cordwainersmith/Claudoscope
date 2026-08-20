@@ -55,4 +55,16 @@ final class PricingCacheKeyTests: XCTestCase {
             "fast-mode multiplier must be part of the hash"
         )
     }
+
+    func testHashIncludesDatedRateWindows() {
+        // Opening or moving a rate window changes cost without touching any rate, so
+        // the windows have to be hashed or cached summaries would keep the old prices.
+        // No window is open today, hence the synthetic values.
+        let m = ModelPricing(input: 1, output: 2, cacheRead: 0.1, cacheCreation5m: 0.5, cacheCreation1h: 1)
+        XCTAssertNotEqual(
+            PricingTables.tableHash(["a": m], rateWindows: ""),
+            PricingTables.tableHash(["a": m], rateWindows: "sonnet5<=2026-08-31"),
+            "dated-rate windows must be part of the hash"
+        )
+    }
 }

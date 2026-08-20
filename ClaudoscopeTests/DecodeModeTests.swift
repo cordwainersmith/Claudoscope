@@ -113,4 +113,41 @@ final class DecodeModeTests: XCTestCase {
         let raw = try decodeLite(json)
         XCTAssertEqual(raw.sessionId, "parent-session-uuid")
     }
+
+    // Hook runtime aggregation needs the slim attachment fields in lite mode,
+    // but stdout/stderr/content can be large (embedded hookSpecificOutput JSON)
+    // and are full-only.
+    func testHookAttachmentSlimInLite() throws {
+        let json = """
+        {"type":"attachment","attachment":{"type":"hook_success","hookName":"PreToolUse:Bash","hookEvent":"PreToolUse","command":"/x/guard.sh","durationMs":120,"exitCode":0,"stdout":"big payload","stderr":"","content":"ctx"}}
+        """
+        let raw = try decodeLite(json)
+        XCTAssertEqual(raw.type, .attachment)
+        let att = try XCTUnwrap(raw.attachment)
+        XCTAssertEqual(att.hookName, "PreToolUse:Bash")
+        XCTAssertEqual(att.command, "/x/guard.sh")
+        XCTAssertEqual(att.durationMs, 120)
+        XCTAssertEqual(att.exitCode, 0)
+        XCTAssertNil(att.stdout, "lite mode must not decode attachment stdout")
+        XCTAssertNil(att.stderr)
+        XCTAssertNil(att.content)
+
+        let full = try XCTUnwrap(try decodeFull(json).attachment)
+        XCTAssertEqual(full.stdout, "big payload")
+        XCTAssertEqual(full.content, "ctx")
+    }
+
+    func testStopHookSummaryFieldsPreservedInLite() throws {
+        let json = """
+        {"type":"system","subtype":"stop_hook_summary","hookCount":2,"hookInfos":[{"command":"notify.sh","durationMs":50},{"command":"http://localhost/hook"}],"hookErrors":["ECONNREFUSED"],"preventedContinuation":true}
+        """
+        let raw = try decodeLite(json)
+        XCTAssertEqual(raw.hookCount, 2)
+        XCTAssertEqual(raw.hookInfos?.count, 2)
+        XCTAssertEqual(raw.hookInfos?[0].command, "notify.sh")
+        XCTAssertEqual(raw.hookInfos?[0].durationMs, 50)
+        XCTAssertNil(raw.hookInfos?[1].durationMs)
+        XCTAssertEqual(raw.hookErrors, ["ECONNREFUSED"])
+        XCTAssertEqual(raw.preventedContinuation, true)
+    }
 }

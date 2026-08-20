@@ -41,6 +41,22 @@ final class CoworkSummaryTests: XCTestCase {
         #"{"type":"assistant","uuid":"u-fast","session_id":"inner-cli","_audit_timestamp":"2026-06-10T10:00:00.000Z","message":{"id":"\#(msgId)","type":"message","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":1000,"output_tokens":2000,"speed":"fast"}}}"#
     }
 
+    /// A Sonnet 5 record on a caller-chosen day. Sonnet 5's rate depends on the
+    /// message date, so these exercise the dated-rate lookup through the Cowork
+    /// path (which derives its day from `_audit_timestamp` via CoworkRecordAdapter).
+    private func sonnet5Line(msgId: String, uuid: String, utcTimestamp: String) -> String {
+        #"{"type":"assistant","uuid":"\#(uuid)","session_id":"inner-cli","_audit_timestamp":"\#(utcTimestamp)","message":{"id":"\#(msgId)","type":"message","role":"assistant","model":"claude-sonnet-5","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":1000,"output_tokens":2000}}}"#
+    }
+
+    /// Two Sonnet 5 records straddling the introductory-pricing cutoff. Midday UTC
+    /// so each lands on the intended LOCAL day in any timezone the suite runs in.
+    private var sonnet5StraddleLines: [String] {
+        [
+            sonnet5Line(msgId: "msg_intro", uuid: "u-intro", utcTimestamp: "2026-08-31T12:00:00.000Z"),
+            sonnet5Line(msgId: "msg_standard", uuid: "u-standard", utcTimestamp: "2026-09-01T12:00:00.000Z"),
+        ]
+    }
+
     private func makeSession(id: String, title: String?, transcriptLines: [String]?) throws -> CoworkSession {
         var transcriptURL: URL?
         if let transcriptLines {
@@ -72,13 +88,15 @@ final class CoworkSummaryTests: XCTestCase {
     // MARK: - Summary synthesis
 
     func testSummaryCostMatchesCoworkStatsTotals() async throws {
-        // Mix of standard and fast records: the two billing paths must agree
-        // (guards the speedMultiplier parity between CoworkStats.totals and
-        // SessionParser.parseMetadata).
+        // Mix of standard, fast, and dated-rate records: the two billing paths must
+        // agree (guards both the speedMultiplier parity and the per-message date
+        // parity between CoworkStats.totals and SessionParser.parseMetadata).
         let session = try makeSession(
             id: "local_s1",
             title: "My Deck",
-            transcriptLines: twoDayLines + [standardLine(msgId: "msg_std"), fastLine(msgId: "msg_fast")]
+            transcriptLines: twoDayLines
+                + [standardLine(msgId: "msg_std"), fastLine(msgId: "msg_fast")]
+                + sonnet5StraddleLines
         )
         let dataOpt = await service.loadSessionData(for: session, pricingTable: table)
         let data = try XCTUnwrap(dataOpt)

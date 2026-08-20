@@ -107,4 +107,51 @@ final class ToolRestrictionLintTests: XCTestCase {
         XCTAssertTrue(results.contains { $0.checkId == .CMD007 },
                       "the command-file scanner should surface CMD007 (and be wired into lint())")
     }
+
+    // MARK: - knownTools currency
+
+    /// The list stalled at 12 entries while Claude Code kept shipping tools, so every
+    /// skill naming Agent, Skill, ToolSearch, or a Task* tool drew an SKL013 warning
+    /// about working config.
+    func testToolsShippedSinceTheOriginalListAreRecognized() async {
+        let linter = ConfigLinterService()
+        let recent = "Agent, Skill, ToolSearch, AskUserQuestion, SendMessage, ListAgents, "
+            + "EnterPlanMode, ExitPlanMode, EnterWorktree, ExitWorktree, TaskOutput, TaskStop, "
+            + "BashOutput, KillShell, SlashCommand, Workflow, Monitor"
+        let results = await linter.lintSkillToolRestrictions(
+            content: frontmatter(allowed: recent, disallowed: nil),
+            filePath: "/tmp/SKILL.md", displayPath: "demo"
+        )
+        XCTAssertTrue(results.isEmpty, "unexpected findings: \(results.map(\.message))")
+    }
+
+    // MARK: - SKL014 (todo tools removed from current models)
+
+    func testSkillLimitedToTodoToolsFiresSKL014() async {
+        let linter = ConfigLinterService()
+        let results = await linter.lintSkillToolRestrictions(
+            content: frontmatter(allowed: "TodoWrite, TaskUpdate", disallowed: nil),
+            filePath: "/tmp/SKILL.md", displayPath: "demo"
+        )
+        XCTAssertTrue(results.contains { $0.checkId == .SKL014 && $0.severity == .warning })
+    }
+
+    /// A skill that also allows real tools still works; it just loses the tracking.
+    func testSkillAllowingTodoToolsAlongsideOthersDoesNotFire() async {
+        let linter = ConfigLinterService()
+        let results = await linter.lintSkillToolRestrictions(
+            content: frontmatter(allowed: "Bash, Read, TodoWrite", disallowed: nil),
+            filePath: "/tmp/SKILL.md", displayPath: "demo"
+        )
+        XCTAssertFalse(results.contains { $0.checkId == .SKL014 })
+    }
+
+    func testSkillWithNoAllowListDoesNotFireSKL014() async {
+        let linter = ConfigLinterService()
+        let results = await linter.lintSkillToolRestrictions(
+            content: frontmatter(allowed: nil, disallowed: "TodoWrite"),
+            filePath: "/tmp/SKILL.md", displayPath: "demo"
+        )
+        XCTAssertFalse(results.contains { $0.checkId == .SKL014 })
+    }
 }

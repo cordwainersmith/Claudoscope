@@ -68,8 +68,21 @@ final class SessionStore {
     var timelineEntries: [HistoryEntry] = []
     var timelineLoading: Bool = false
 
+    // Insights data
+    var insightsData: InsightsData = .empty
+    var insightsLoading: Bool = false
+
+    // Tasks & Jobs data
+    var taskLists: [TaskListSummary] = []
+    var jobs: [JobSummary] = []
+    var daemonStatus: DaemonStatus?
+    var selectedJobTimeline: [JobTimelineEntry] = []
+    var tasksJobsLoading: Bool = false
+
     // Config data
     var hookGroups: [HookEventGroup] = []
+    /// Cross-session hook runtime rollup, recomputed with analytics.
+    var hookRuntimeAggregates: [HookRuntimeAggregate] = []
     var commands: [CommandEntry] = []
     var skills: [SkillEntry] = []
     var agents: [AgentEntry] = []
@@ -222,6 +235,8 @@ final class SessionStore {
     @ObservationIgnored private var scanTask: Task<Void, Never>?
     private let watcher: ClaudeFileWatcher
     private let plansService: PlansService
+    private let tasksJobsService: TasksJobsService
+    private let insightsService: InsightsService
     private let timelineService: TimelineService
     private let configService: ConfigService
     private let linterService = ConfigLinterService()
@@ -435,6 +450,8 @@ final class SessionStore {
         self.claudeDir = home.appendingPathComponent(".claude")
         self.watcher = ClaudeFileWatcher(claudeDir: claudeDir)
         self.plansService = PlansService(claudeDir: claudeDir)
+        self.tasksJobsService = TasksJobsService(claudeDir: claudeDir)
+        self.insightsService = InsightsService(claudeDir: claudeDir)
         self.timelineService = TimelineService(claudeDir: claudeDir)
         self.configService = ConfigService(claudeDir: claudeDir)
         self.alertedSecrets = Self.loadAlertedSecrets()
@@ -1012,6 +1029,11 @@ final class SessionStore {
             to: nil
         )
 
+        hookRuntimeAggregates = HookRuntimeEngine.aggregate(
+            sessions: allSessionsWithProjects.map(\.session),
+            hookGroups: hookGroups
+        )
+
         evaluateCostAlerts(rebaselineLedger: rebaselineCostLedger)
     }
 
@@ -1131,6 +1153,42 @@ final class SessionStore {
         let loaded = await timelineService.loadEntries(since: sevenDaysAgo)
         self.timelineEntries = loaded
         self.timelineLoading = false
+    }
+
+    // MARK: - Insights
+
+    func loadInsights() async {
+        insightsLoading = true
+        let facets = await insightsService.loadFacets()
+        let meta = await insightsService.loadMeta(sessionIds: Set(facets.map(\.facet.sessionId)))
+        let summariesById = Dictionary(
+            allSessionsWithProjects.map { ($0.session.id, $0.session) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        insightsData = InsightsEngine.build(
+            facets: facets,
+            meta: meta,
+            summariesById: summariesById,
+            storeSessionCount: allSessionsWithProjects.count
+        )
+        insightsLoading = false
+    }
+
+    // MARK: - Tasks & Jobs
+
+    func loadTasksJobs() async {
+        tasksJobsLoading = true
+        async let lists = tasksJobsService.loadTaskLists()
+        async let loadedJobs = tasksJobsService.loadJobs()
+        async let status = tasksJobsService.loadDaemonStatus()
+        self.taskLists = await lists
+        self.jobs = await loadedJobs
+        self.daemonStatus = await status
+        self.tasksJobsLoading = false
+    }
+
+    func loadJobTimeline(jobId: String) async {
+        self.selectedJobTimeline = await tasksJobsService.loadJobTimeline(jobId: jobId)
     }
 
     // MARK: - Config (hooks, commands, MCPs, memory)

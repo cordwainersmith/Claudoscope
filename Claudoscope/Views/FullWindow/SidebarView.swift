@@ -22,6 +22,10 @@ struct SidebarView: View {
     @Binding var selectedTimelineDay: String?
     @Binding var selectedCoworkSessionId: String?
     @Binding var selectedPluginId: String?
+    @Binding var selectedTasksJobsItem: TasksJobsSelection?
+    @Binding var selectedInsightSessionId: String?
+    let analyticsTab: AnalyticsTab
+    @Binding var healthSection: HealthSection
     @State private var filterText = ""
 
     private var showsGlobalFilter: Bool {
@@ -75,19 +79,28 @@ struct SidebarView: View {
                         selectedProjectId: $selectedProjectId
                     )
                 case .analytics:
-                    AnalyticsSidebarContent(
-                        projectCosts: store.analyticsData.projectCosts,
-                        totalCost: store.analyticsData.totalCost,
-                        filterText: filterText,
-                        timeRangeLabel: store.analyticsTimeRange.rawValue,
-                        selectedProjectId: Binding(
-                            get: { store.selectedAnalyticsProjectId },
-                            set: { newValue in
-                                store.selectedAnalyticsProjectId = newValue
-                                store.recomputeAnalytics()
-                            }
+                    switch analyticsTab {
+                    case .usage:
+                        AnalyticsSidebarContent(
+                            projectCosts: store.analyticsData.projectCosts,
+                            totalCost: store.analyticsData.totalCost,
+                            filterText: filterText,
+                            timeRangeLabel: store.analyticsTimeRange.rawValue,
+                            selectedProjectId: Binding(
+                                get: { store.selectedAnalyticsProjectId },
+                                set: { newValue in
+                                    store.selectedAnalyticsProjectId = newValue
+                                    store.recomputeAnalytics()
+                                }
+                            )
                         )
-                    )
+                    case .insights:
+                        InsightsSidebarContent(
+                            filterText: filterText,
+                            data: store.insightsData,
+                            selectedSessionId: $selectedInsightSessionId
+                        )
+                    }
                 case .plans:
                     PlansSidebarContent(
                         filterText: filterText,
@@ -102,6 +115,14 @@ struct SidebarView: View {
                         globalFilterActive: store.globalFilterActive,
                         selectedDay: $selectedTimelineDay
                     )
+                case .tasksJobs:
+                    TasksJobsSidebarContent(
+                        filterText: filterText,
+                        jobs: store.jobs,
+                        taskLists: store.taskLists,
+                        daemonStatus: store.daemonStatus,
+                        selection: $selectedTasksJobsItem
+                    )
                 case .cowork:
                     CoworkSidebarContent(
                         filterText: filterText,
@@ -114,6 +135,7 @@ struct SidebarView: View {
                     HooksSidebarContent(
                         filterText: filterText,
                         hookGroups: store.hookGroups,
+                        runtimeAggregates: store.hookRuntimeAggregates,
                         selectedEventId: $selectedHookEventId
                     )
                 case .commands:
@@ -162,28 +184,43 @@ struct SidebarView: View {
                         selectedProjectId: $selectedCanonProjectId
                     )
                 case .configHealth:
-                    ConfigHealthSidebarContent(
-                        filterText: filterText,
-                        lintResults: store.lintResults,
-                        lintSummary: store.lintSummary,
-                        isLoading: store.lintLoading,
-                        selectedItem: $selectedHealthItem,
-                        hiddenSeverities: $hiddenLintSeverities
-                    )
-                case .hardening:
-                    HardeningSidebarContent(
-                        filterText: filterText,
-                        lintResults: store.lintResults,
-                        isLoading: store.lintLoading,
-                        selectedLintResultId: $selectedLintResultId
-                    )
-                case .agentRouting:
-                    RoutingSidebarContent(
-                        filterText: filterText,
-                        lintResults: store.lintResults,
-                        isLoading: store.lintLoading,
-                        selectedLintResultId: $selectedLintResultId
-                    )
+                    VStack(spacing: 0) {
+                        Picker("", selection: $healthSection) {
+                            ForEach(HealthSection.allCases, id: \.self) { section in
+                                Text(section.rawValue).tag(section)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+
+                        switch healthSection {
+                        case .health:
+                            ConfigHealthSidebarContent(
+                                filterText: filterText,
+                                lintResults: store.lintResults,
+                                lintSummary: store.lintSummary,
+                                isLoading: store.lintLoading,
+                                selectedItem: $selectedHealthItem,
+                                hiddenSeverities: $hiddenLintSeverities
+                            )
+                        case .hardening:
+                            HardeningSidebarContent(
+                                filterText: filterText,
+                                lintResults: store.lintResults,
+                                isLoading: store.lintLoading,
+                                selectedLintResultId: $selectedLintResultId
+                            )
+                        case .routing:
+                            RoutingSidebarContent(
+                                filterText: filterText,
+                                lintResults: store.lintResults,
+                                isLoading: store.lintLoading,
+                                selectedLintResultId: $selectedLintResultId
+                            )
+                        }
+                    }
                 case .settings:
                     SettingsSidebarContent(
                         filterText: filterText,
@@ -454,11 +491,20 @@ private struct SessionRow: View {
                             .help("Session resumed after 75+ min idle without /clear")
                     }
 
-                    if session.observability.isWorktreeSession {
+                    // The worktree-state record names the checkout; observability only
+                    // infers one from worktree tool use, so prefer the record.
+                    if session.worktreeName != nil || session.observability.isWorktreeSession {
                         Image(systemName: "arrow.triangle.branch")
                             .font(.system(size: 9))
                             .foregroundStyle(.cyan)
-                            .help("Session uses a git worktree")
+                            .help(worktreeHelp)
+                    }
+
+                    if let prNumber = session.prNumber {
+                        Text("#\(prNumber)")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.cyan)
+                            .help(session.prUrl ?? "Pull request #\(prNumber)")
                     }
 
                     if let model = session.primaryModel {
@@ -485,6 +531,14 @@ private struct SessionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+
+    private var worktreeHelp: String {
+        if let name = session.worktreeName, let branch = session.worktreeBranch {
+            return "Worktree \(name) on branch \(branch)"
+        }
+        if let name = session.worktreeName { return "Worktree \(name)" }
+        return "Session uses a git worktree"
     }
 }
 

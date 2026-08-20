@@ -50,6 +50,10 @@ struct AnalyticsData: Sendable {
     /// True if any contributing Cowork session referenced a model not in the
     /// pricing table — `coworkCost` underestimates spend in that case.
     let coworkHasUnknownModel: Bool
+    /// CLI model ids that billed tokens at no known rate. Those tokens cost $0 here
+    /// and are filtered out of `modelUsage`, so `totalCost` understates spend and
+    /// nothing else in the payload hints at it. Normally empty.
+    let unpricedModels: [String]
 
     init(
         totalSessions: Int,
@@ -67,7 +71,8 @@ struct AnalyticsData: Sendable {
         effortAnalytics: EffortAnalytics,
         parallelToolAnalytics: ParallelToolAnalytics,
         coworkCost: Double,
-        coworkHasUnknownModel: Bool
+        coworkHasUnknownModel: Bool,
+        unpricedModels: [String] = []
     ) {
         self.totalSessions = totalSessions
         self.totalMessages = totalMessages
@@ -85,6 +90,7 @@ struct AnalyticsData: Sendable {
         self.parallelToolAnalytics = parallelToolAnalytics
         self.coworkCost = coworkCost
         self.coworkHasUnknownModel = coworkHasUnknownModel
+        self.unpricedModels = unpricedModels
     }
 
     static let empty = AnalyticsData(
@@ -114,7 +120,8 @@ struct AnalyticsData: Sendable {
             effortAnalytics: effortAnalytics,
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: coworkCost,
-            coworkHasUnknownModel: hasUnknownModel
+            coworkHasUnknownModel: hasUnknownModel,
+            unpricedModels: unpricedModels
         )
     }
 }

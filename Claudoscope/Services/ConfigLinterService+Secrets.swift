@@ -72,7 +72,9 @@ extension ConfigLinterService {
         ),
         SecretPattern(
             checkId: .SEC007, name: "Platform Token",
-            pattern: "github_pat_[A-Za-z0-9_]{20,255}|gh[opusr]_[0-9a-zA-Z]{36}|glpat-[A-Za-z0-9_-]{20,200}|xox[bps]-[A-Za-z0-9./-]{20,200}|npm_[A-Za-z0-9]{36}|AIza[A-Za-z0-9_-]{35}|sk-ant-(?!admin01-)[A-Za-z0-9_-]{20,200}|sk-proj-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ|\\bsk-[A-Za-z0-9]{48}\\b|hf_[A-Za-z0-9]{34,200}|dckr_pat_[A-Za-z0-9_-]{20,200}|SG\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43}|shp(?:at|ss|pa|ca)_[a-fA-F0-9]{32}|dop_v1_[a-f0-9]{64}|lin_api_[a-zA-Z0-9]{40}|pypi-AgEIcHlwaS5vcmcC[A-Za-z0-9_-]{50,200}",
+            // GitLab families as of CC 2.1.232, minus the routable glpat-/gldt- pair,
+            // which is account-level and lives in SEC010.
+            pattern: "github_pat_[A-Za-z0-9_]{20,255}|gh[opusr]_[0-9a-zA-Z]{36}|gl(?:rt|oas|ptt|agent|imt|soat|cbt|ffct|ft)-[A-Za-z0-9_-]{20,200}|xox[bps]-[A-Za-z0-9./-]{20,200}|npm_[A-Za-z0-9]{36}|AIza[A-Za-z0-9_-]{35}|sk-ant-(?!admin01-)[A-Za-z0-9_-]{20,200}|sk-proj-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ|\\bsk-[A-Za-z0-9]{48}\\b|hf_[A-Za-z0-9]{34,200}|dckr_pat_[A-Za-z0-9_-]{20,200}|SG\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43}|shp(?:at|ss|pa|ca)_[a-fA-F0-9]{32}|dop_v1_[a-f0-9]{64}|lin_api_[a-zA-Z0-9]{40}|pypi-AgEIcHlwaS5vcmcC[A-Za-z0-9_-]{50,200}",
             severity: .warning
         ),
         SecretPattern(
@@ -83,7 +85,7 @@ extension ConfigLinterService {
         ),
         SecretPattern(
             checkId: .SEC010, name: "Critical Platform Token",
-            pattern: "(?:sk|rk)_(?:live|prod)_[a-zA-Z0-9]{20,99}|whsec_[A-Za-z0-9]{32,64}|sk-(?:svcacct|admin)-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ|sk-ant-admin01-[a-zA-Z0-9_-]{93}AA|AccountKey=[A-Za-z0-9+/=]{86,90}|hvs\\.[A-Za-z0-9_-]{24,200}",
+            pattern: "gl(?:pat|dt)-[A-Za-z0-9_-]{20,200}|(?:sk|rk)_(?:live|prod)_[a-zA-Z0-9]{20,99}|whsec_[A-Za-z0-9]{32,64}|sk-(?:svcacct|admin)-(?:[A-Za-z0-9_-]{74}|[A-Za-z0-9_-]{58})T3BlbkFJ|sk-ant-admin01-[a-zA-Z0-9_-]{93}AA|AccountKey=[A-Za-z0-9+/=]{86,90}|hvs\\.[A-Za-z0-9_-]{24,200}",
             severity: .error
         ),
     ]

@@ -145,8 +145,12 @@ struct MemoryFile: Identifiable, Sendable {
 // MARK: - Extended Config Models
 
 struct SandboxCredentials: Sendable {
-    let files: [String]      // sandbox.credentials.files paths (mode: deny)
-    let envVars: [String]    // sandbox.credentials.envVars names (mode: deny)
+    let files: [String]      // sandbox.credentials.files paths
+    let envVars: [String]    // sandbox.credentials.envVars names
+    /// Entry path/name -> declared `mode` ("deny" or "mask"). Masking (CC 2.1.221/.224)
+    /// substitutes the real value on egress instead of hiding the file outright, and
+    /// only works when the sandbox terminates TLS. Absent entries default to "deny".
+    var modes: [String: String] = [:]
 }
 
 struct SandboxConfig: Sendable {
@@ -155,6 +159,12 @@ struct SandboxConfig: Sendable {
     let deniedDomains: [String]
     var credentials: SandboxCredentials? = nil   // sandbox.credentials (CC 2.1.187)
     var allowAppleEvents: Bool = false            // sandbox.allowAppleEvents (CC 2.1.181)
+    var filesystemDisabled: Bool = false          // sandbox.filesystem.disabled (CC 2.1.216)
+    var strictAllowlist: Bool = false             // sandbox.network.strictAllowlist (CC 2.1.219)
+    var tlsTerminate: Bool = false                // sandbox.network.tlsTerminate
+    /// bwrapPath / socatPath / ripgrep. Honored only from user, managed, and
+    /// --settings scope since CC 2.1.232.
+    var binaryOverrides: [String: String] = [:]
 }
 
 struct AttributionConfig: Sendable {
@@ -225,6 +235,12 @@ struct ExtendedConfig: Sendable {
     var enforceAvailableModels: Bool = false  // managed (CC 2.1.175)
     var requiredMinimumVersion: String? = nil // managed (CC 2.1.163)
     var requiredMaximumVersion: String? = nil // managed (CC 2.1.163)
+    var crossSessionInbound: String? = nil    // accept|hold|refuse (CC 2.1.224)
+    var dialogExpiry: Int? = nil              // CC 2.1.224
+    var workflowSizeGuideline: String? = nil  // CC 2.1.219
+    var spellcheck: Bool? = nil               // CC 2.1.235
+    var emojiCompletionEnabled: Bool? = nil   // CC 2.1.217
+    var defaultModel: String? = nil           // env ANTHROPIC_DEFAULT_MODEL (CC 2.1.236)
 }
 
 // MARK: - Theme Models

@@ -72,10 +72,38 @@ final class SessionSummaryCodableTests: XCTestCase {
             dailyContributions: [day1, day2],
             isCowork: true,
             agentId: "abc123",
-            spawnedAgentIds: ["child-1", "child-2"]
+            spawnedAgentIds: ["child-1", "child-2"],
+            hookRunStats: HookRunStats(
+                perCommand: [HookCommandRunStats(
+                    hookName: "PreToolUse:Bash", command: "/x/guard.sh",
+                    fireCount: 5, errorCount: 1, totalDurationMs: 600, maxDurationMs: 300
+                )],
+                stopHookRuns: 2,
+                preventedContinuationCount: 1
+            )
         )
 
         XCTAssertEqual(try roundTrip(summary), summary)
+    }
+
+    /// Blobs written before parserVersion 7 have no hookRunStats key; they must
+    /// still decode (to nil) rather than degrade into a cache miss.
+    func testLegacyBlobWithoutHookRunStatsDecodes() throws {
+        let summary = SessionSummary(
+            id: "sess-legacy", projectId: "p", slug: nil, title: "t",
+            firstTimestamp: "", lastTimestamp: "", messageCount: 0, primaryModel: nil,
+            totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
+            totalCacheCreationTokens: 0, totalCacheCreation5mTokens: 0,
+            totalCacheCreation1hTokens: 0, compactionCount: 0, estimatedCost: 0,
+            hasError: false, modelBreakdown: [], toolCallCount: 0,
+            observability: .empty, isSubagent: false, dailyContributions: []
+        )
+        var json = try XCTUnwrap(String(data: JSONEncoder().encode(summary), encoding: .utf8))
+        json = json.replacingOccurrences(of: "\"hookRunStats\":null,", with: "")
+            .replacingOccurrences(of: ",\"hookRunStats\":null", with: "")
+        let decoded = try JSONDecoder().decode(SessionSummary.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.hookRunStats)
+        XCTAssertEqual(decoded, summary)
     }
 
     func testRoundTripMinimalSummary() throws {

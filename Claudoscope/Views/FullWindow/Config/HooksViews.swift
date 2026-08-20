@@ -5,6 +5,7 @@ import SwiftUI
 struct HooksSidebarContent: View {
     let filterText: String
     let hookGroups: [HookEventGroup]
+    var runtimeAggregates: [HookRuntimeAggregate] = []
     @Binding var selectedEventId: String?
 
     private var filtered: [HookEventGroup] {
@@ -15,6 +16,18 @@ struct HooksSidebarContent: View {
         }
     }
 
+    /// (fires, errors) per event, summed from aggregates whose hookName is the
+    /// event itself ("Stop") or event-prefixed ("PreToolUse:Bash").
+    private func runtimeCounts(for event: String) -> (fires: Int, errors: Int) {
+        var fires = 0
+        var errors = 0
+        for agg in runtimeAggregates where agg.hookName == event || agg.hookName.hasPrefix(event + ":") {
+            fires += agg.fireCount
+            errors += agg.errorCount
+        }
+        return (fires, errors)
+    }
+
     var body: some View {
         if filtered.isEmpty {
             SidebarEmptyStateView(icon: "arrow.triangle.turn.up.right.diamond", text: "No hooks configured")
@@ -23,6 +36,7 @@ struct HooksSidebarContent: View {
                 ForEach(filtered) { group in
                     HookEventRow(
                         group: group,
+                        runtimeCounts: runtimeCounts(for: group.event),
                         isSelected: selectedEventId == group.id
                     ) {
                         selectedEventId = group.id
@@ -36,8 +50,20 @@ struct HooksSidebarContent: View {
 
 private struct HookEventRow: View {
     let group: HookEventGroup
+    var runtimeCounts: (fires: Int, errors: Int) = (0, 0)
     let isSelected: Bool
     let onSelect: () -> Void
+
+    private var subtitle: String {
+        var text = "\(group.rules.count) rule\(group.rules.count == 1 ? "" : "s")"
+        if runtimeCounts.fires > 0 {
+            text += " · \(runtimeCounts.fires) fired"
+            if runtimeCounts.errors > 0 {
+                text += ", \(runtimeCounts.errors) failed"
+            }
+        }
+        return text
+    }
 
     var body: some View {
         Button(action: onSelect) {
@@ -53,7 +79,7 @@ private struct HookEventRow: View {
                         .lineLimit(1)
                         .foregroundStyle(isSelected ? .white : .primary)
 
-                    Text("\(group.rules.count) rule\(group.rules.count == 1 ? "" : "s")")
+                    Text(subtitle)
                         .font(.system(size: 11))
                         .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
                 }
@@ -102,9 +128,40 @@ struct HooksMainPanelView: View {
     static let eventsWithDurationMs: Set<String> = ["PostToolUse", "PostToolUseFailure"]
 
     let hookGroups: [HookEventGroup]
+    var runtimeAggregates: [HookRuntimeAggregate] = []
     let selectedEventId: String?
 
+    private enum Dimension: String, CaseIterable {
+        case configuration = "Configuration"
+        case runtime = "Runtime"
+    }
+    @State private var dimension: Dimension = .configuration
+
     var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $dimension) {
+                ForEach(Dimension.allCases, id: \.self) { dim in
+                    Text(dim.rawValue).tag(dim)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 280)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            switch dimension {
+            case .configuration:
+                configurationContent
+            case .runtime:
+                HooksRuntimePanel(aggregates: runtimeAggregates)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var configurationContent: some View {
         if let eventId = selectedEventId,
            let group = hookGroups.first(where: { $0.id == eventId }) {
             hookDetailContent(group)
@@ -237,5 +294,97 @@ struct HooksMainPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Runtime Panel
+
+/// Cross-session hook runtime: what actually fired across all parsed sessions,
+/// folded from SessionSummary.hookRunStats by HookRuntimeEngine.
+private struct HooksRuntimePanel: View {
+    let aggregates: [HookRuntimeAggregate]
+
+    private var totalFailures: Int {
+        aggregates.reduce(0) { $0 + $1.errorCount }
+    }
+
+    var body: some View {
+        if aggregates.isEmpty {
+            EmptyStateView(
+                icon: "arrow.triangle.turn.up.right.diamond",
+                title: "No hook activity yet",
+                message: "Runtime stats appear after sessions that ran hooks are parsed. Recent Claude Code versions record hook execution in the transcript."
+            )
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 16) {
+                        runtimeStat(label: "Hooks", value: "\(aggregates.count)")
+                        runtimeStat(label: "Total fires", value: "\(aggregates.reduce(0) { $0 + $1.fireCount })")
+                        runtimeStat(label: "Failures", value: "\(totalFailures)", highlight: totalFailures > 0)
+                    }
+
+                    ForEach(aggregates) { agg in
+                        CardView {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Text(agg.hookName)
+                                        .font(.system(size: 13, weight: .medium))
+                                    if !agg.isConfigured {
+                                        Text("not in config")
+                                            .font(Typography.micro)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Color.okabeOrange.opacity(0.15))
+                                            .clipShape(Capsule())
+                                            .foregroundStyle(Color.okabeOrange)
+                                            .help("This command appears in transcripts but matches no currently configured hook")
+                                    }
+                                    Spacer()
+                                    if agg.errorCount > 0 {
+                                        Text("\(agg.errorCount) failed")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(Color.okabeVermillion)
+                                    }
+                                }
+
+                                Text(agg.command.isEmpty ? "(no command recorded)" : agg.command)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                                    .textSelection(.enabled)
+
+                                HStack(spacing: 12) {
+                                    Text("\(agg.fireCount) fire\(agg.fireCount == 1 ? "" : "s")")
+                                    Text("\(agg.sessionCount) session\(agg.sessionCount == 1 ? "" : "s")")
+                                    if agg.avgDurationMs > 0 {
+                                        Text("avg \(agg.avgDurationMs)ms")
+                                    }
+                                    if agg.maxDurationMs > 0 {
+                                        Text("max \(agg.maxDurationMs)ms")
+                                    }
+                                }
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                }
+                .padding(24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func runtimeStat(label: String, value: String, highlight: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .foregroundStyle(highlight ? Color.okabeVermillion : Color.primary)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .frame(minWidth: 80, alignment: .leading)
     }
 }

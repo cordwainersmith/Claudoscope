@@ -174,6 +174,114 @@ extension ConfigLinterService {
             ))
         }
 
+        let sandbox = json["sandbox"] as? [String: Any]
+        let sandboxEnabled = (sandbox?["enabled"] as? Bool) == true
+        let network = sandbox?["network"] as? [String: Any]
+
+        // CFG013: filesystem isolation switched off (CC 2.1.216)
+        if (sandbox?["filesystem"] as? [String: Any])?["disabled"] as? Bool == true {
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .CFG013,
+                filePath: settingsPath,
+                message: "sandbox.filesystem.disabled is true. Sandboxed commands get full filesystem access; only network egress is still controlled.",
+                fix: "Remove sandbox.filesystem.disabled unless a specific tool cannot run under filesystem isolation.",
+                displayPath: "settings.json"
+            ))
+        }
+
+        // CFG014: sandbox without a strict network allowlist (CC 2.1.219)
+        if sandboxEnabled, (network?["strictAllowlist"] as? Bool) != true {
+            results.append(LintResult(
+                severity: .info,
+                checkId: .CFG014,
+                filePath: settingsPath,
+                message: "sandbox.enabled is true without sandbox.network.strictAllowlist. A command reaching a non-allowlisted host prompts for approval instead of being denied.",
+                fix: "Set sandbox.network.strictAllowlist to true to deny unlisted hosts outright.",
+                displayPath: "settings.json"
+            ))
+        }
+
+        // CFG015: credential masking needs TLS termination to substitute on egress
+        // (CC 2.1.221/.224). Without it the mask never applies and the sentinel value
+        // is what leaves the machine.
+        if let cred = sandbox?["credentials"] as? [String: Any] {
+            let entries = ((cred["files"] as? [[String: Any]]) ?? []) + ((cred["envVars"] as? [[String: Any]]) ?? [])
+            let masks = entries.filter { ($0["mode"] as? String) == "mask" }
+            if !masks.isEmpty, (network?["tlsTerminate"] as? Bool) != true {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .CFG015,
+                    filePath: settingsPath,
+                    message: "\(masks.count) sandbox credential entr\(masks.count == 1 ? "y uses" : "ies use") mode \"mask\" but sandbox.network.tlsTerminate is not enabled, so the real value is never substituted on egress.",
+                    fix: "Enable sandbox.network.tlsTerminate, or switch those entries to mode \"deny\".",
+                    displayPath: "settings.json"
+                ))
+            }
+        }
+
+        // CFG018: cross-session messages auto-accepted into a bypassed session
+        // (CC 2.1.224). Claude Code holds them for approval by default in that
+        // combination; "accept" opts out of the one guard on the path.
+        let defaultMode = (json["permissions"] as? [String: Any])?["defaultMode"] as? String
+        if json["crossSessionInbound"] as? String == "accept", defaultMode == "bypassPermissions" {
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .CFG018,
+                filePath: settingsPath,
+                message: "crossSessionInbound is \"accept\" while permissions.defaultMode is \"bypassPermissions\". Messages from your other sessions are delivered unreviewed to a session that approves every tool call.",
+                fix: "Set crossSessionInbound to \"hold\" so inbound messages are approved first.",
+                displayPath: "settings.json"
+            ))
+        }
+
+        results += lintProjectScopedSettings(projectRoot: projectRoot)
+
+        return results
+    }
+
+    /// Rules for keys that Claude Code reads only from user, managed, or `--settings`
+    /// scope. Setting them in a repo is not an error the CLI reports, it just does
+    /// nothing, which reads as working config to whoever added it.
+    private func lintProjectScopedSettings(projectRoot: URL?) -> [LintResult] {
+        guard let projectRoot else { return [] }
+        var results: [LintResult] = []
+
+        for name in ["settings.json", "settings.local.json"] {
+            let url = projectRoot.appendingPathComponent(".claude").appendingPathComponent(name)
+            guard let data = try? Data(contentsOf: url),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { continue }
+            let displayPath = ".claude/\(name)"
+
+            // CFG016: sandbox binary overrides ignored outside user scope (CC 2.1.232)
+            if let sandbox = json["sandbox"] as? [String: Any] {
+                let overrides = ["bwrapPath", "socatPath", "ripgrep"].filter { sandbox[$0] != nil }
+                if !overrides.isEmpty {
+                    results.append(LintResult(
+                        severity: .warning,
+                        checkId: .CFG016,
+                        filePath: url.path,
+                        message: "sandbox.\(overrides.joined(separator: ", sandbox.")) set in project settings. Claude Code 2.1.232 honors sandbox binary overrides only from user, managed, and --settings scope, so this has no effect.",
+                        fix: "Move the override to ~/.claude/settings.json, or remove it.",
+                        displayPath: displayPath
+                    ))
+                }
+            }
+
+            // CFG017: Remote Control auto-start ignored from repo-local scope (CC 2.1.222)
+            if json["remoteControlAtStartup"] as? Bool == true {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .CFG017,
+                    filePath: url.path,
+                    message: "remoteControlAtStartup is enabled in project settings. Since Claude Code 2.1.222 repo-local settings can only turn Remote Control off, never on.",
+                    fix: "Enable Remote Control at user scope via /config, or remove the key.",
+                    displayPath: displayPath
+                ))
+            }
+        }
+
         return results
     }
 }

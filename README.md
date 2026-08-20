@@ -64,6 +64,7 @@ Full version history is in [CHANGELOG.md](CHANGELOG.md).
   - [Plans](#plans)
   - [Timeline](#timeline)
   - [Cowork](#cowork)
+  - [Tasks & Jobs](#tasks--jobs)
   - [Hooks](#hooks)
   - [Commands](#commands)
   - [MCPs](#mcps)
@@ -148,7 +149,7 @@ All scanning is local. Detected secrets never leave your machine, and Claudoscop
 
 ## Hardening
 
-Claude Code is powerful by design: it reads your filesystem, runs shell commands, and reaches outbound networks. Out of the box, those capabilities ship with very few guardrails. Claudoscope's Hardening rail installs a vendor-neutral security baseline into `~/.claude/` in a single click, then continuously verifies that the baseline stays in place.
+Claude Code is powerful by design: it reads your filesystem, runs shell commands, and reaches outbound networks. Out of the box, those capabilities ship with very few guardrails. Claudoscope's Hardening view (the Hardening section of the [Health](#config-health) rail) installs a vendor-neutral security baseline into `~/.claude/` in a single click, then continuously verifies that the baseline stays in place.
 
 The baseline is layered, so weakening any single layer does not unlock the others:
 
@@ -203,13 +204,17 @@ A global project and date lens sits above the sidebar filter and scopes the Sess
 
 ![Analytics Dashboard](screenshots/analytics.png)
 
-Aggregates token usage and cost data across all your Claude Code sessions. A segmented picker switches between three tabs:
+Aggregates token usage and cost data across all your Claude Code sessions. A Usage/Insights toggle at the top switches between the usage dashboard and the session-quality view.
+
+**Usage** has three tabs:
 
 - **Overview**: summary cards (sessions, messages, tokens, cache tokens, estimated cost), daily usage bar chart, project cost breakdown, and model distribution by family
 - **Cache**: hit ratio with cache-busting detection, stability callout, 5-minute vs. 1-hour TTL tier breakdown, per-session efficiency ranking, model-aware savings estimate, and cached vs. uncached cost comparison
 - **Models**: daily cost by model chart, model efficiency table, and a what-if calculator that estimates savings from switching Opus usage to Sonnet
 
 All tabs share a time range selector (7/30/90 days or custom) and an optional project filter.
+
+**Insights** reads the session facets Claude Code's `/insights` command writes locally (outcome, friction, satisfaction, goal categories, session type) and joins them to Claudoscope's cost engine: outcome distribution, friction frequency, and average cost by outcome, plus a per-session facet detail with a jump straight to the session. Facets exist only after you run `/insights`, so a coverage banner always states how many sessions are covered and when they were last generated.
 
 ### Sessions
 
@@ -253,9 +258,22 @@ The rail appears automatically once Cowork is configured and at least one sessio
 
 Cowork spend is also rolled into the Analytics Est. Cost card so the dashboard reflects your true total Claude bill, not just the CLI portion.
 
+### Tasks & Jobs
+
+A monitor for Claude Code's local background machinery:
+
+- **Background jobs** from `~/.claude/jobs/`: each job's state, timeline, token count, template/backend, and final result, with a live daemon supervisor status line. Job environment maps (`providerEnv`) are never decoded, so credentials stored in job state can never surface anywhere in the app.
+- **Task lists** from `~/.claude/tasks/`: the per-session checklists Claude Code maintains, rendered with status icons and "blocked by" dependency chips, split into lists with open work and completed lists.
+
+Where a job or task list belongs to a session whose transcript is still in your local corpus, an "Open session" button jumps straight to it.
+
 ### Hooks
 
-All registered Claude Code hooks merged from five sources (user, project, project-local, plugin, managed) and grouped by event type, including `PreToolUse`, `PostToolUse`, `PermissionDenied`, `SessionStart`, `SessionEnd`, `Stop`, `UserPromptSubmit`, `Notification`, `PreCompact`, `PostToolUseFailure`, `FileChanged`, and any new event types as they appear. Each entry shows matcher pattern, command, timeout, and source label.
+A Configuration/Runtime toggle splits the rail into what is registered and what actually ran.
+
+**Configuration** shows all registered Claude Code hooks merged from five sources (user, project, project-local, plugin, managed) and grouped by event type, including `PreToolUse`, `PostToolUse`, `PermissionDenied`, `SessionStart`, `SessionEnd`, `Stop`, `UserPromptSubmit`, `Notification`, `PreCompact`, `PostToolUseFailure`, `FileChanged`, and any new event types as they appear. Each entry shows matcher pattern, command, timeout, and source label.
+
+**Runtime** folds the hook execution records Claude Code writes into transcripts across every parsed session: per-hook fire counts, failure counts, average and max duration, how many sessions each hook ran in, and a "not in config" badge for commands that appear in old transcripts but match no currently registered hook. Sidebar event rows carry fire and failure counts, and the chat view marks each Stop-hook batch inline, including one that blocked continuation.
 
 ### Commands
 
@@ -273,7 +291,7 @@ All installed Claude Code skills, with name and trigger description. Selecting a
 
 ### Agents
 
-A read-only inventory of every agent definition installed on your machine, merged from your user directory, each project's `.claude/agents/`, and any plugins that ship agents. Agents installed by Claudoscope's [Agent Routing](#agent-routing) rail are grouped into a pinned section with a badge, so it is always clear which ones came from the app and which are yours.
+A read-only inventory of every agent definition installed on your machine, merged from your user directory, each project's `.claude/agents/`, and any plugins that ship agents. Agents installed by Claudoscope's [Agent Routing](#agent-routing) view are grouped into a pinned section with a badge, so it is always clear which ones came from the app and which are yours.
 
 ### Plugins
 
@@ -295,7 +313,9 @@ Opt-in is per project, with bulk enable and disable available in Settings. A CAN
 
 ### Config Health
 
-Runs 62 lint rules across your Claude Code configuration, sessions, and security posture, grouped into six categories: Security, Session Performance, Skills & Hooks, Configuration, Plugins, and Canon. Two further families live in their own rails: seven Agent Routing drift checks (RTG) in [Agent Routing](#agent-routing), and thirteen hardening-baseline drift checks (HRD001 through HRD013) in [Hardening](#hardening).
+The Health rail has three sections behind one icon: **Health** (the linter below), **Hardening** (the [security baseline](#hardening)), and **Routing** ([Agent Routing](#agent-routing)). All three read the same lint results.
+
+The Health section runs 69 lint rules across your Claude Code configuration, sessions, and security posture, grouped into six categories: Security, Session Performance, Skills & Hooks, Configuration, Plugins, and Canon. Two further families live in the sibling sections: seven Agent Routing drift checks (RTG) in [Agent Routing](#agent-routing), and thirteen hardening-baseline drift checks (HRD001 through HRD013) in [Hardening](#hardening).
 
 - **Health score**: weighted summary (Excellent / Good / Fair / Poor) from error and warning counts
 - **Severity filters**: click any stat card (Errors, Warnings, Info) to toggle on or off
@@ -323,9 +343,9 @@ Each session triggers at most one check (the most severe), capped at 10 results.
 
 ### Agent Routing
 
-Claude Code will happily use its most expensive model for a task that a cheaper one would finish just as well. This rail installs a set of role-scoped subagents into `~/.claude/agents/` so work gets routed by what it actually needs: `recon` and `Explore` for read-only lookups and sweeps, `routine` for fully-specified mechanical edits, `builder` for work requiring judgment, `checker` for fresh-context verification, plus `security-review` and `security-build` for security-sensitive work.
+Claude Code will happily use its most expensive model for a task that a cheaper one would finish just as well. This view (the Routing section of the [Health](#config-health) rail) installs a set of role-scoped subagents into `~/.claude/agents/` so work gets routed by what it actually needs: `recon` and `Explore` for read-only lookups and sweeps, `routine` for fully-specified mechanical edits, `builder` for work requiring judgment, `checker` for fresh-context verification, plus `security-review` and `security-build` for security-sensitive work.
 
-Installing also appends a marker-delimited orchestration policy to your global `CLAUDE.md` and sets a fallback model if you do not already have one. Install, reinstall, revert, and uninstall work the same way as the [Hardening](#hardening) rail: every write is preceded by a timestamped, owner-only backup, and uninstall deliberately leaves behind any agent file you have edited yourself. An RTG lint family reports drift from the installed baseline.
+Installing also appends a marker-delimited orchestration policy to your global `CLAUDE.md` and sets a fallback model if you do not already have one. Install, reinstall, revert, and uninstall work the same way as the [Hardening](#hardening) section: every write is preceded by a timestamped, owner-only backup, and uninstall deliberately leaves behind any agent file you have edited yourself. An RTG lint family reports drift from the installed baseline.
 
 ### Settings
 

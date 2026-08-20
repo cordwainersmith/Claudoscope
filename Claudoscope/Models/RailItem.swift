@@ -8,6 +8,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     case plans
     case timeline
     case cowork
+    case tasksJobs
 
     // Config (below separator)
     case hooks
@@ -19,8 +20,6 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
     case memory
     case canon
     case configHealth
-    case hardening
-    case agentRouting
 
     // Pinned bottom
     case settings
@@ -33,6 +32,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .plans:     return "doc.text"
         case .timeline:  return "clock.arrow.circlepath"
         case .cowork:    return "checklist"
+        case .tasksJobs: return "rectangle.stack.badge.play"
         case .hooks:     return "arrow.triangle.turn.up.right.diamond"
         case .commands:  return "terminal"
         case .mcps:      return "point.3.connected.trianglepath.dotted"
@@ -42,8 +42,6 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .memory:       return "brain"
         case .canon:        return "building.columns"
         case .configHealth: return "checkmark.shield"
-        case .hardening:    return "lock.shield"
-        case .agentRouting: return "arrow.triangle.branch"
         case .settings:     return "gear"
         }
     }
@@ -56,6 +54,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .plans:     return "Plans"
         case .timeline:  return "Timeline"
         case .cowork:    return "Cowork"
+        case .tasksJobs: return "Tasks & Jobs"
         case .hooks:     return "Hooks"
         case .commands:  return "Commands"
         case .mcps:      return "MCPs"
@@ -65,8 +64,6 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         case .memory:       return "Memory"
         case .canon:        return "Canon"
         case .configHealth: return "Health"
-        case .hardening:    return "Hardening"
-        case .agentRouting: return "Routing"
         case .settings:     return "Settings"
         }
     }
@@ -78,6 +75,23 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         self == .cowork
     }
 
-    static var primaryItems: [RailItem] { [.analytics, .sessions, .tools, .plans, .timeline, .cowork] }
-    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .agents, .plugins, .memory, .canon, .configHealth, .hardening, .agentRouting] }
+    static var primaryItems: [RailItem] { [.analytics, .sessions, .tools, .plans, .timeline, .cowork, .tasksJobs] }
+    static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .agents, .plugins, .memory, .canon, .configHealth] }
+}
+
+/// Sub-navigation inside the Analytics rail: the usage dashboard vs the
+/// /insights facet view. A tab rather than a rail because Insights data
+/// changes only when the user reruns /insights.
+enum AnalyticsTab: String, CaseIterable, Sendable {
+    case usage = "Usage"
+    case insights = "Insights"
+}
+
+/// Sub-navigation inside the merged Health rail. Health, Hardening, and
+/// Routing are all views over the same ConfigLinter results, so they share
+/// one rail icon and switch here instead.
+enum HealthSection: String, CaseIterable, Sendable {
+    case health = "Health"
+    case hardening = "Hardening"
+    case routing = "Routing"
 }

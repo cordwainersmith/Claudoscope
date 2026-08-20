@@ -90,6 +90,18 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// bare ids of subagents it spawned (via toolUseResult.agentId).
     let agentId: String?
     let spawnedAgentIds: [String]
+    /// Provenance stamped by Claude Code: the worktree a `--worktree` or `/fork`
+    /// session ran in, and the PR or GitLab MR it opened. Nil for an ordinary
+    /// session in the project checkout. Defaulted so the memberwise init stays
+    /// source-compatible with every existing call site.
+    var worktreeName: String? = nil
+    var worktreeBranch: String? = nil
+    var prNumber: Int? = nil
+    var prUrl: String? = nil
+    /// Aggregated hook runtime extracted from hook_success attachment records
+    /// and stop_hook_summary system records. Nil when the session ran no hooks
+    /// or the cached blob predates parserVersion 7.
+    var hookRunStats: HookRunStats? = nil
 
     init(
         id: String,
@@ -116,7 +128,12 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         dailyContributions: [DailyContribution],
         isCowork: Bool = false,
         agentId: String? = nil,
-        spawnedAgentIds: [String] = []
+        spawnedAgentIds: [String] = [],
+        worktreeName: String? = nil,
+        worktreeBranch: String? = nil,
+        prNumber: Int? = nil,
+        prUrl: String? = nil,
+        hookRunStats: HookRunStats? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -143,6 +160,11 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.isCowork = isCowork
         self.agentId = agentId
         self.spawnedAgentIds = spawnedAgentIds
+        self.worktreeName = worktreeName
+        self.worktreeBranch = worktreeBranch
+        self.prNumber = prNumber
+        self.prUrl = prUrl
+        self.hookRunStats = hookRunStats
     }
 }
 

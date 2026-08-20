@@ -39,6 +39,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SKL009  // reserved words in name
     case SKL012  // body >500 lines
     case SKL013  // allowed-tools/disallowed-tools malformed or contradictory
+    case SKL014  // allowed-tools restricted to todo tools, unavailable on current models (CC 2.1.233)
     case SKL_AGG  // aggregate descriptions >16000 chars
 
     // Hook matcher checks
@@ -74,6 +75,12 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG009  // sandbox.enabled without sandbox.credentials
     case CFG010  // sandbox.allowAppleEvents enabled (weakens isolation)
     case CFG011  // respondToBashCommands disabled with hooks present
+    case CFG013  // sandbox.filesystem.disabled (CC 2.1.216)
+    case CFG014  // sandbox enabled without network.strictAllowlist (CC 2.1.219)
+    case CFG015  // credential mode "mask" without network.tlsTerminate (CC 2.1.221/.224)
+    case CFG016  // sandbox binary override in project scope, ignored (CC 2.1.232)
+    case CFG017  // remoteControlAtStartup in project scope, ignored (CC 2.1.222)
+    case CFG018  // crossSessionInbound "accept" under bypassPermissions (CC 2.1.224)
 
     // Hardening baseline checks
     case HRD001  // sandbox.enabled missing or false

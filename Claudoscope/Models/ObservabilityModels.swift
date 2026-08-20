@@ -153,6 +153,33 @@ struct SessionObservability: Sendable, Codable, Equatable {
     )
 }
 
+// MARK: - Hook Runtime Stats
+
+/// Per-hook-command aggregate for one session, folded at parse time from
+/// hook_success attachment records and stop_hook_summary system records.
+struct HookCommandRunStats: Sendable, Codable, Equatable, Identifiable {
+    var id: String { hookName + "|" + command }
+    let hookName: String        // "PreToolUse:Bash", "Stop", ...
+    let command: String         // script path as recorded in the transcript
+    let fireCount: Int
+    let errorCount: Int
+    let totalDurationMs: Int
+    let maxDurationMs: Int
+}
+
+/// Aggregated hook runtime for one session. Bounded by (hook events x
+/// configured commands); never stores per-event data.
+struct HookRunStats: Sendable, Codable, Equatable {
+    let perCommand: [HookCommandRunStats]
+    let stopHookRuns: Int
+    let preventedContinuationCount: Int
+
+    var totalFires: Int { perCommand.reduce(0) { $0 + $1.fireCount } }
+    var totalErrors: Int { perCommand.reduce(0) { $0 + $1.errorCount } }
+
+    static let empty = HookRunStats(perCommand: [], stopHookRuns: 0, preventedContinuationCount: 0)
+}
+
 // MARK: - Session Badge Data
 
 struct SessionBadgeData: Sendable {

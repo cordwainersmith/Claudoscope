@@ -20,6 +20,47 @@ struct CompactionDivider: View {
     }
 }
 
+// MARK: - Hook Summary Divider
+
+/// Inline marker for a stop_hook_summary system record: how many hooks the CLI
+/// ran at this stop, whether any failed, and whether one blocked continuation.
+struct HookSummaryDivider: View {
+    let hookCount: Int
+    let errorCount: Int
+    let preventedContinuation: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Rectangle()
+                .fill(.secondary.opacity(0.2))
+                .frame(height: 1)
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 9))
+                Text(hookCount == 1 ? "1 hook ran" : "\(hookCount) hooks ran")
+                if errorCount > 0 {
+                    Text(errorCount == 1 ? "1 failed" : "\(errorCount) failed")
+                        .foregroundStyle(Color.okabeVermillion)
+                }
+                if preventedContinuation {
+                    Text("stopped continuation")
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.okabeVermillion.opacity(0.15), in: Capsule())
+                        .foregroundStyle(Color.okabeVermillion)
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            Rectangle()
+                .fill(.secondary.opacity(0.2))
+                .frame(height: 1)
+        }
+        .help("Stop hooks the CLI executed at the end of this turn")
+        .padding(.vertical, 8)
+    }
+}
+
 // MARK: - Claude Avatar
 
 struct ClaudeAvatarView: View {

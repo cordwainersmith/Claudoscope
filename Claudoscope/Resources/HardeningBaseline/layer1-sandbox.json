@@ -10,6 +10,7 @@
         "~/.aws/",
         "~/.azure/",
         "~/.config/gh/",
+        "~/.config/glab-cli/",
         "~/.git-credentials",
         "~/.docker/config.json",
         "~/.kube/",

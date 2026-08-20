@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.1.0]
+Catches Claudoscope up with Claude Code 2.1.196 through 2.1.237, and opens three new observability surfaces: session quality insights, hook runtime stats, and a background tasks and jobs monitor. Two of the fixes are billing corrections you would not have noticed from inside the app: one model priced at zero, and another about to be priced 50% high.
+
+### Fixed
+- **Sonnet 5 no longer reverts to $3/$15 in September.** Sonnet 5's $2/$10 launch rate was announced as introductory pricing through 2026-08-31, and Anthropic has since made it the standard price and cancelled the increase. The dated cutoff has been removed, so Sonnet 5 keeps billing at $2/$10 indefinitely instead of jumping 50% on 2026-09-01.
+- **Claude Mythos 5 is priced.** `claude-mythos-*` matched no model family, so it resolved to the "unknown" rate of zero: sessions using it contributed nothing to any cost figure and were dropped from the model distribution entirely. It now prices at $10/$50 (Fable 5 rates) on all three tables.
+- **Haiku 3.5 billed at Haiku 3 rates.** Both ids shared one table row, underbilling Haiku 3.5 by about 3.2x. Haiku 3.5 now uses its own $0.80/$4 rate; the family label is unchanged, so nothing forks in the UI.
+- **Unpriced models are visible instead of free.** Analytics shows a notice naming any model id with no known rate. Previously such a model cost $0 and was filtered out of the model distribution, so a session that ran entirely on one looked like it had never happened.
+- **Skill tool restrictions no longer flag working config.** The known-tools list had stalled at twelve entries, so any skill whose `allowed-tools` named Agent, Skill, ToolSearch, AskUserQuestion, SendMessage, or a Task tool drew a spurious "unknown tool name" warning. The list now covers the current tool surface.
+- **`DirectoryAdded` recognized as a hook event** (Claude Code 2.1.219), so a matcher set on it is correctly reported as dead config.
+- **GitLab marketplaces and archive plugin sources display their source.** `additionalMarketplaces` is now read as an alias for `extraKnownMarketplaces` (2.1.232), and the `archive` (2.1.224) and `command` (2.1.229) plugin sources show their URL or command instead of a blank detail.
+
+### New Features
+- **Insights tab in Analytics.** Reads the session facets Claude Code's `/insights` writes to `~/.claude/usage-data/` (outcome, friction, satisfaction, goal, session type) and joins them to Claudoscope's cost engine: outcome distribution, friction frequency, and average cost by outcome, plus a per-session facet detail with a jump to the session. A coverage banner states how many sessions have facets and when they were last generated, since facets exist only after running `/insights`. Lives as a Usage/Insights toggle inside the Analytics rail rather than its own icon.
+- **Hooks Runtime tab.** The Hooks rail gains a Configuration/Runtime toggle. Runtime shows what actually executed across all parsed sessions, folded from the hook execution records in transcripts: per-hook fire counts, failures, average and max duration, session counts, and a "not in config" badge for commands seen in old transcripts that match no current hook. Sidebar event rows carry fire/failure counts, and the chat view marks each Stop-hook batch inline, including one that blocked continuation. Requires a one-time full reparse on first launch (parser version bump).
+- **Tasks & Jobs rail.** Surfaces Claude Code's background jobs (`~/.claude/jobs/`: state, timeline, tokens, result) and per-session task lists (`~/.claude/tasks/`: checklist with dependency chips), with jump-to-session where the owning transcript is still in the corpus and a daemon status line. Job `providerEnv` maps are never decoded, so credentials in job state cannot surface anywhere in the app.
+- **Merged Health rail.** Health, Hardening, and Routing were three icons over the same lint results; they are now one Health rail with a section toggle, shrinking the icon rail.
+- **Context tab.** Per-session chart of how full the context window got on each assistant turn, against that model's ceiling, with compaction events marked. Reports peak context and peak utilization, and flags sessions that mix model generations across the Claude 4.7 tokenizer change, where token counts are not comparable turn to turn.
+- **Session provenance.** Sessions started with `--worktree` or `/fork` show their worktree and branch, and a session that opened a pull request or GitLab merge request links to it from the session header. Claude Code's own generated session names (`ai-title`) are now used as titles, ranking below a `/rename` and above the slug.
+
+### Security
+- **Nine more GitLab token families detected.** Only `glpat-` was recognized; runner, OAuth, pipeline-trigger, agent, import, service-account, CI-build, feature-flag, and deploy tokens now are too. The routable `glpat-`/`gldt-` pair is classified as a critical account-level credential.
+- **`glab` credential store protected** in the hardening sandbox baseline, matching the existing `gh` entry.
+- **Six new configuration checks (CFG013 through CFG018).** Filesystem isolation disabled (2.1.216); sandbox running without a strict network allowlist (2.1.219); credential `mode: "mask"` set without the TLS termination it depends on, which silently leaves masking inert (2.1.221/.224); sandbox binary overrides in project settings, which Claude Code stopped honoring (2.1.232); `remoteControlAtStartup` in project settings, which can no longer enable Remote Control (2.1.222); and cross-session messages auto-accepted into a session running with bypassed permissions (2.1.224).
+- **New SKL014.** Flags a skill restricted only to `TodoWrite` or `Task*` tools, which Claude Code 2.1.233 removed from Opus 4.8, Sonnet 5, Fable 5, Mythos 5, and newer models unless `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` is set.
+
 ## [1.0.0]
 🎉 **One point oh.** Claudoscope started as a menu bar readout for a single number and grew into a full lens on where Claude Code actually spends your time and money. This is the release where the data holds still: session summaries persist between launches instead of being re-parsed every time, cost estimates have been audited against real bills, and everything Claude touched in a session is one tab away.
 

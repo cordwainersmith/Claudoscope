@@ -46,6 +46,10 @@ struct FullWindowView: View {
 
     // Plugins state
     @State private var selectedPluginId: String?
+    @State private var selectedTasksJobsItem: TasksJobsSelection?
+    @State private var selectedInsightSessionId: String?
+    @State private var analyticsTab: AnalyticsTab = .usage
+    @State private var healthSection: HealthSection = .health
 
     // Sidebar resize
     @AppStorage("sidebarWidth") private var sidebarWidth: Double = 240
@@ -174,7 +178,11 @@ struct FullWindowView: View {
                 selectedHealthItem: $selectedHealthItem,
                 selectedTimelineDay: $selectedTimelineDay,
                 selectedCoworkSessionId: $selectedCoworkSessionId,
-                selectedPluginId: $selectedPluginId
+                selectedPluginId: $selectedPluginId,
+                selectedTasksJobsItem: $selectedTasksJobsItem,
+                selectedInsightSessionId: $selectedInsightSessionId,
+                analyticsTab: analyticsTab,
+                healthSection: $healthSection
             )
 
             SidebarResizeHandle(sidebarWidth: $sidebarWidth, dragStartWidth: $dragStartWidth)
@@ -196,6 +204,10 @@ struct FullWindowView: View {
                 selectedSettingsSection: $selectedSettingsSection,
                 selectedCoworkSessionId: $selectedCoworkSessionId,
                 selectedPluginId: $selectedPluginId,
+                selectedTasksJobsItem: selectedTasksJobsItem,
+                selectedInsightSessionId: selectedInsightSessionId,
+                analyticsTab: $analyticsTab,
+                healthSection: healthSection,
                 onNavigateToSession: { projectId, sessionId, subagentFileName in
                     pendingSubagentFileName = subagentFileName
                     pendingNavigation = (projectId, sessionId)
@@ -244,7 +256,7 @@ struct FullWindowView: View {
             case .canon:
                 await store.refreshCanonDetection()
                 await store.loadCanon(projectId: selectedCanonProjectId)
-            case .configHealth, .hardening, .agentRouting:
+            case .configHealth:
                 await store.runConfigLintIfNeeded(projectId: selectedProjectId)
             case .plugins:
                 await store.loadConfig(projectId: selectedProjectId)
@@ -254,7 +266,13 @@ struct FullWindowView: View {
                 await store.loadConfig(projectId: selectedProjectId)
             case .cowork:
                 await store.loadCowork()
-            case .analytics, .sessions, .tools:
+            case .tasksJobs:
+                await store.loadTasksJobs()
+            case .analytics:
+                // Insights lives as a tab here; the facet corpus is small
+                // (bounded by /insights runs), so load it with the rail.
+                await store.loadInsights()
+            case .sessions, .tools:
                 break
             }
         }

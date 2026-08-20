@@ -110,7 +110,8 @@ struct ChatView: View {
             }
             return !(record.message?.content?.textContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .system:
-            return record.subtype == "compact_boundary"   // CompactionDivider, never filtered
+            // CompactionDivider / HookSummaryDivider, never filtered
+            return record.subtype == "compact_boundary" || record.subtype == "stop_hook_summary"
         default:
             return false
         }
@@ -348,6 +349,12 @@ struct ChatView: View {
         case .system:
             if record.subtype == "compact_boundary" {
                 CompactionDivider()
+            } else if record.subtype == "stop_hook_summary" {
+                HookSummaryDivider(
+                    hookCount: record.hookCount ?? record.hookInfos?.count ?? 0,
+                    errorCount: record.hookErrors?.count ?? 0,
+                    preventedContinuation: record.preventedContinuation == true
+                )
             }
 
         default:

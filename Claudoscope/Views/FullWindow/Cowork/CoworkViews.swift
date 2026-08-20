@@ -470,8 +470,13 @@ enum CoworkStats {
             t.cacheRead += cacheRead
             t.cacheCreation += cacheCreate
 
+            // LOCAL day of this record, for dated rate lookups. Same derivation and
+            // same "1970-01-01" fallback as SessionParser.parseMetadata, so a record
+            // is never priced on a different day than the parser would price it.
+            let day = record.timestamp.flatMap(ISO8601.localDayKey) ?? "1970-01-01"
+
             let model = record.message?.model ?? "unknown"
-            let pricing = getModelPricing(model, table: pricingTable)
+            let pricing = getModelPricing(model, table: pricingTable, on: day)
             let isUnknown = pricing.isUnknown
             if isUnknown { t.hasUnknownModel = true }
 
@@ -489,6 +494,7 @@ enum CoworkStats {
                 cacheCreation5mTokens: cache5m,
                 cacheCreation1hTokens: cache1h,
                 table: pricingTable,
+                on: day,
                 speedMultiplier: speedMultiplier
             )
             t.cost += msgCost

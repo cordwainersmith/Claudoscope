@@ -62,6 +62,7 @@ struct AnalyticsEngine {
         var projectCostMap: [String: ProjectCost] = [:]
         var modelMap: [String: ModelUsage] = [:]
         var windowed: [WindowedSession] = []
+        var unpricedModels: Set<String> = []
 
         for (session, project) in sessions {
             // Project the session onto the window. A session with no billed day in
@@ -148,6 +149,14 @@ struct AnalyticsEngine {
                 )
             }
 
+            // An "unknown" family is an id no pricing table recognizes: it billed $0
+            // and the distribution below drops it, so without this it disappears
+            // twice over. Name the id when it is the session's primary model.
+            if let u = wFamily["unknown"], u.inputTokens + u.outputTokens > 0 {
+                let id = session.primaryModel
+                unpricedModels.insert(getModelFamily(id) == "unknown" ? (id ?? "unknown") : "unknown")
+            }
+
             // Model distribution: one count per family the session billed in-range
             // (preserving turnCount = "sessions using this family"); tokens are the
             // windowed per-family totals.
@@ -213,7 +222,8 @@ struct AnalyticsEngine {
             effortAnalytics: effortAnalytics,
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: 0,
-            coworkHasUnknownModel: false
+            coworkHasUnknownModel: false,
+            unpricedModels: unpricedModels.sorted()
         )
     }
 
@@ -268,14 +278,16 @@ struct AnalyticsEngine {
             totalCache1h += w.cacheCreation1hTokens
             actualCost += w.cost
 
-            let pricing = getModelPricing(w.session.primaryModel, table: pricingTable)
+            let pricing = getModelPricing(w.session.primaryModel, table: pricingTable, on: w.firstDay)
             // Hypothetical: if all cache reads were billed at base input price instead
             let cacheReadSavingsPerToken = pricing.input - pricing.cacheRead
             let savings = Double(w.cacheReadTokens) / 1e6 * cacheReadSavingsPerToken
             hypotheticalUncachedCost += w.cost + savings
 
-            // Per-session tier cost reconciles with actualCost; unknown-priced sessions
-            // contribute zero on both sides.
+            // Per-session tier cost approximates actualCost; unknown-priced sessions
+            // contribute zero on both sides. It cannot reconcile exactly for a session
+            // that mixes models, or that straddles a dated rate change — one
+            // session-level model and day cannot express either.
             if !pricing.isUnknown {
                 tierCost5m += Double(w.cacheCreation5mTokens) / 1e6 * pricing.cacheCreation5m
                 tierCost1h += Double(w.cacheCreation1hTokens) / 1e6 * pricing.cacheCreation1h
@@ -311,7 +323,9 @@ struct AnalyticsEngine {
             let total = readTokens + writeTokens
             guard total > 0 else { return nil }
             let ratio = Double(readTokens) / Double(total)
-            let pricing = getModelPricing(session.primaryModel, table: pricingTable)
+            // Lifetime (not windowed) figures here, so price on the session's last day.
+            let day = ISO8601.localDayKey(session.lastTimestamp) ?? "1970-01-01"
+            let pricing = getModelPricing(session.primaryModel, table: pricingTable, on: day)
             let savingsPerToken = pricing.input - pricing.cacheRead
             let savings = Double(readTokens) / 1e6 * savingsPerToken
             return SessionCacheEfficiency(
@@ -332,6 +346,9 @@ struct AnalyticsEngine {
                 modelCacheReads[family, default: 0] += fm.cacheReadTokens
             }
         }
+        // Keyed by model FAMILY, so a family under a dated introductory rate reads the
+        // standard row here and its savings figure is modestly overstated. Advisory
+        // number only — billed cost comes from the per-message path in SessionParser.
         let modelSavings: [ModelCacheSavings] = modelCacheReads.compactMap { (model, readTokens) in
             guard readTokens > 0, let pricing = pricingTable[model] else { return nil }
             let savingsRate = pricing.input - pricing.cacheRead
@@ -456,7 +473,8 @@ struct AnalyticsEngine {
                             cacheReadTokens: breakdown.cacheReadTokens,
                             cacheCreation5mTokens: 0,
                             cacheCreation1hTokens: 0,
-                            table: pricingTable
+                            table: pricingTable,
+                            on: ISO8601.localDayKey(session.lastTimestamp) ?? "1970-01-01"
                         )
                         hypotheticalCost += hypothetical
                     } else {

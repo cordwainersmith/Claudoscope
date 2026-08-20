@@ -39,6 +39,8 @@ struct AnalyticsDetailView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 440)
+
+                unpricedModelNotice
             }
             .padding(.horizontal, 24)
             .padding(.top, 24)
@@ -90,6 +92,26 @@ struct AnalyticsDetailView: View {
             case .effort:
                 EffortAnalyticsView(data: data.effortAnalytics)
             }
+        }
+    }
+
+    /// Shown on every tab, because an unpriced model makes every cost figure on all
+    /// of them low. Tokens from an id with no rate bill at $0 and are dropped from
+    /// the model distribution, so this notice is the only trace they leave.
+    @ViewBuilder
+    private var unpricedModelNotice: some View {
+        if !data.unpricedModels.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                Text("No pricing for \(data.unpricedModels.joined(separator: ", ")) — cost below excludes it")
+                    .font(.system(size: 12))
+            }
+            .foregroundStyle(Color.okabeVermillion)
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.okabeVermillion.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
     }
 

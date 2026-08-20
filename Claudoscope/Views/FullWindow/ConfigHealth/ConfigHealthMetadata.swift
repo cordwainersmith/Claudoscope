@@ -239,6 +239,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Tool restriction malformed",
         hint: "A skill's allowed-tools / disallowed-tools frontmatter is malformed or self-contradictory (a tool listed as both allowed and disallowed, or an unknown tool name). Fix the frontmatter so the restriction is unambiguous."
     ),
+    .SKL014: RuleMetadata(
+        displayName: "Skill depends on todo tools",
+        hint: "The skill's allowed-tools names TodoWrite or a Task* tracking tool. Claude Code 2.1.233 removed those tools from Opus 4.8, Sonnet 5, Fable 5, Mythos 5, and newer models, so on a current model the skill is restricted to a tool that isn't there and can do nothing. Set CLAUDE_CODE_ENABLE_TODO_TOOLS=1 to bring them back, or widen the restriction."
+    ),
     .CMD007: RuleMetadata(
         displayName: "Command tool restriction malformed",
         hint: "A command's allowed-tools / disallowed-tools frontmatter is malformed or self-contradictory. Fix the frontmatter so the restriction is unambiguous."
@@ -258,6 +262,30 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .CFG011: RuleMetadata(
         displayName: "Bash commands do not trigger a response",
         hint: "respondToBashCommands is false, so \"!\" bash commands are added to context without a model response. Harmless on its own, but confirm any hook-driven automation still behaves as intended."
+    ),
+    .CFG013: RuleMetadata(
+        displayName: "Sandbox filesystem isolation off",
+        hint: "sandbox.filesystem.disabled skips filesystem isolation while keeping network egress control (Claude Code 2.1.216). Sandboxed commands can read and write anywhere the user can, so the sandbox no longer limits blast radius, only exfiltration. Remove it unless a specific tool cannot run under isolation."
+    ),
+    .CFG014: RuleMetadata(
+        displayName: "Sandbox network allowlist not strict",
+        hint: "The sandbox is on but sandbox.network.strictAllowlist is not, so a command reaching a host outside the allowlist opens a permission prompt instead of being denied (Claude Code 2.1.219). Prompts get approved under time pressure; strict mode makes the allowlist the actual boundary."
+    ),
+    .CFG015: RuleMetadata(
+        displayName: "Credential masking inert",
+        hint: "A sandbox credential entry uses mode \"mask\", which relies on the sandbox proxy substituting the real value on egress. That substitution requires sandbox.network.tlsTerminate; without it the mask never applies. Enable TLS termination or switch the entry to mode \"deny\"."
+    ),
+    .CFG016: RuleMetadata(
+        displayName: "Sandbox binary override ignored",
+        hint: "sandbox.bwrapPath, sandbox.socatPath, and sandbox.ripgrep are honored only from user, managed, and --settings scope since Claude Code 2.1.232 — a repo can no longer swap out the binaries that enforce its own sandbox. The key in project settings does nothing. Move it to ~/.claude/settings.json or remove it."
+    ),
+    .CFG017: RuleMetadata(
+        displayName: "Remote Control auto-start ignored",
+        hint: "Since Claude Code 2.1.222, repo-local settings can turn Remote Control off but never on, so remoteControlAtStartup in project settings has no effect. Enable it at user scope through /config, or remove the key so it stops reading as configured."
+    ),
+    .CFG018: RuleMetadata(
+        displayName: "Cross-session messages auto-accepted",
+        hint: "crossSessionInbound is \"accept\" while permissions.defaultMode is \"bypassPermissions\". Claude Code holds inbound cross-session messages for approval in exactly this combination by default (2.1.224); \"accept\" removes the only review step before another session's instructions reach a session that approves every tool call."
     ),
     .HRD012: RuleMetadata(
         displayName: "autoMode missing hard_deny baseline",
