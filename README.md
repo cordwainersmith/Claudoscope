@@ -218,7 +218,7 @@ All tabs share a time range selector (7/30/90 days or custom) and an optional pr
 
 ### Sessions
 
-The core session explorer. The sidebar lists all projects discovered under `~/.claude/projects/`, with sessions grouped by project. Each session row shows inline observability badges: error indicators (rate limits, auth failures, tool errors), idle/zombie gap warnings, and git worktree markers.
+The core session explorer. The sidebar lists all projects discovered under `~/.claude/projects/`, with sessions grouped by project. Each session row shows inline observability badges: error indicators (rate limits, auth failures, tool errors), idle/zombie gap warnings, git worktree markers, and a pull-request chip on sessions that opened one.
 
 The chat view renders the complete conversation thread with:
 
@@ -232,6 +232,10 @@ The chat view renders the complete conversation thread with:
 - A **Focus** toggle that hides thinking blocks and tool/MCP activity so you can read just the conversation. Filtering is display-only, so tokens and cost stay computed on the full transcript.
 
 **Files tab.** Every session also has a Files tab listing each file Claude edited or wrote, with a chronological diff for every individual edit reconstructed from the transcript. Edits made by subagents are merged in with a badge and anchored to the call that spawned them. Each entry offers open, reveal in Finder, copy patch, and jump to the matching point in the chat, and files that changed on disk after the session touched them are flagged.
+
+**Context tab.** A per-turn chart of how full the context window actually got, plotted against the ceiling of the model that turn ran on, with every compaction event marked on the timeline. It reports peak context, peak utilization (highlighted past 80%, where auto-compact becomes likely to fire mid-task), and the compaction count, so you can see whether a session was running out of room and whether compaction bought it any. Sessions that mix model generations across the Claude 4.7 tokenizer change carry a caveat, since later models produce roughly 30% more tokens for the same text and turn-to-turn comparisons across that boundary are not like-for-like.
+
+**Session provenance.** Sessions started with `--worktree` or `/fork` show the worktree they ran in and its branch, and a session that opened a pull request or GitLab merge request links straight to it from the session header. Claude Code's own generated session names are used as titles where present, ranking below an explicit `/rename` and above the directory slug.
 
 ### Tools
 
