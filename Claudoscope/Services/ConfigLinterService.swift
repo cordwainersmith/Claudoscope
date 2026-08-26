@@ -100,6 +100,9 @@ actor ConfigLinterService {
         let plugins = await configService.loadPlugins()
         results.append(contentsOf: lintPlugins(plugins: plugins))
 
+        // Channel plugin checks (CHN001-CHN003)
+        results.append(contentsOf: lintChannels(plugins: plugins, globalClaudeDir: globalClaudeDir))
+
         // Hook matcher checks (HOOK001-HOOK004)
         var hookProjectPaths: [(name: String, path: String)] = []
         if let root = projectRoot {

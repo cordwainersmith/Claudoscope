@@ -351,6 +351,18 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Plugin contributes no components",
         hint: "A plugin contributes no commands, skills, or hooks. It may be misconfigured or an empty install."
     ),
+    .CHN001: RuleMetadata(
+        displayName: "Channel plugin enabled",
+        hint: "A known channel plugin (Telegram, Discord, iMessage, fakechat) is installed and enabled. Channels are MCP servers that push external events into live sessions, so anyone who can reach the endpoint can put text in front of Claude: a prompt-injection surface. Two-way channels can also opt into permission relay, answering Bash/Write/Edit approvals remotely from a phone. Verify sender gating/pairing is configured and that remote approvals are intended."
+    ),
+    .CHN002: RuleMetadata(
+        displayName: "Channels inert on third-party provider",
+        hint: "A channel plugin is enabled but settings.json env selects Vertex or Bedrock, where Claude Code silently ignores channels (they are also disabled in non-interactive -p mode). The plugin is dead weight until a first-party Anthropic login is used. Detection is best-effort: provider env vars set only in your shell profile are not visible to this check."
+    ),
+    .CHN003: RuleMetadata(
+        displayName: "channelsEnabled policy set",
+        hint: "The channelsEnabled org-policy key is present in settings.json, explicitly turning the channels feature on or off for this environment. Confirm the value matches your governance intent. This is separate from allowedChannelPlugins (CFG004), which restricts which channel plugins may load."
+    ),
     .CAN001: RuleMetadata(
         displayName: "Canon protocol missing",
         hint: "Canon is enabled for this project but .claude/rules/canon.md is absent, so Claude Code won't follow the canon protocol. Re-enable Canon from the Canon rail to reinstall the protocol rule."
@@ -387,7 +399,7 @@ let healthCategories: [CategoryDef] = [
     CategoryDef(id: "performance", label: "Session performance", icon: "~", color: Color(red: 0.937, green: 0.624, blue: 0.153), prefixes: ["SES"], sortOrder: 2),
     CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS", "HOOK"], sortOrder: 3),
     CategoryDef(id: "config", label: "Configuration", icon: "i", color: Color(red: 0.216, green: 0.541, blue: 0.867), prefixes: ["XCT", "CFG", "CMD", "RUL"], sortOrder: 4),
-    CategoryDef(id: "plugins", label: "Plugins", icon: "P", color: Color(red: 0.357, green: 0.678, blue: 0.518), prefixes: ["PLG"], sortOrder: 5),
+    CategoryDef(id: "plugins", label: "Plugins", icon: "P", color: Color(red: 0.357, green: 0.678, blue: 0.518), prefixes: ["PLG", "CHN"], sortOrder: 5),
     CategoryDef(id: "canon", label: "Canon", icon: "C", color: Color(red: 0.553, green: 0.435, blue: 0.302), prefixes: ["CAN"], sortOrder: 6),
 ]
 

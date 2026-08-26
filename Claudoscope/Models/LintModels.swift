@@ -111,6 +111,11 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case PLG002  // plugin dependency cycle
     case PLG003  // plugin declares no components
 
+    // Channel plugin checks
+    case CHN001  // known channel plugin installed and enabled (prompt-injection surface, permission relay)
+    case CHN002  // channel plugin enabled but third-party provider selected (channels silently ignored)
+    case CHN003  // channelsEnabled policy key present in settings.json
+
     // Canon checks
     case CAN001  // opted-in but protocol rule .claude/rules/canon.md missing
     case CAN002  // canon records gitignored (won't be shared with the team)

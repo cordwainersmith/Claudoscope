@@ -299,6 +299,8 @@ Every Claude Code plugin installed on your machine, with the components each one
 
 The rail also runs three dependency checks: a plugin that declares a dependency which is not installed or enabled, a dependency cycle between plugins, and a plugin that contributes no components at all.
 
+**Channel plugins** get their own checks (**CHN**), because they behave unlike any other plugin: a channel lets an external endpoint push messages directly into a live session, and a two-way channel can opt into relaying tool-permission prompts so approvals can be answered remotely. Claudoscope flags each enabled channel plugin as that surface, notes when one is enabled on a Vertex or Bedrock setup where Claude Code silently ignores channels entirely, and reports the `channelsEnabled` org-policy key whenever it is set. Results appear under Plugins in [Config Health](#config-health).
+
 ### Memory
 
 All `CLAUDE.md` and memory files Claude Code uses for persistent context: the global `~/.claude/CLAUDE.md`, project-level `CLAUDE.md` files, and auto-memory files. Selecting a file renders its markdown content.
@@ -315,7 +317,7 @@ Opt-in is per project, with bulk enable and disable available in Settings. A CAN
 
 The Health rail has three sections behind one icon: **Health** (the linter below), **Hardening** (the [security baseline](#hardening)), and **Routing** ([Agent Routing](#agent-routing)). All three read the same lint results.
 
-The Health section runs 69 lint rules across your Claude Code configuration, sessions, and security posture, grouped into six categories: Security, Session Performance, Skills & Hooks, Configuration, Plugins, and Canon. Two further families live in the sibling sections: seven Agent Routing drift checks (RTG) in [Agent Routing](#agent-routing), and thirteen hardening-baseline drift checks (HRD001 through HRD013) in [Hardening](#hardening).
+The Health section runs 72 lint rules across your Claude Code configuration, sessions, and security posture, grouped into six categories: Security, Session Performance, Skills & Hooks, Configuration, Plugins, and Canon. Two further families live in the sibling sections: seven Agent Routing drift checks (RTG) in [Agent Routing](#agent-routing), and thirteen hardening-baseline drift checks (HRD001 through HRD013) in [Hardening](#hardening).
 
 - **Health score**: weighted summary (Excellent / Good / Fair / Poor) from error and warning counts
 - **Severity filters**: click any stat card (Errors, Warnings, Info) to toggle on or off
@@ -324,7 +326,7 @@ The Health section runs 69 lint rules across your Claude Code configuration, ses
 - **Rescan**: re-run all checks without switching tabs
 - **Skill display names**: skills identified by directory name (e.g. "animate", "context7") instead of the repeated "SKILL.md" filename
 
-Rule families: CLAUDE.md size and structure (**CMD**), rules YAML frontmatter and glob validation (**RUL**), skill metadata completeness and naming conventions (**SKL**), hook matcher validity (**HOOK**), plugin dependency integrity (**PLG**), canon protocol and record health (**CAN**), cross-cutting token budget estimates (**XCT**), and settings validation (**CFG**).
+Rule families: CLAUDE.md size and structure (**CMD**), rules YAML frontmatter and glob validation (**RUL**), skill metadata completeness and naming conventions (**SKL**), hook matcher validity (**HOOK**), plugin dependency integrity (**PLG**), channel plugin exposure (**CHN**), canon protocol and record health (**CAN**), cross-cutting token budget estimates (**XCT**), and settings validation (**CFG**).
 
 **Secret detection** (**SEC** rules) scans session JSONL files for accidentally leaked credentials across ten patterns, with a multi-stage false-positive filter and real-time alerts on new matches. See [Secret Scanning](#secret-scanning) for the full feature.
 
