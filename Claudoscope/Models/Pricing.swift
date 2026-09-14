@@ -32,6 +32,7 @@ struct ModelPricing: Sendable {
 struct PricingTables {
     static let anthropic: [String: ModelPricing] = [
         "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
+        "fable51": ModelPricing(input: 10,   output: 50,    cacheRead: 0.25,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "mythos": ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10,   webSearchRequestFee: 0.01),
         "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30,   webSearchRequestFee: 0.01),
@@ -46,6 +47,7 @@ struct PricingTables {
         // Fable and Mythos on Vertex are provisional: they assume Anthropic-mirrored
         // rates and are not yet bill-validated.
         "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
+        "fable51": ModelPricing(input: 10,   output: 50,    cacheRead: 0.25,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "mythos": ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10,   webSearchRequestFee: 0.01),
         "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30,   webSearchRequestFee: 0.01),
@@ -60,6 +62,7 @@ struct PricingTables {
         // Fable and Mythos on Vertex are provisional: they assume Anthropic rate x1.1
         // regional and are not yet bill-validated.
         "fable":  ModelPricing(input: 11,    output: 55,     cacheRead: 1.10,   cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
+        "fable51": ModelPricing(input: 11,   output: 55,     cacheRead: 0.275,  cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
         "mythos": ModelPricing(input: 11,    output: 55,     cacheRead: 1.10,   cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
         "opus":   ModelPricing(input: 5.50,  output: 27.50,  cacheRead: 0.55,   cacheCreation5m: 6.875,   cacheCreation1h: 11,   webSearchRequestFee: 0.011),
         "opus4":  ModelPricing(input: 16.50, output: 82.50,  cacheRead: 1.65,   cacheCreation5m: 20.625,  cacheCreation1h: 33,   webSearchRequestFee: 0.011),
@@ -119,10 +122,12 @@ private let legacyHaikuMarkers = ["claude-3-haiku", "claude-3-5-haiku"]
 /// (id marker, pricing-table key) pairs. Sonnet 5 is $2/$10 against Sonnet 4.5/4.6's
 /// $3/$15; Haiku 3.5 is $0.80/$4 against Haiku 3's $0.25/$1.25. Both are permanent
 /// rate differences, not dated windows: Anthropic cancelled the 2026-09-01 increase
-/// that would have moved Sonnet 5 onto the standard row.
+/// that would have moved Sonnet 5 onto the standard row. Fable 5.1 keeps Fable 5's
+/// $10/$50 input/output but drops cache reads to $0.25/MTok against Fable 5's $1.00.
 private let rateSplitMarkers: [(marker: String, key: String)] = [
     ("sonnet-5", "sonnet5"),
     ("claude-3-5-haiku", "haiku35"),
+    ("fable-5-1", "fable51"),
 ]
 
 /// Canonical fingerprint of the dated rate windows in force, hashed into the cache

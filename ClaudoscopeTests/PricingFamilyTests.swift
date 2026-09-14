@@ -299,6 +299,56 @@ final class PricingFamilyTests: XCTestCase {
         XCTAssertEqual(getModelFamily("claude-3-5-haiku-20241022"), "haiku3")
     }
 
+    // MARK: - Fable 5.1 rate split
+
+    // Fable 5.1 keeps Fable 5's $10/$50 input/output but drops cache reads to
+    // $0.25/MTok against Fable 5's $1.00. Both ids share the "fable" family, so the
+    // difference lives in the pricing key, not the family.
+
+    func testFable51ResolvesToFableFamily() {
+        // Must NOT become "fable51": same reasoning as Sonnet 5 — the family string
+        // is also a UI label and analytics aggregation key.
+        XCTAssertEqual(getModelFamily("claude-fable-5-1"), "fable")
+    }
+
+    func testFable51AnthropicPricing() {
+        let p = getModelPricing("claude-fable-5-1", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertFalse(p.isUnknown)
+        XCTAssertEqual(p.input, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 50.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 12.5, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 20.0, accuracy: 1e-9)
+    }
+
+    func testFable51VertexRegionalPricing() {
+        let p = getModelPricing("claude-fable-5-1", table: PricingTables.vertexRegional, on: anyDay)
+        XCTAssertEqual(p.input, 11.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 55.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.275, accuracy: 1e-9)
+    }
+
+    func testFable5KeepsTheStandardCacheReadRate() {
+        // The split row is keyed on the Fable 5.1 marker, not the family, so Fable 5
+        // still bills the $1.00/MTok cache read rate.
+        let p = getModelPricing("claude-fable-5", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertEqual(p.cacheRead, 1.0, accuracy: 1e-9)
+    }
+
+    /// End-to-end: a real `claude-fable-5-1` assistant record must price its cache
+    /// reads at $0.25/MTok via the family -> breakdown -> cost chain.
+    func testFable51SessionParsesAtFable51Rate() async throws {
+        let parser = SessionParser()
+        let rec = "{\"type\":\"assistant\",\"uuid\":\"u1\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-09-10T10:00:00.000Z\",\"message\":{\"role\":\"assistant\",\"id\":\"m1\",\"stop_reason\":\"end_turn\",\"model\":\"claude-fable-5-1\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":2000,\"cache_read_input_tokens\":1000,\"service_tier\":\"standard\"}}}"
+        let url = try writeTempFile([rec])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let s = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: PricingTables.anthropic)
+        // 1000 input * $10/MTok + 2000 output * $50/MTok + 1000 cache-read * $0.25/MTok
+        // = 0.01 + 0.10 + 0.00025 = 0.11025
+        XCTAssertEqual(s.estimatedCost, 0.11025, accuracy: 1e-9)
+    }
+
     // MARK: - Unpriced models
 
     /// An id no table knows must resolve to `isUnknown` so the UI can flag it. The
