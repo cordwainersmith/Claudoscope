@@ -12,6 +12,25 @@ private struct ModelDayAcc {
     var turnCount = 0
 }
 
+/// Key for the per-day MCP accumulator. A struct rather than a joined
+/// "server/tool" string so consumers never have to re-split it: the MCPs rail
+/// joins on server alone, the analytics table shows both parts.
+private struct McpKey: Hashable {
+    let server: String
+    let tool: String
+}
+
+/// Counters for one attribution key on one day. Same five fields as
+/// `ModelDayAcc`, kept separate because attribution is a partial partition
+/// while the model breakdown is a total one.
+private struct AttrAcc {
+    var inputTokens = 0
+    var outputTokens = 0
+    var cacheReadTokens = 0
+    var estimatedCost = 0.0
+    var turnCount = 0
+}
+
 private struct DayAcc {
     var inputTokens = 0
     var outputTokens = 0
@@ -21,6 +40,11 @@ private struct DayAcc {
     var cacheCreation1hTokens = 0
     var estimatedCost = 0.0
     var model: [String: ModelDayAcc] = [:]
+    /// Partial partitions. A record can carry a skill tag, an MCP tag, both, or
+    /// neither, so these accumulate independently of each other and neither
+    /// sums to `estimatedCost`.
+    var skill: [String: AttrAcc] = [:]
+    var mcp: [McpKey: AttrAcc] = [:]
 }
 
 /// Stream-parses Claude Code JSONL session files.
@@ -40,7 +64,7 @@ actor SessionParser {
     /// Pricing rate-table edits do NOT need a bump: rates are hashed into the
     /// cache's pricing key, as are the dated-rate windows. See
     /// docs/sqlite-persistence-roadmap.md, section 9.
-    static let parserVersion: Int = 7
+    static let parserVersion: Int = 8
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -480,6 +504,9 @@ actor SessionParser {
         var worktreeBranch: String?
         var prNumber: Int?
         var prUrl: String?
+        // Scalars: one value per file across the corpus, so first non-nil wins.
+        var attributionAgent: String?
+        var sessionKind: String?
         var isFirstRecord = true
         var parentSessionId: String? = nil
         var firstTimestamp = ""
@@ -522,6 +549,11 @@ actor SessionParser {
         // flat per-request rate, attributed to the model that issued the search.
         let perSearchFee = webSearchFee(table: pricingTable)
         var lastBilledFamily: String?
+        // Carried attribution keys for the same web-search fee, set on every
+        // billed assistant record INCLUDING to nil, so an untagged turn clears
+        // them instead of leaking the previous skill's tag onto a later fee.
+        var lastBilledSkill: String?
+        var lastBilledMcp: McpKey?
         var localSeenSearchUUIDs = Set<String>()
 
         let isoFormatter = ISO8601DateFormatter()
@@ -586,6 +618,15 @@ actor SessionParser {
             if let url = raw.prUrl, !url.isEmpty {
                 prUrl = url
                 prNumber = raw.prNumber
+            }
+            // Session-scoped attribution scalars. First non-nil wins: a subagent
+            // file carries one agent type throughout, and sessionKind does not
+            // change mid-session.
+            if attributionAgent == nil, let a = raw.attributionAgent, !a.isEmpty {
+                attributionAgent = a
+            }
+            if sessionKind == nil, let k = raw.sessionKind, !k.isEmpty {
+                sessionKind = k
             }
 
             // Track user timestamps for turn duration computation
@@ -711,6 +752,35 @@ actor SessionParser {
                         // Web-search fees (billed on the following tool-result record)
                         // attribute to the model that issued the search.
                         lastBilledFamily = family
+                    }
+
+                    // Attribution: independent partial partitions. A record can
+                    // carry a skill tag, an MCP tag, both, or neither, so these
+                    // are two separate `if`s, never an either/or.
+                    if let skill = raw.attributionSkill, !skill.isEmpty {
+                        var a = day.skill[skill] ?? AttrAcc()
+                        a.inputTokens += msgInput
+                        a.outputTokens += msgOutput
+                        a.cacheReadTokens += msgCacheRead
+                        a.estimatedCost += msgCost
+                        a.turnCount += 1
+                        day.skill[skill] = a
+                        lastBilledSkill = skill
+                    } else {
+                        lastBilledSkill = nil
+                    }
+                    if let tool = raw.attributionMcpTool, !tool.isEmpty {
+                        let key = McpKey(server: raw.attributionMcpServer ?? "", tool: tool)
+                        var a = day.mcp[key] ?? AttrAcc()
+                        a.inputTokens += msgInput
+                        a.outputTokens += msgOutput
+                        a.cacheReadTokens += msgCacheRead
+                        a.estimatedCost += msgCost
+                        a.turnCount += 1
+                        day.mcp[key] = a
+                        lastBilledMcp = key
+                    } else {
+                        lastBilledMcp = nil
                     }
                     dayAccs[dayKey] = day
 
@@ -844,6 +914,20 @@ actor SessionParser {
                         m.estimatedCost += fee
                         day.model[family] = m
                     }
+                    // Mirror the fee into the carried attribution groups so a
+                    // day's attribution stays consistent with its cost. A search
+                    // issued from an untagged turn has nil carried keys and its
+                    // fee correctly lands only in the unattributed remainder.
+                    if let skill = lastBilledSkill {
+                        var a = day.skill[skill] ?? AttrAcc()
+                        a.estimatedCost += fee
+                        day.skill[skill] = a
+                    }
+                    if let key = lastBilledMcp {
+                        var a = day.mcp[key] ?? AttrAcc()
+                        a.estimatedCost += fee
+                        day.mcp[key] = a
+                    }
                     dayAccs[dayKey] = day
                 }
             }
@@ -869,6 +953,10 @@ actor SessionParser {
         var familyCacheRead: [String: Int] = [:]
         var familyCost: [String: Double] = [:]
         var familyTurns: [String: Int] = [:]
+        // Session-level attribution rollups, folded in the same pass as the
+        // per-day arrays so the two levels cannot disagree.
+        var skillAcc: [String: AttrAcc] = [:]
+        var mcpAcc: [McpKey: AttrAcc] = [:]
 
         let dailyContributions: [DailyContribution] = dayAccs.keys.sorted().map { dayKey in
             let acc = dayAccs[dayKey]!
@@ -895,6 +983,45 @@ actor SessionParser {
                     turnCount: m.turnCount
                 )
             }
+            let skills = acc.skill.keys.sorted().map { key -> SkillAttribution in
+                let a = acc.skill[key]!
+                var roll = skillAcc[key] ?? AttrAcc()
+                roll.inputTokens += a.inputTokens
+                roll.outputTokens += a.outputTokens
+                roll.cacheReadTokens += a.cacheReadTokens
+                roll.estimatedCost += a.estimatedCost
+                roll.turnCount += a.turnCount
+                skillAcc[key] = roll
+                return SkillAttribution(
+                    skill: key,
+                    inputTokens: a.inputTokens,
+                    outputTokens: a.outputTokens,
+                    cacheReadTokens: a.cacheReadTokens,
+                    estimatedCost: a.estimatedCost,
+                    turnCount: a.turnCount
+                )
+            }
+            let mcps = acc.mcp.keys
+                .sorted { ($0.server, $0.tool) < ($1.server, $1.tool) }
+                .map { key -> McpAttribution in
+                    let a = acc.mcp[key]!
+                    var roll = mcpAcc[key] ?? AttrAcc()
+                    roll.inputTokens += a.inputTokens
+                    roll.outputTokens += a.outputTokens
+                    roll.cacheReadTokens += a.cacheReadTokens
+                    roll.estimatedCost += a.estimatedCost
+                    roll.turnCount += a.turnCount
+                    mcpAcc[key] = roll
+                    return McpAttribution(
+                        server: key.server,
+                        tool: key.tool,
+                        inputTokens: a.inputTokens,
+                        outputTokens: a.outputTokens,
+                        cacheReadTokens: a.cacheReadTokens,
+                        estimatedCost: a.estimatedCost,
+                        turnCount: a.turnCount
+                    )
+                }
             return DailyContribution(
                 date: dayKey,
                 inputTokens: acc.inputTokens,
@@ -904,7 +1031,9 @@ actor SessionParser {
                 cacheCreation5mTokens: acc.cacheCreation5mTokens,
                 cacheCreation1hTokens: acc.cacheCreation1hTokens,
                 estimatedCost: acc.estimatedCost,
-                modelBreakdown: models
+                modelBreakdown: models,
+                skillBreakdown: skills,
+                mcpBreakdown: mcps
             )
         }
 
@@ -916,6 +1045,29 @@ actor SessionParser {
                 cacheReadTokens: familyCacheRead[family, default: 0],
                 estimatedCost: familyCost[family, default: 0],
                 turnCount: familyTurns[family, default: 0]
+            )
+        }.sorted { $0.estimatedCost > $1.estimatedCost }
+
+        let skillBreakdown = skillAcc.map { key, a in
+            SkillAttribution(
+                skill: key,
+                inputTokens: a.inputTokens,
+                outputTokens: a.outputTokens,
+                cacheReadTokens: a.cacheReadTokens,
+                estimatedCost: a.estimatedCost,
+                turnCount: a.turnCount
+            )
+        }.sorted { $0.estimatedCost > $1.estimatedCost }
+
+        let mcpBreakdown = mcpAcc.map { key, a in
+            McpAttribution(
+                server: key.server,
+                tool: key.tool,
+                inputTokens: a.inputTokens,
+                outputTokens: a.outputTokens,
+                cacheReadTokens: a.cacheReadTokens,
+                estimatedCost: a.estimatedCost,
+                turnCount: a.turnCount
             )
         }.sorted { $0.estimatedCost > $1.estimatedCost }
 
@@ -986,7 +1138,11 @@ actor SessionParser {
             worktreeBranch: worktreeBranch,
             prNumber: prNumber,
             prUrl: prUrl,
-            hookRunStats: hookRunStats
+            hookRunStats: hookRunStats,
+            attributionAgent: attributionAgent,
+            sessionKind: sessionKind,
+            skillBreakdown: skillBreakdown,
+            mcpBreakdown: mcpBreakdown
         )
     }
 

@@ -106,6 +106,45 @@ final class SessionSummaryCodableTests: XCTestCase {
         XCTAssertEqual(decoded, summary)
     }
 
+    /// Blobs written before parserVersion 8 have no attribution keys. They must
+    /// decode to nil rather than throw, which would route every cached row into
+    /// `undecodable` and silently degrade into a full reparse.
+    ///
+    /// This is why the attribution fields are Optional and not defaulted arrays:
+    /// Swift's synthesized Codable ignores property defaults and throws on a
+    /// missing key for a non-optional.
+    func testLegacyBlobWithoutAttributionDecodes() throws {
+        let summary = SessionSummary(
+            id: "sess-legacy-v7", projectId: "p", slug: nil, title: "t",
+            firstTimestamp: "", lastTimestamp: "", messageCount: 0, primaryModel: nil,
+            totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
+            totalCacheCreationTokens: 0, totalCacheCreation5mTokens: 0,
+            totalCacheCreation1hTokens: 0, compactionCount: 0, estimatedCost: 0,
+            hasError: false, modelBreakdown: [], toolCallCount: 0,
+            observability: .empty, isSubagent: false,
+            dailyContributions: [DailyContribution(
+                date: "2026-09-10", inputTokens: 1, outputTokens: 1, cacheReadTokens: 0,
+                cacheCreationTokens: 0, cacheCreation5mTokens: 0, cacheCreation1hTokens: 0,
+                estimatedCost: 0.1, modelBreakdown: []
+            )]
+        )
+        var json = try XCTUnwrap(String(data: JSONEncoder().encode(summary), encoding: .utf8))
+        for key in ["attributionAgent", "sessionKind", "skillBreakdown", "mcpBreakdown"] {
+            json = json.replacingOccurrences(of: "\"\(key)\":null,", with: "")
+                .replacingOccurrences(of: ",\"\(key)\":null", with: "")
+        }
+        XCTAssertFalse(json.contains("attributionAgent"), "fixture must not still carry the key")
+        XCTAssertFalse(json.contains("skillBreakdown"), "fixture must not still carry the key")
+
+        let decoded = try JSONDecoder().decode(SessionSummary.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.attributionAgent)
+        XCTAssertNil(decoded.sessionKind)
+        XCTAssertNil(decoded.skillBreakdown)
+        XCTAssertNil(decoded.mcpBreakdown)
+        XCTAssertNil(decoded.dailyContributions.first?.skillBreakdown)
+        XCTAssertEqual(decoded, summary)
+    }
+
     func testRoundTripMinimalSummary() throws {
         let summary = SessionSummary(
             id: "sess-min",

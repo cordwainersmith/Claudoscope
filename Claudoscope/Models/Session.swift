@@ -102,6 +102,23 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// and stop_hook_summary system records. Nil when the session ran no hooks
     /// or the cached blob predates parserVersion 7.
     var hookRunStats: HookRunStats? = nil
+    /// Subagent files only: the agent type Claude Code attributed the whole
+    /// file to ("Explore", "Plan", "general-purpose"). One value per subagent
+    /// file, so a scalar rather than a breakdown. Nil for main sessions.
+    var attributionAgent: String? = nil
+    /// Claude Code's session classification; "bg" for a background session.
+    /// Nil for an ordinary interactive session.
+    var sessionKind: String? = nil
+    /// Un-windowed rollups of the per-day attribution arrays, for the config
+    /// rails and session detail. Date-windowed analytics must fold
+    /// `dailyContributions` instead, not these.
+    ///
+    /// Optional, not a defaulted array: Swift's synthesized Codable ignores
+    /// property defaults and throws on a missing key, so a non-optional here
+    /// would turn every pre-parserVersion-8 blob into a cache miss. Nil means
+    /// "no attribution data in this blob"; [] means "parsed, nothing tagged".
+    var skillBreakdown: [SkillAttribution]? = nil
+    var mcpBreakdown: [McpAttribution]? = nil
 
     init(
         id: String,
@@ -133,7 +150,11 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         worktreeBranch: String? = nil,
         prNumber: Int? = nil,
         prUrl: String? = nil,
-        hookRunStats: HookRunStats? = nil
+        hookRunStats: HookRunStats? = nil,
+        attributionAgent: String? = nil,
+        sessionKind: String? = nil,
+        skillBreakdown: [SkillAttribution]? = nil,
+        mcpBreakdown: [McpAttribution]? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -165,6 +186,10 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.prNumber = prNumber
         self.prUrl = prUrl
         self.hookRunStats = hookRunStats
+        self.attributionAgent = attributionAgent
+        self.sessionKind = sessionKind
+        self.skillBreakdown = skillBreakdown
+        self.mcpBreakdown = mcpBreakdown
     }
 }
 
@@ -188,6 +213,45 @@ struct ModelDayCost: Sendable, Codable, Equatable {
     let turnCount: Int
 }
 
+/// Cost billed on records Claude Code tagged with `attributionSkill`.
+///
+/// A PARTIAL partition: only about a tenth of billed records carry any
+/// attribution tag, so `sum(estimatedCost)` is always <= the enclosing total and
+/// the remainder is unattributed. Never render these rows without showing that
+/// remainder, and never normalize them to 100%.
+struct SkillAttribution: Sendable, Codable, Equatable, Identifiable {
+    var id: String { skill }
+    /// The raw tag. Comes in two forms — bare ("dataviz") and plugin-qualified
+    /// ("frontend-design:frontend-design") — and the same skill can appear in
+    /// both, so any join against installed skills needs a normalizer.
+    let skill: String
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let estimatedCost: Double
+    let turnCount: Int
+}
+
+/// Cost billed on records tagged with `attributionMcpServer` + `attributionMcpTool`.
+/// Claude Code tags the turns downstream of an MCP tool result, so this measures
+/// spend while that tool's result was driving the turn, not just the call itself.
+///
+/// Server and tool stay separate fields: the MCPs rail joins on server, the
+/// analytics table displays both.
+///
+/// Independent of `SkillAttribution`, not a sibling slice of it: a single record
+/// can carry both tags, so the two sums can together exceed the day's cost.
+struct McpAttribution: Sendable, Codable, Equatable, Identifiable {
+    var id: String { server + "/" + tool }
+    let server: String
+    let tool: String
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let estimatedCost: Double
+    let turnCount: Int
+}
+
 /// One calendar day's worth of billed activity for a session. `date` is the
 /// LOCAL day (YYYY-MM-DD) the messages landed on, fixed at parse time.
 struct DailyContribution: Sendable, Codable, Equatable {
@@ -200,4 +264,9 @@ struct DailyContribution: Sendable, Codable, Equatable {
     let cacheCreation1hTokens: Int
     let estimatedCost: Double
     let modelBreakdown: [ModelDayCost]
+    /// Partial attribution partitions for this day. Optional rather than a
+    /// defaulted array because synthesized Codable ignores property defaults:
+    /// a non-optional would break decoding of every pre-v8 blob.
+    var skillBreakdown: [SkillAttribution]? = nil
+    var mcpBreakdown: [McpAttribution]? = nil
 }

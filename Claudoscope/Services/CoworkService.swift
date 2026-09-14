@@ -140,7 +140,23 @@ actor CoworkService {
                 observability: s.observability,
                 isSubagent: false,
                 dailyContributions: s.dailyContributions,
-                isCowork: true
+                isCowork: true,
+                // Everything below is pass-through. Only id, projectId, title,
+                // isSubagent and isCowork are intentionally overridden; any
+                // other field left off here is silently lost for Cowork
+                // sessions, which is how hookRunStats went missing.
+                // CoworkSummaryTests guards this.
+                agentId: s.agentId,
+                spawnedAgentIds: s.spawnedAgentIds,
+                worktreeName: s.worktreeName,
+                worktreeBranch: s.worktreeBranch,
+                prNumber: s.prNumber,
+                prUrl: s.prUrl,
+                hookRunStats: s.hookRunStats,
+                attributionAgent: s.attributionAgent,
+                sessionKind: s.sessionKind,
+                skillBreakdown: s.skillBreakdown,
+                mcpBreakdown: s.mcpBreakdown
             )
             return (parsed, summary)
         } catch {

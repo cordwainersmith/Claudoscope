@@ -96,6 +96,25 @@ struct ParsedRecordRaw: Decodable, Sendable {
     let prNumber: Int?
     let prUrl: String?
 
+    // Cost attribution Claude Code stamps on billed assistant records
+    // (2.1.24x+). Decoded in both modes because they feed SessionSummary, not
+    // the chat view.
+    //
+    // `attributionAgent` appears only inside subagent files and carries one
+    // value for the whole file, so it is a scalar on the summary rather than a
+    // breakdown. `attributionSkill` and the MCP pair appear on main-session
+    // records and can each hold many values per session.
+    //
+    // Skill and MCP tags are INDEPENDENT: a single record can carry both, so
+    // the two breakdowns overlap and neither is a partition of session cost.
+    let attributionAgent: String?
+    let attributionSkill: String?
+    let attributionMcpServer: String?
+    let attributionMcpTool: String?
+
+    // "bg" for a background session. Single-valued per session.
+    let sessionKind: String?
+
     // Captures the raw `type` string when it doesn't match a known RecordType,
     // so a future telemetry layer can surface unrecognized record types instead
     // of silently dropping them.
@@ -138,6 +157,11 @@ struct ParsedRecordRaw: Decodable, Sendable {
         worktreeSession = try container.decodeIfPresent(WorktreeStateRaw.self, forKey: .worktreeSession)
         prNumber = try container.decodeIfPresent(Int.self, forKey: .prNumber)
         prUrl = try container.decodeIfPresent(String.self, forKey: .prUrl)
+        attributionAgent = try container.decodeIfPresent(String.self, forKey: .attributionAgent)
+        attributionSkill = try container.decodeIfPresent(String.self, forKey: .attributionSkill)
+        attributionMcpServer = try container.decodeIfPresent(String.self, forKey: .attributionMcpServer)
+        attributionMcpTool = try container.decodeIfPresent(String.self, forKey: .attributionMcpTool)
+        sessionKind = try container.decodeIfPresent(String.self, forKey: .sessionKind)
         if mode == .full {
             parentUuid = try container.decodeIfPresent(String.self, forKey: .parentUuid)
             cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
@@ -159,6 +183,8 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case snapshot, isSnapshotUpdate, messageId
         case aiTitle, worktreeSession, prNumber, prUrl
         case hookCount, hookInfos, hookErrors, preventedContinuation, attachment
+        case attributionAgent, attributionSkill, attributionMcpServer, attributionMcpTool
+        case sessionKind
     }
 }
 

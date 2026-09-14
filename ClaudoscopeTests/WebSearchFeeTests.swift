@@ -26,10 +26,12 @@ final class WebSearchFeeTests: XCTestCase {
         msgId: String = "m1",
         speed: String? = nil,
         input: Int = 1000,
-        output: Int = 2000
+        output: Int = 2000,
+        skill: String? = nil
     ) -> String {
         let speedField = speed.map { "\"speed\":\"\($0)\"," } ?? ""
-        return "{\"type\":\"assistant\",\"uuid\":\"\(UUID().uuidString)\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-04-26T10:00:00.000Z\",\"message\":{\"role\":\"assistant\",\"id\":\"\(msgId)\",\"stop_reason\":\"tool_use\",\"model\":\"claude-sonnet-4-6\",\"usage\":{\"input_tokens\":\(input),\"output_tokens\":\(output),\(speedField)\"service_tier\":\"standard\"}}}"
+        let skillField = skill.map { "\"attributionSkill\":\"\($0)\"," } ?? ""
+        return "{\"type\":\"assistant\",\"uuid\":\"\(UUID().uuidString)\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-04-26T10:00:00.000Z\",\(skillField)\"message\":{\"role\":\"assistant\",\"id\":\"\(msgId)\",\"stop_reason\":\"tool_use\",\"model\":\"claude-sonnet-4-6\",\"usage\":{\"input_tokens\":\(input),\"output_tokens\":\(output),\(speedField)\"service_tier\":\"standard\"}}}"
     }
 
     /// A WebSearch tool-result record carrying the search count.
@@ -136,5 +138,45 @@ final class WebSearchFeeTests: XCTestCase {
         XCTAssertEqual(totals.cost, expectedTokenCost + 3 * fee, accuracy: 1e-9)
         XCTAssertEqual(totals.cost, parsed.estimatedCost, accuracy: 1e-9,
                        "Cowork rail/Analytics and parseMetadata must bill web search identically")
+    }
+
+    // MARK: - Attribution carry-over
+
+    /// The fee is billed on the tool-result record, not the assistant turn, so
+    /// the parser carries the issuing turn's attribution forward. A search
+    /// issued from a skill-tagged turn must add its fee to that skill.
+    func testFeeFollowsTheIssuingTurnsSkill() async throws {
+        let parser = SessionParser()
+        let url = try writeTempFile([
+            assistantRecord(skill: "claude-api"),
+            searchResultRecord(searchCount: 1),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let s = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: table)
+        let row = try XCTUnwrap(s.skillBreakdown?.first)
+        XCTAssertEqual(row.skill, "claude-api")
+        XCTAssertEqual(row.estimatedCost, expectedTokenCost + fee, accuracy: 1e-9,
+                       "the skill group must include the search fee, not just token cost")
+        XCTAssertEqual(s.estimatedCost, expectedTokenCost + fee, accuracy: 1e-9)
+    }
+
+    /// The carry-over is cleared on every billed turn, including untagged ones.
+    /// Without that, an untagged turn's search fee would leak onto whichever
+    /// skill happened to run earlier in the session.
+    func testUntaggedTurnDoesNotLeakFeeOntoPreviousSkill() async throws {
+        let parser = SessionParser()
+        let url = try writeTempFile([
+            assistantRecord(msgId: "m1", skill: "claude-api"),
+            assistantRecord(msgId: "m2"),
+            searchResultRecord(searchCount: 1),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let s = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: table)
+        let row = try XCTUnwrap(s.skillBreakdown?.first)
+        XCTAssertEqual(row.estimatedCost, expectedTokenCost, accuracy: 1e-9,
+                       "the fee belongs to the untagged turn, so it stays in the remainder")
+        XCTAssertEqual(s.estimatedCost, 2 * expectedTokenCost + fee, accuracy: 1e-9)
     }
 }

@@ -168,4 +168,63 @@ final class CoworkSummaryTests: XCTestCase {
         XCTAssertEqual(empty.tokens, 0)
         XCTAssertEqual(empty.cost, 0, accuracy: 0.000001)
     }
+
+    // MARK: - Field forwarding
+
+    /// The Cowork path rebuilds a SessionSummary by hand from the parser's
+    /// output, so any field it forgets to copy is silently lost for every
+    /// Cowork session. That is how hookRunStats went missing for a whole
+    /// release.
+    ///
+    /// A value comparison against a direct parseMetadata is not possible here:
+    /// the Cowork path adapts `_audit_timestamp` into `timestamp` first, so the
+    /// two parses legitimately differ on dates. Instead this pins the property
+    /// count. Adding a field to SessionSummary fails this test, which is the
+    /// prompt to go forward it in CoworkService.loadSessionData.
+    func testSessionSummaryPropertyCountIsPinnedForCoworkForwarding() {
+        let probe = SessionSummary(
+            id: "x", projectId: "p", slug: nil, title: "t",
+            firstTimestamp: "", lastTimestamp: "", messageCount: 0, primaryModel: nil,
+            totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
+            totalCacheCreationTokens: 0, totalCacheCreation5mTokens: 0,
+            totalCacheCreation1hTokens: 0, compactionCount: 0, estimatedCost: 0,
+            hasError: false, modelBreakdown: [], toolCallCount: 0,
+            observability: .empty, isSubagent: false, dailyContributions: []
+        )
+        XCTAssertEqual(
+            Mirror(reflecting: probe).children.count, 34,
+            """
+            SessionSummary gained or lost a stored property. Forward it in \
+            CoworkService.loadSessionData (everything except id, projectId, \
+            title, isSubagent and isCowork is pass-through), then update this \
+            count. Skipping the forward silently drops the field for every \
+            Cowork session.
+            """
+        )
+    }
+
+    /// The pass-through actually happens end to end, for the fields most
+    /// recently added and therefore most likely to have been missed.
+    func testRebuiltSummaryForwardsAttributionFields() async throws {
+        let lines = twoDayLines + [
+            #"{"type":"assistant","uuid":"u-attr","session_id":"inner-cli","_audit_timestamp":"2026-06-10T09:00:00.000Z","attributionSkill":"hairline-deck","attributionMcpServer":"srv","attributionMcpTool":"fetch","sessionKind":"bg","message":{"id":"msg_attr","type":"message","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":1000,"output_tokens":2000}}}"#
+        ]
+        let session = try makeSession(id: "local_fwd", title: "Fwd", transcriptLines: lines)
+        let dataOpt = await service.loadSessionData(for: session, pricingTable: table)
+        let rebuilt = try XCTUnwrap(dataOpt).summary
+
+        XCTAssertEqual(rebuilt.sessionKind, "bg")
+        XCTAssertEqual(rebuilt.skillBreakdown?.first?.skill, "hairline-deck")
+        XCTAssertEqual(rebuilt.mcpBreakdown?.first?.server, "srv")
+        XCTAssertEqual(rebuilt.mcpBreakdown?.first?.tool, "fetch")
+        // The per-day arrays survive the rebuild too, which is what
+        // date-windowed analytics reads.
+        XCTAssertEqual(
+            rebuilt.dailyContributions.flatMap { $0.skillBreakdown ?? [] }.count, 1
+        )
+        // Intentional overrides still applied.
+        XCTAssertTrue(rebuilt.isCowork)
+        XCTAssertFalse(rebuilt.isSubagent)
+        XCTAssertEqual(rebuilt.title, session.displayTitle)
+    }
 }
