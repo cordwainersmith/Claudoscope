@@ -6,6 +6,12 @@ struct McpsSidebarContent: View {
     let filterText: String
     let mcpServers: [McpServerEntry]
     @Binding var selectedMcpName: String?
+    /// Per-tool spend; rolled up to the server for the row chip.
+    var attribution: [McpCostAggregate] = []
+
+    private func cost(for server: McpServerEntry) -> Double {
+        attribution.filter { $0.server == server.name }.reduce(0) { $0 + $1.estimatedCost }
+    }
 
     private var filtered: [McpServerEntry] {
         if filterText.isEmpty { return mcpServers }
@@ -24,7 +30,8 @@ struct McpsSidebarContent: View {
                 ForEach(filtered) { server in
                     McpServerRow(
                         server: server,
-                        isSelected: selectedMcpName == server.name
+                        isSelected: selectedMcpName == server.name,
+                        cost: cost(for: server)
                     ) {
                         selectedMcpName = server.name
                     }
@@ -38,6 +45,7 @@ struct McpsSidebarContent: View {
 struct McpServerRow: View {
     let server: McpServerEntry
     let isSelected: Bool
+    var cost: Double = 0
     let onSelect: () -> Void
 
     private var serverType: String {
@@ -85,6 +93,8 @@ struct McpServerRow: View {
 
                 Spacer()
 
+                AttributionSpendChip(cost: cost, isSelected: isSelected)
+
                 if let level = server.level {
                     Text(level)
                         .font(Typography.micro)
@@ -110,6 +120,7 @@ struct McpServerRow: View {
 struct McpsMainPanelView: View {
     let mcpServers: [McpServerEntry]
     let selectedMcpName: String?
+    var attribution: [McpCostAggregate] = []
 
     @State private var expandedServer: String?
 
@@ -130,7 +141,8 @@ struct McpsMainPanelView: View {
                     ForEach(mcpServers) { server in
                         McpServerCard(
                             server: server,
-                            isExpanded: expandedServer == server.name
+                            isExpanded: expandedServer == server.name,
+                            tools: attribution.filter { $0.server == server.name }
                         ) {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 expandedServer = expandedServer == server.name ? nil : server.name
@@ -148,7 +160,11 @@ struct McpsMainPanelView: View {
 struct McpServerCard: View {
     let server: McpServerEntry
     let isExpanded: Bool
+    /// Per-tool spend for this server, most expensive first.
+    var tools: [McpCostAggregate] = []
     let onToggle: () -> Void
+
+    private var totalCost: Double { tools.reduce(0) { $0 + $1.estimatedCost } }
 
     private var serverType: String {
         if server.url != nil { return "HTTP" }
@@ -227,6 +243,14 @@ struct McpServerCard: View {
                                     .font(.system(size: 11))
                                     .foregroundStyle(.tertiary)
                             }
+
+                            if totalCost > 0 {
+                                Text(formatCost(totalCost))
+                                    .font(Typography.caption)
+                                    .monospacedDigit()
+                                    .foregroundStyle(Color.okabeBlue)
+                                    .help("Estimated lifetime cost on turns driven by this server's tools")
+                            }
                         }
                     }
 
@@ -258,6 +282,34 @@ struct McpServerCard: View {
                     Divider().padding(.horizontal, 14)
 
                     VStack(alignment: .leading, spacing: 10) {
+                        if !tools.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("USAGE")
+                                    .font(Typography.caption)
+                                    .foregroundStyle(.tertiary)
+
+                                ForEach(tools) { tool in
+                                    HStack(spacing: 6) {
+                                        Text(tool.tool)
+                                            .font(Typography.codeSmall)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text("\(tool.turnCount) turns")
+                                            .font(Typography.caption)
+                                            .foregroundStyle(.tertiary)
+                                        Text(formatCost(tool.estimatedCost))
+                                            .font(Typography.codeSmall)
+                                            .monospacedDigit()
+                                    }
+                                }
+
+                                Text("Lifetime cost of turns Claude Code attributed to each tool, including the turns that followed its result.")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.tertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+
                         if !server.args.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("ARGUMENTS")

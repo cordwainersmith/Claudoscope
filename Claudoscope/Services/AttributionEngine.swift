@@ -38,6 +38,10 @@ struct AgentCostAggregate: Sendable, Identifiable, Equatable {
     let estimatedCost: Double
     let inputTokens: Int
     let outputTokens: Int
+    /// Model families actually observed running as this agent, most frequent
+    /// first. The Agents rail compares this against the agent definition's
+    /// declared `model`, which is where a stale or overridden definition shows.
+    let observedModels: [String]
 }
 
 /// One fold's worth of attribution.
@@ -107,6 +111,7 @@ enum AttributionEngine {
             var cost = 0.0
             var input = 0
             var output = 0
+            var models: [String: Int] = [:]
         }
         var skillAcc: [String: Acc] = [:]
         var mcpAcc: [String: (server: String, tool: String, acc: Acc)] = [:]
@@ -150,6 +155,9 @@ enum AttributionEngine {
                 a.cost += windowCost
                 a.input += days.reduce(0) { $0 + $1.inputTokens }
                 a.output += days.reduce(0) { $0 + $1.outputTokens }
+                if let model = session.primaryModel {
+                    a.models[getModelFamily(model), default: 0] += 1
+                }
                 agentAcc[agent] = a
             }
         }
@@ -184,12 +192,31 @@ enum AttributionEngine {
                 sessionCount: a.sessions.count,
                 estimatedCost: a.cost,
                 inputTokens: a.input,
-                outputTokens: a.output
+                outputTokens: a.output,
+                observedModels: a.models
+                    .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+                    .map(\.key)
             )
         }.sorted { costDescending($0.estimatedCost, $1.estimatedCost, $0.id, $1.id) }
 
         return AttributionRollup(
             skills: skillRows, mcps: mcpRows, agents: agentRows, totalCost: totalCost
+        )
+    }
+
+    /// Date-bound convenience matching `AnalyticsEngine.compute`, so a caller
+    /// that already has the analytics window can pass it straight through.
+    static func aggregate(
+        sessions: [SessionSummary],
+        skills: [SkillEntry] = [],
+        from: Date?,
+        to: Date?
+    ) -> AttributionRollup {
+        aggregate(
+            sessions: sessions,
+            skills: skills,
+            fromDay: from.map { AnalyticsEngine.dayKey($0) },
+            toDay: to.map { AnalyticsEngine.dayKey($0) }
         )
     }
 
@@ -218,5 +245,12 @@ enum AttributionEngine {
     /// True when an attribution tag refers to this installed skill.
     static func matchSkill(_ tag: String, to entry: SkillEntry) -> Bool {
         canonicalSkillKey(tag) == canonicalSkillKey(entry.name)
+    }
+
+    /// Claude Code writes the agent type as invoked ("Explore"), while an agent
+    /// definition's `name` is whatever its frontmatter says ("explore"), so the
+    /// join is case-insensitive.
+    static func matchAgent(_ tag: String, to entry: AgentEntry) -> Bool {
+        tag.compare(entry.name, options: .caseInsensitive) == .orderedSame
     }
 }

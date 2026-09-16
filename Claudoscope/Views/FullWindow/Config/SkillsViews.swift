@@ -6,6 +6,13 @@ struct SkillsSidebarContent: View {
     let filterText: String
     let skills: [SkillEntry]
     @Binding var selectedSkillName: String?
+    /// Lifetime spend per skill. Defaulted so existing call sites keep working,
+    /// following the Hooks rail's runtimeAggregates pattern.
+    var attribution: [SkillCostAggregate] = []
+
+    private func spend(for skill: SkillEntry) -> SkillCostAggregate? {
+        attribution.first { AttributionEngine.matchSkill($0.skill, to: skill) }
+    }
 
     private var filtered: [SkillEntry] {
         if filterText.isEmpty { return skills }
@@ -24,7 +31,8 @@ struct SkillsSidebarContent: View {
                 ForEach(filtered) { skill in
                     SkillRow(
                         skill: skill,
-                        isSelected: selectedSkillName == skill.displayName
+                        isSelected: selectedSkillName == skill.displayName,
+                        cost: spend(for: skill)?.estimatedCost ?? 0
                     ) {
                         selectedSkillName = skill.displayName
                     }
@@ -38,6 +46,7 @@ struct SkillsSidebarContent: View {
 struct SkillRow: View {
     let skill: SkillEntry
     let isSelected: Bool
+    var cost: Double = 0
     let onSelect: () -> Void
 
     var body: some View {
@@ -61,6 +70,8 @@ struct SkillRow: View {
 
                     Spacer()
 
+                    AttributionSpendChip(cost: cost, isSelected: isSelected)
+
                     Text(formatFileSize(skill.sizeBytes))
                         .font(.system(size: 11))
                 }
@@ -81,6 +92,11 @@ struct SkillRow: View {
 struct SkillsMainPanelView: View {
     let skills: [SkillEntry]
     @Binding var selectedSkillName: String?
+    var attribution: [SkillCostAggregate] = []
+
+    private func spend(for skill: SkillEntry) -> SkillCostAggregate? {
+        attribution.first { AttributionEngine.matchSkill($0.skill, to: skill) }
+    }
 
     private var selectedSkill: SkillEntry? {
         guard let name = selectedSkillName else { return nil }
@@ -161,6 +177,18 @@ struct SkillsMainPanelView: View {
                     )
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
+                        if let s = spend(for: skill) {
+                            AttributionSpendCard(
+                                title: "Usage",
+                                cost: s.estimatedCost,
+                                turns: s.turnCount,
+                                sessions: s.sessionCount,
+                                tokens: s.inputTokens + s.outputTokens
+                            )
+                        } else {
+                            AttributionNoSpendNote(noun: "skill")
+                        }
+
                         // Tool restrictions banner
                         if skill.metadata["allowed-tools"] != nil || skill.metadata["disallowed-tools"] != nil {
                             SkillToolRestrictionsView(

@@ -30,8 +30,9 @@ struct AnalyticsEngine {
     }()
 
     /// LOCAL calendar day (YYYY-MM-DD) for a window bound. Matches the local day
-    /// keys the parser stamps on each `DailyContribution`.
-    private static func dayKey(_ date: Date) -> String { localDayFormatter.string(from: date) }
+    /// keys the parser stamps on each `DailyContribution`. Internal, not private,
+    /// so AttributionEngine windows on exactly the same bounds.
+    static func dayKey(_ date: Date) -> String { localDayFormatter.string(from: date) }
 
     static func compute(
         sessions: [(session: SessionSummary, project: Project)],

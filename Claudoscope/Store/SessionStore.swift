@@ -83,9 +83,13 @@ final class SessionStore {
     var hookGroups: [HookEventGroup] = []
     /// Cross-session hook runtime rollup, recomputed with analytics.
     var hookRuntimeAggregates: [HookRuntimeAggregate] = []
-    /// Un-windowed cost attribution, for the Skills, MCPs and Agents rails.
-    /// The Analytics tab folds its own windowed rollup instead of reading this.
+    /// Un-windowed cost attribution, for the Skills, MCPs and Agents rails,
+    /// which report lifetime spend the way the Hooks rail reports lifetime fires.
     var attributionRollup: AttributionRollup = .empty
+    /// Attribution for the current Analytics window and project filter. Kept
+    /// separate from `attributionRollup` because the Analytics tab must respect
+    /// the time range while the config rails must not.
+    var analyticsAttribution: AttributionRollup = .empty
     var commands: [CommandEntry] = []
     var skills: [SkillEntry] = []
     var agents: [AgentEntry] = []
@@ -1023,6 +1027,13 @@ final class SessionStore {
             analyticsData = baseData
         }
 
+        analyticsAttribution = AttributionEngine.aggregate(
+            sessions: sessions.map(\.session),
+            skills: skills,
+            from: from,
+            to: to
+        )
+
         // Also recompute sidebar analytics (all projects, 30d)
         let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date())
         sidebarAnalyticsData = AnalyticsEngine.compute(
@@ -1433,6 +1444,15 @@ final class SessionStore {
         self.themes = loadedThemes
         self.plugins = loadedPlugins
         self.configLoading = false
+
+        // The rails' attribution join marks a tag "removed" when it matches no
+        // installed skill, so it has to be refolded once skills are loaded.
+        // Without this every skill reads as removed until the next analytics
+        // recompute. Cheap: a pure fold over summaries already in memory.
+        attributionRollup = AttributionEngine.aggregate(
+            sessions: allSessionsWithProjects.map(\.session),
+            skills: skills
+        )
     }
 
     /// Load the plugin inventory in isolation, for the Plugins rail's on-demand

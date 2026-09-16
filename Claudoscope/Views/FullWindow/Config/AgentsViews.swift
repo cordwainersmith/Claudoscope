@@ -24,6 +24,11 @@ struct AgentsSidebarContent: View {
     let filterText: String
     let agents: [AgentEntry]
     @Binding var selectedAgentName: String?
+    var attribution: [AgentCostAggregate] = []
+
+    private func spend(for agent: AgentEntry) -> AgentCostAggregate? {
+        attribution.first { AttributionEngine.matchAgent($0.agent, to: agent) }
+    }
 
     private var filtered: [AgentEntry] {
         if filterText.isEmpty { return agents }
@@ -65,7 +70,11 @@ struct AgentsSidebarContent: View {
     }
 
     private func row(_ agent: AgentEntry) -> some View {
-        AgentRow(agent: agent, isSelected: selectedAgentName == agent.displayName) {
+        AgentRow(
+            agent: agent,
+            isSelected: selectedAgentName == agent.displayName,
+            cost: spend(for: agent)?.estimatedCost ?? 0
+        ) {
             selectedAgentName = agent.displayName
         }
     }
@@ -74,6 +83,7 @@ struct AgentsSidebarContent: View {
 struct AgentRow: View {
     let agent: AgentEntry
     let isSelected: Bool
+    var cost: Double = 0
     let onSelect: () -> Void
 
     var body: some View {
@@ -99,6 +109,8 @@ struct AgentRow: View {
 
                     Spacer()
 
+                    AttributionSpendChip(cost: cost, isSelected: isSelected)
+
                     Text(formatFileSize(agent.sizeBytes))
                         .font(.system(size: 11))
                 }
@@ -121,6 +133,11 @@ struct AgentRow: View {
 struct AgentsMainPanelView: View {
     let agents: [AgentEntry]
     @Binding var selectedAgentName: String?
+    var attribution: [AgentCostAggregate] = []
+
+    private func spend(for agent: AgentEntry) -> AgentCostAggregate? {
+        attribution.first { AttributionEngine.matchAgent($0.agent, to: agent) }
+    }
 
     private static let agentKnownKeys: [(key: String, label: String, icon: String)] = [
         ("model", "Model", "cpu"),
@@ -215,6 +232,12 @@ struct AgentsMainPanelView: View {
                     )
                 } else {
                     VStack(alignment: .leading, spacing: 16) {
+                        if let s = spend(for: agent) {
+                            AgentUsageCard(agent: agent, spend: s)
+                        } else {
+                            AttributionNoSpendNote(noun: "agent")
+                        }
+
                         if agent.metadata["tools"] != nil || agent.metadata["disallowed-tools"] != nil {
                             SkillToolRestrictionsView(
                                 allowedTools: agent.metadata["tools"],
@@ -240,5 +263,66 @@ struct AgentsMainPanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Agent spend, plus the one comparison this rail can make that the others
+/// cannot: the model the definition declares against the models that actually
+/// ran. A mismatch means the definition changed, an override is in force, or
+/// the runs predate the current definition.
+struct AgentUsageCard: View {
+    let agent: AgentEntry
+    let spend: AgentCostAggregate
+
+    private var declaredModel: String? {
+        agent.metadata["model"]?.trimmingCharacters(in: .whitespaces).lowercased()
+    }
+
+    /// Only flag a real disagreement. "inherit"/"sonnet"-style aliases and an
+    /// absent declaration are not mismatches.
+    private var isModelMismatch: Bool {
+        guard let declared = declaredModel, !declared.isEmpty, declared != "inherit",
+              !spend.observedModels.isEmpty else { return false }
+        return !spend.observedModels.contains { declared.contains($0) }
+    }
+
+    var body: some View {
+        CardView {
+            VStack(alignment: .leading, spacing: 10) {
+                ConfigSectionHeader(title: "Usage")
+                HStack(alignment: .top, spacing: 24) {
+                    stat("Cost", formatCost(spend.estimatedCost))
+                    stat("Runs", "\(spend.sessionCount)")
+                    stat("Tokens", formatTokens(spend.inputTokens + spend.outputTokens))
+                    if !spend.observedModels.isEmpty {
+                        stat("Ran on", spend.observedModels.joined(separator: ", "))
+                    }
+                }
+                if isModelMismatch, let declared = declaredModel {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 11))
+                        Text("Declares model \"\(declared)\" but ran on \(spend.observedModels.joined(separator: ", ")).")
+                            .font(.system(size: 11))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(Color.okabeOrange)
+                }
+                Text("Lifetime estimate from sessions Claude Code tagged with this agent type. Not filtered by the Analytics time range.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func stat(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(Typography.code)
+        }
     }
 }

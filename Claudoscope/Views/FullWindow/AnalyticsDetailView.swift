@@ -9,6 +9,7 @@ struct AnalyticsDetailView: View {
         case overview = "Overview"
         case cache = "Cache"
         case models = "Models"
+        case attribution = "Attribution"
         case latency = "Latency"
         case effort = "Effort"
     }
@@ -38,7 +39,7 @@ struct AnalyticsDetailView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 440)
+                .frame(width: 560)
 
                 unpricedModelNotice
             }
@@ -85,6 +86,9 @@ struct AnalyticsDetailView: View {
 
             case .models:
                 ModelAnalysisView()
+
+            case .attribution:
+                AttributionAnalyticsView(rollup: store.analyticsAttribution)
 
             case .latency:
                 LatencyAnalyticsView(data: data.latencyAnalytics)

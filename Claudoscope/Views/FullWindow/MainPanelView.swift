@@ -131,12 +131,14 @@ struct MainPanelView: View {
             case .skills:
                 SkillsMainPanelView(
                     skills: store.skills,
-                    selectedSkillName: $selectedSkillName
+                    selectedSkillName: $selectedSkillName,
+                    attribution: store.attributionRollup.skills
                 )
             case .agents:
                 AgentsMainPanelView(
                     agents: store.agents,
-                    selectedAgentName: $selectedAgentName
+                    selectedAgentName: $selectedAgentName,
+                    attribution: store.attributionRollup.agents
                 )
             case .plugins:
                 PluginsMainPanelView(
@@ -147,7 +149,8 @@ struct MainPanelView: View {
             case .mcps:
                 McpsMainPanelView(
                     mcpServers: store.mcpServers,
-                    selectedMcpName: selectedMcpName
+                    selectedMcpName: selectedMcpName,
+                    attribution: store.attributionRollup.mcps
                 )
             case .memory:
                 MemoryMainPanelView(

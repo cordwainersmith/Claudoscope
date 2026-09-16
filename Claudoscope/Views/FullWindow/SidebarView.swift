@@ -148,13 +148,15 @@ struct SidebarView: View {
                     SkillsSidebarContent(
                         filterText: filterText,
                         skills: store.skills,
-                        selectedSkillName: $selectedSkillName
+                        selectedSkillName: $selectedSkillName,
+                        attribution: store.attributionRollup.skills
                     )
                 case .agents:
                     AgentsSidebarContent(
                         filterText: filterText,
                         agents: store.agents,
-                        selectedAgentName: $selectedAgentName
+                        selectedAgentName: $selectedAgentName,
+                        attribution: store.attributionRollup.agents
                     )
                 case .plugins:
                     PluginsSidebarContent(
@@ -166,7 +168,8 @@ struct SidebarView: View {
                     McpsSidebarContent(
                         filterText: filterText,
                         mcpServers: store.mcpServers,
-                        selectedMcpName: $selectedMcpName
+                        selectedMcpName: $selectedMcpName,
+                        attribution: store.attributionRollup.mcps
                     )
                 case .memory:
                     MemorySidebarContent(
