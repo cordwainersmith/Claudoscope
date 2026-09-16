@@ -18,7 +18,8 @@ final class PluginLintTests: XCTestCase {
         marketplace: String = "mkt",
         enabled: Bool = true,
         components: [String]? = ["skills (1)"],
-        dependencies: [String]? = nil
+        dependencies: [String]? = nil,
+        installations: [PluginInstallation]? = nil
     ) -> PluginInfo {
         PluginInfo(
             fullName: "\(name)@\(marketplace)",
@@ -26,7 +27,20 @@ final class PluginLintTests: XCTestCase {
             marketplace: marketplace,
             enabled: enabled,
             components: components,
-            dependencies: dependencies
+            dependencies: dependencies,
+            installations: installations
+        )
+    }
+
+    private func install(
+        _ scope: String,
+        version: String,
+        sha: String? = nil,
+        projectPath: String? = nil
+    ) -> PluginInstallation {
+        PluginInstallation(
+            scope: scope, projectPath: projectPath, version: version,
+            gitCommitSha: sha, installedAt: nil, lastUpdated: nil
         )
     }
 
@@ -215,5 +229,61 @@ final class PluginLintTests: XCTestCase {
             XCTAssertTrue(result.message.contains("\"alpha@mkt\""),
                           "PLG message should quote the plugin fullName for UI row labels: \(result.message)")
         }
+    }
+
+
+    // MARK: - PLG004: scope drift
+
+    func testPLG004FiresWhenTwoScopesRunDifferentCommits() async {
+        let p = plugin("frontend-design", installations: [
+            install("user", version: "76c85b73", sha: "76c85b7366c8be78ce3ac67dd21945b3960d1a8c"),
+            install("project", version: "unknown", sha: "ff2a7b576c20b2f1a777c497455e5d1e443f23e9",
+                    projectPath: "/tmp/agent-hive")
+        ])
+        let r = await lint([p])
+        XCTAssertTrue(r.contains { $0.checkId == .PLG004 })
+    }
+
+    func testPLG004DoesNotFireWhenBothScopesMatch() async {
+        let p = plugin("frontend-design", installations: [
+            install("user", version: "1.0.0", sha: "abc123"),
+            install("project", version: "1.0.0", sha: "abc123", projectPath: "/tmp/x")
+        ])
+        let r = await lint([p])
+        XCTAssertFalse(r.contains { $0.checkId == .PLG004 })
+    }
+
+    func testPLG004DoesNotFireForASingleInstall() async {
+        let p = plugin("swift-lsp", installations: [install("user", version: "1.0.0", sha: "abc123")])
+        let r = await lint([p])
+        XCTAssertFalse(r.contains { $0.checkId == .PLG004 })
+    }
+
+    /// installed_plugins.json missing, or not listing this plugin.
+    func testPLG004DoesNotFireWithoutInstallRecords() async {
+        let r = await lint([plugin("swift-lsp")])
+        XCTAssertFalse(r.contains { $0.checkId == .PLG004 })
+    }
+
+    /// Same commit, different version string, is a labelling difference in the
+    /// cache path, not two different bodies of code.
+    func testScopeDriftComparesVersionAndSha() {
+        let sameCode = plugin("p", installations: [
+            install("user", version: "1.0.0", sha: "abc"),
+            install("project", version: "1.0.0", sha: "abc")
+        ])
+        XCTAssertFalse(sameCode.hasScopeDrift)
+
+        let differentVersion = plugin("p", installations: [
+            install("user", version: "1.0.0", sha: "abc"),
+            install("project", version: "1.1.0", sha: "abc")
+        ])
+        XCTAssertTrue(differentVersion.hasScopeDrift)
+    }
+
+    func testShortShaTruncatesToEightCharacters() {
+        XCTAssertEqual(install("user", version: "1", sha: "76c85b7366c8be78").shortSha, "76c85b73")
+        XCTAssertEqual(install("user", version: "1", sha: "abc").shortSha, "abc")
+        XCTAssertNil(install("user", version: "1").shortSha)
     }
 }

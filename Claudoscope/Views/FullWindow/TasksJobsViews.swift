@@ -248,12 +248,14 @@ private struct JobDetailView: View {
     let job: JobSummary
     var onNavigateToSession: ((String, String, String?) -> Void)?
 
-    /// (projectId, sessionId) when the job's session exists in the store.
-    private var linkedSession: (projectId: String, sessionId: String)? {
+    /// The job's session, when it exists in the store. Carries the summary so
+    /// the JOB card can report what the run actually cost and ran at, rather
+    /// than just linking out to it.
+    private var linkedSession: (projectId: String, sessionId: String, summary: SessionSummary)? {
         for candidate in [job.sessionId, job.resumeSessionId] {
             guard let id = candidate else { continue }
             if let match = store.allSessionsWithProjects.first(where: { $0.session.id == id }) {
-                return (match.project.id, match.session.id)
+                return (match.project.id, match.session.id, match.session)
             }
         }
         return nil
@@ -298,6 +300,11 @@ private struct JobDetailView: View {
                             detailRow("Template", job.template)
                             detailRow("Backend", job.backend)
                             detailRow("Tokens", job.tokens.map { formatTokens($0) })
+                            if let summary = linkedSession?.summary {
+                                detailRow("Model", summary.primaryModel.map { getModelFamily($0) })
+                                detailRow("Effort", summary.observability.dominantEffortLevel?.label)
+                                detailRow("Cost", formatCost(summary.estimatedCost))
+                            }
                             if let inFlight = job.inFlight {
                                 detailRow("In flight", "\(inFlight.tasks ?? 0) tasks, \(inFlight.queued ?? 0) queued")
                             }

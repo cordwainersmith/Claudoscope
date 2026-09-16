@@ -301,6 +301,7 @@ struct ObservabilityAnalyzer {
                 id: sub.id,
                 sessionTitle: sub.title,
                 model: sub.primaryModel,
+                effort: sub.observability.dominantEffortLevel,
                 totalInputTokens: sub.totalInputTokens,
                 totalOutputTokens: sub.totalOutputTokens,
                 estimatedCost: sub.estimatedCost,

@@ -115,6 +115,9 @@ struct SubagentNode: Identifiable, Sendable {
     let id: String
     let sessionTitle: String
     let model: String?
+    /// Effort the subagent actually ran at (CC 2.1.243 made it per-subagent).
+    /// Nil on a transcript that predates the per-record `effort` field.
+    let effort: EffortLevel?
     let totalInputTokens: Int
     let totalOutputTokens: Int
     let estimatedCost: Double

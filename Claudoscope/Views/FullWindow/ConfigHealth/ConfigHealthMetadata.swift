@@ -383,6 +383,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Plugin contributes no components",
         hint: "A plugin contributes no commands, skills, or hooks. It may be misconfigured or an empty install."
     ),
+    .PLG004: RuleMetadata(
+        displayName: "Plugin scope drift",
+        hint: "The same plugin is installed at both user and project scope, at different versions or commits. Which one a session loads depends on where it was started, so the plugin can behave differently between two projects with nothing in the UI explaining why. Update or uninstall one scope."
+    ),
     .CHN001: RuleMetadata(
         displayName: "Channel plugin enabled",
         hint: "A known channel plugin (Telegram, Discord, iMessage, fakechat) is installed and enabled. Channels are MCP servers that push external events into live sessions, so anyone who can reach the endpoint can put text in front of Claude: a prompt-injection surface. Two-way channels can also opt into permission relay, answering Bash/Write/Edit approvals remotely from a phone. Verify sender gating/pairing is configured and that remote approvals are intended."

@@ -58,6 +58,16 @@ private struct PluginRow: View {
                             .clipShape(Capsule())
                             .foregroundStyle(isSelected ? .white : .secondary)
                     }
+                    if plugin.hasScopeDrift {
+                        Text("scope drift")
+                            .font(.system(size: 9, weight: .medium))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(Color.okabeOrange.opacity(0.18)))
+                            .clipShape(Capsule())
+                            .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(Color.okabeOrange))
+                            .help("Installed at more than one scope, at different versions or commits.")
+                    }
                 }
 
                 HStack(spacing: 4) {
@@ -197,6 +207,46 @@ private struct PluginDetail: View {
             infoRow("Marketplace", value: plugin.marketplace)
             infoRow("Full name", value: plugin.fullName)
             infoRow("Status", value: plugin.enabled ? "Enabled" : "Disabled")
+
+            if let installations = plugin.installations, !installations.isEmpty {
+                Divider().padding(.vertical, 2)
+                HStack(spacing: 6) {
+                    Text("Installed at")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    if plugin.hasScopeDrift {
+                        Text("drift")
+                            .font(.system(size: 9, weight: .medium))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.okabeOrange.opacity(0.18))
+                            .clipShape(Capsule())
+                            .foregroundStyle(Color.okabeOrange)
+                    }
+                }
+                ForEach(installations) { install in
+                    HStack(spacing: 6) {
+                        Text(install.scope)
+                            .font(Typography.code)
+                            .frame(width: 56, alignment: .leading)
+                        Text(install.version)
+                            .font(Typography.code)
+                        if let sha = install.shortSha {
+                            Text(sha)
+                                .font(Typography.code)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        if let path = install.projectPath {
+                            Text((path as NSString).lastPathComponent)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                }
+            }
         }
         .padding(12)
         .background(Color.secondary.opacity(0.08))

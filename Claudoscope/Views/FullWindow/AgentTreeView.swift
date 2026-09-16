@@ -97,6 +97,17 @@ struct AgentTreeView: View {
                             .clipShape(Capsule())
                     }
 
+                    if let effort = node.effort {
+                        Text(effort.label)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(AnyShapeStyle(.quaternary))
+                            .clipShape(Capsule())
+                            .help("Effort this subagent ran at, from its own transcript.")
+                    }
+
                     Spacer()
 
                     Text(formatTokens(node.totalInputTokens + node.totalOutputTokens))

@@ -118,6 +118,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case PLG001  // unsatisfied or missing plugin dependency
     case PLG002  // plugin dependency cycle
     case PLG003  // plugin declares no components
+    case PLG004  // plugin installed at two scopes running different code
 
     // Channel plugin checks
     case CHN001  // known channel plugin installed and enabled (prompt-injection surface, permission relay)

@@ -290,4 +290,47 @@ final class ExtendedConfigTests: XCTestCase {
         let topLevel = await service.loadExtendedConfig()
         XCTAssertNil(topLevel.blockReadsOutsideWorkingDirectories)
     }
+
+
+    // MARK: - installed_plugins.json per-scope records (PLG004 input)
+
+    func testPluginInstallationsParsePerScope() async throws {
+        let pluginsDir = claudeDir.appendingPathComponent("plugins")
+        try FileManager.default.createDirectory(at: pluginsDir, withIntermediateDirectories: true)
+        let obj: [String: Any] = [
+            "version": 2,
+            "plugins": [
+                "frontend-design@official": [
+                    [
+                        "scope": "user",
+                        "version": "76c85b73",
+                        "installedAt": "2026-03-05T16:53:46.994Z",
+                        "lastUpdated": "2026-09-16T05:46:39.165Z",
+                        "gitCommitSha": "76c85b7366c8be78ce3ac67dd21945b3960d1a8c"
+                    ],
+                    [
+                        "scope": "project",
+                        "projectPath": "/Users/x/projects/agent-hive",
+                        "version": "unknown",
+                        "gitCommitSha": "ff2a7b576c20b2f1a777c497455e5d1e443f23e9"
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: obj)
+        try data.write(to: pluginsDir.appendingPathComponent("installed_plugins.json"))
+
+        let installs = await service.loadPluginInstallations()["frontend-design@official"]
+        XCTAssertEqual(installs?.count, 2)
+        XCTAssertEqual(installs?.map(\.scope), ["project", "user"], "sorted by scope")
+        XCTAssertEqual(installs?.first(where: { $0.scope == "project" })?.projectPath,
+                       "/Users/x/projects/agent-hive")
+        XCTAssertEqual(installs?.first(where: { $0.scope == "user" })?.shortSha, "76c85b73")
+        XCTAssertNil(installs?.first(where: { $0.scope == "project" })?.installedAt)
+    }
+
+    func testPluginInstallationsEmptyWhenFileMissing() async {
+        let installs = await service.loadPluginInstallations()
+        XCTAssertTrue(installs.isEmpty)
+    }
 }

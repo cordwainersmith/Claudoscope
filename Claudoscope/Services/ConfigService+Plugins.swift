@@ -67,6 +67,8 @@ extension ConfigService {
         let enabledMap = settings["enabledPlugins"] as? [String: Any] ?? [:]
         let skipped = Set(settings["skippedPlugins"] as? [String] ?? [])
 
+        let installations = loadPluginInstallations()
+
         var plugins: [PluginInfo] = []
 
         for (pluginDirName, versionDir) in latestPluginVersionDirs() {
@@ -100,12 +102,45 @@ extension ConfigService {
                 enabled: enabled,
                 components: components,
                 dependencies: dependencies,
-                componentsByKind: componentsByKind
+                componentsByKind: componentsByKind,
+                installations: installations[fullName]
             ))
         }
 
         plugins.sort { $0.fullName.localizedCaseInsensitiveCompare($1.fullName) == .orderedAscending }
         return plugins
+    }
+
+    /// Per-scope install records from `~/.claude/plugins/installed_plugins.json`,
+    /// keyed by `<name>@<marketplace>`. The same plugin can be installed at user
+    /// and project scope at different commits, which nothing else surfaces.
+    func loadPluginInstallations() -> [String: [PluginInstallation]] {
+        let url = claudeDir
+            .appendingPathComponent("plugins")
+            .appendingPathComponent("installed_plugins.json")
+        guard let json = readJSON(at: url),
+              let plugins = json["plugins"] as? [String: Any]
+        else { return [:] }
+
+        var out: [String: [PluginInstallation]] = [:]
+        for (fullName, value) in plugins {
+            guard let records = value as? [[String: Any]] else { continue }
+            let entries = records.compactMap { record -> PluginInstallation? in
+                guard let scope = record["scope"] as? String else { return nil }
+                return PluginInstallation(
+                    scope: scope,
+                    projectPath: record["projectPath"] as? String,
+                    version: record["version"] as? String ?? "unknown",
+                    gitCommitSha: record["gitCommitSha"] as? String,
+                    installedAt: record["installedAt"] as? String,
+                    lastUpdated: record["lastUpdated"] as? String
+                )
+            }
+            if !entries.isEmpty {
+                out[fullName] = entries.sorted { $0.scope < $1.scope }
+            }
+        }
+        return out
     }
 
     /// Read a plugin's manifest, probing the nested `.claude-plugin/plugin.json`

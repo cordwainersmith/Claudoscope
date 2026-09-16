@@ -85,7 +85,33 @@ extension ConfigLinterService {
             ))
         }
 
+        // PLG004: the same plugin installed at two scopes, at different code.
+        for plugin in plugins where plugin.hasScopeDrift {
+            let installs = plugin.installations ?? []
+            let detail = installs
+                .map { "\($0.scope) @ \($0.version)\($0.shortSha.map { " (\($0))" } ?? "")" }
+                .joined(separator: ", ")
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .PLG004,
+                filePath: pluginInstallationsFilePath,
+                message: "Plugin \"\(plugin.fullName)\" is installed at \(installs.count) scopes running different code: \(detail).",
+                fix: "Update or uninstall one scope so both run the same version.",
+                displayPath: "Plugins"
+            ))
+        }
+
         return results
+    }
+
+    /// Where the per-scope install records live. PLG004 points here rather than
+    /// at settings.json, because that is the file that disagrees with itself.
+    private var pluginInstallationsFilePath: String {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude")
+            .appendingPathComponent("plugins")
+            .appendingPathComponent("installed_plugins.json")
+            .path
     }
 
     /// Anchor path for plugin lint results. Plugin enablement lives in

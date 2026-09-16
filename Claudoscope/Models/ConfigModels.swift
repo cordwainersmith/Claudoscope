@@ -192,6 +192,36 @@ struct PluginInfo: Identifiable, Sendable {
     var components: [String]? = nil     // commands/skills/hooks contributed (CC 2.1.143/2.1.145)
     var dependencies: [String]? = nil   // declared plugin dependencies (CC 2.1.143)
     var componentsByKind: [String: [PluginComponentEntry]]? = nil   // kind -> entries (name + file path), for drill-down
+    /// Every scope this plugin is installed at, from installed_plugins.json.
+    /// Nil when the file is missing or does not list this plugin.
+    var installations: [PluginInstallation]? = nil
+
+    /// True when the plugin is installed at more than one scope AND those
+    /// installs are not the same code. Which one a session loads depends on
+    /// where it was started, so the two can behave differently for no visible
+    /// reason.
+    var hasScopeDrift: Bool {
+        guard let installations, installations.count > 1 else { return false }
+        let fingerprints = Set(installations.map { "\($0.version)|\($0.gitCommitSha ?? "")" })
+        return fingerprints.count > 1
+    }
+}
+
+/// One scope's install of a plugin, from ~/.claude/plugins/installed_plugins.json.
+struct PluginInstallation: Identifiable, Sendable, Equatable {
+    var id: String { scope + "|" + (projectPath ?? "") }
+    let scope: String            // "user" or "project"
+    let projectPath: String?     // set for project scope
+    let version: String
+    let gitCommitSha: String?
+    let installedAt: String?
+    let lastUpdated: String?
+
+    /// Short sha for display; the full value stays available for comparison.
+    var shortSha: String? {
+        guard let gitCommitSha, gitCommitSha.count >= 8 else { return gitCommitSha }
+        return String(gitCommitSha.prefix(8))
+    }
 }
 
 struct MarketplaceSource: Identifiable, Sendable {
