@@ -469,10 +469,54 @@ extension SettingsMainPanelView {
 
     // MARK: - Pricing Section
 
+    /// Contracted rates come from the organization's managed settings, which
+    /// Claude Code reads only from `/Library/Application Support/ClaudeCode/`.
+    /// Read-only here on purpose: it is not the user's key to change, and the
+    /// banner exists so "why doesn't this match list price" has a visible
+    /// answer rather than looking like an estimator bug.
+    @ViewBuilder
+    private var managedPricingBanner: some View {
+        let managed = store.managedPricing
+        if !managed.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Image(systemName: "building.2")
+                        .font(.system(size: 11))
+                    Text("Contracted rates from managed settings are in effect")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                Text(managedPricingDetail(managed))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.okabeBlue.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private func managedPricingDetail(_ managed: ManagedPricingOverride) -> String {
+        var parts: [String] = []
+        if let m = managed.multiplier {
+            parts.append(String(format: "all costs scaled by %.2f", m))
+        }
+        if !managed.overrides.isEmpty {
+            let names = managed.overrides.keys.sorted().joined(separator: ", ")
+            parts.append("custom rates for \(names)")
+        }
+        return "The rates below are overridden: " + parts.joined(separator: "; ")
+            + ". Set by your organization in managed-settings.json, so it cannot be changed here."
+    }
+
     @ViewBuilder
     func pricingSection() -> some View {
         settingsSection(id: "pricing", icon: "dollarsign.circle", title: "Pricing") {
             VStack(alignment: .leading, spacing: 12) {
+                managedPricingBanner
+
                 // Provider toggle
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Provider")

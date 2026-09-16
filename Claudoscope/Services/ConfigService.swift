@@ -10,6 +10,25 @@ actor ConfigService {
         self.claudeDir = claudeDir
     }
 
+    /// Where Claude Code reads an organization's managed policy on macOS.
+    /// Managed-scope keys (`modelPricing`, `managedMcpServers`) are honored
+    /// only from here; Claude Code ignores them in user, project and local
+    /// settings, so Claudoscope must not read them from anywhere else.
+    static let managedSettingsURL = URL(
+        fileURLWithPath: "/Library/Application Support/ClaudeCode/managed-settings.json"
+    )
+
+    /// Synchronous because the pricing override it carries has to be resolved
+    /// before the first scan: the summary cache bakes cost in, so indexing at
+    /// list price and correcting later would wipe and reindex the whole cache
+    /// on the second launch.
+    static func loadManagedSettings() -> [String: Any] {
+        guard let data = try? Data(contentsOf: managedSettingsURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return [:] }
+        return json
+    }
+
     // MARK: - JSON Reading
 
     func readJSON(at url: URL) -> [String: Any]? {
@@ -56,8 +75,7 @@ actor ConfigService {
         }
 
         // 5. Managed settings
-        let managedURL = URL(fileURLWithPath: "/Library/Application Support/ClaudeCode/managed-settings.json")
-        if let settings = readJSON(at: managedURL) {
+        if let settings = readJSON(at: Self.managedSettingsURL) {
             collectHooksFromSettings(settings, source: .managed, into: &byEvent)
         }
 

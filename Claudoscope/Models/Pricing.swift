@@ -23,6 +23,11 @@ struct ModelPricing: Sendable {
     // family added to a table later is never silently billed a fee it may not incur.
     var webSearchRequestFee: Double = 0
     var isUnknown: Bool = false
+    /// Set on rows written by a managed `modelPricing` override. Claude Code
+    /// documents such rates as used exactly as written, with no fast-mode
+    /// surcharge added on top, so `estimateCostFromTokens` skips the 2x for
+    /// these rows.
+    var isManagedOverride: Bool = false
 
     static let unknown = ModelPricing(
         input: 0, output: 0, cacheRead: 0, cacheCreation5m: 0, cacheCreation1h: 0, isUnknown: true
@@ -104,7 +109,7 @@ struct PricingTables {
         var canonical = ""
         for key in table.keys.sorted() {
             let p = table[key]!
-            canonical += "\(key):\(p.input),\(p.output),\(p.cacheRead),\(p.cacheCreation5m),\(p.cacheCreation1h),\(p.webSearchRequestFee);"
+            canonical += "\(key):\(p.input),\(p.output),\(p.cacheRead),\(p.cacheCreation5m),\(p.cacheCreation1h),\(p.webSearchRequestFee),\(p.isManagedOverride);"
         }
         canonical += "fast:\(fastMultiplier)|windows:\(rateWindows)"
         let digest = SHA256.hash(data: Data(canonical.utf8))
@@ -172,10 +177,23 @@ private func pricingKey(_ model: String?, on day: String) -> String {
     return getModelFamily(model)
 }
 
+/// Reserved key prefix for managed exact-model-id override rows carried inside
+/// an otherwise family-keyed table. Not a legal family or rate key, so it can
+/// never collide with one.
+let managedExactKeyPrefix = "@id:"
+
 /// `day` is the LOCAL calendar day of the message being priced, so historical
 /// cost stays fixed as dated rate windows open and close.
+///
+/// An exact managed override for this model id wins over its family row. That
+/// is the only way to express the documented precedence rule — a contracted
+/// rate for one dated snapshot alongside a different rate for the model in
+/// general — in a table that is otherwise keyed by family.
 func getModelPricing(_ model: String?, table: [String: ModelPricing], on day: String) -> ModelPricing {
-    table[pricingKey(model, on: day)] ?? .unknown
+    if let id = model?.lowercased(), let exact = table[managedExactKeyPrefix + id] {
+        return exact
+    }
+    return table[pricingKey(model, on: day)] ?? .unknown
 }
 
 /// Fast-mode billing multiplier. Confirmed against the published pricing page:
@@ -202,7 +220,9 @@ func estimateCostFromTokens(
          + (Double(cacheReadTokens) / 1e6) * p.cacheRead
          + (Double(cacheCreation5mTokens) / 1e6) * p.cacheCreation5m
          + (Double(cacheCreation1hTokens) / 1e6) * p.cacheCreation1h
-    return base * speedMultiplier
+    // A contracted rate is the rate: Claude Code does not add the fast-mode
+    // surcharge on top of a managed override row, so neither do we.
+    return base * (p.isManagedOverride ? 1.0 : speedMultiplier)
 }
 
 /// Flat web-search request fee for a table. Uniform across families by
@@ -212,4 +232,168 @@ func estimateCostFromTokens(
 /// separately from estimateCostFromTokens.
 func webSearchFee(table: [String: ModelPricing]) -> Double {
     table.values.map(\.webSearchRequestFee).max() ?? 0
+}
+
+// MARK: - Managed contracted rates (Claude Code 2.1.243 `modelPricing`)
+
+/// One contracted rate row. USD per million tokens, all four required.
+/// `cacheWrite` covers both the five-minute and the one-hour cache write.
+struct ManagedRateRow: Sendable, Equatable {
+    let input: Double
+    let output: Double
+    let cacheRead: Double
+    let cacheWrite: Double
+
+    /// Claude Code validates each rate to 0...10000 and drops rows it cannot
+    /// parse, keeping the rest. Mirrored here so a typo in one row does not
+    /// silently reprice everything else.
+    static func parse(_ raw: Any?) -> ManagedRateRow? {
+        guard let dict = raw as? [String: Any] else { return nil }
+        func rate(_ key: String) -> Double? {
+            guard let n = dict[key] as? NSNumber else { return nil }
+            let v = n.doubleValue
+            guard v.isFinite, v >= 0, v <= 10_000 else { return nil }
+            return v
+        }
+        guard let input = rate("input"), let output = rate("output"),
+              let cacheRead = rate("cacheRead"), let cacheWrite = rate("cacheWrite")
+        else { return nil }
+        return ManagedRateRow(input: input, output: output,
+                              cacheRead: cacheRead, cacheWrite: cacheWrite)
+    }
+}
+
+/// The `modelPricing` block from managed settings: an organization's contracted
+/// rates, which Claude Code reports instead of list price.
+///
+/// Managed scope only. Claude Code ignores this key in user, project and local
+/// settings, so Claudoscope reads it from the same single managed source and
+/// nowhere else.
+struct ManagedPricingOverride: Sendable, Equatable {
+    /// Scales every computed cost, whether or not an `overrides` row covers the
+    /// model. Valid in (0, 1]; nil when absent or out of range.
+    let multiplier: Double?
+    /// Keyed by model id exactly as written, lowercased.
+    let overrides: [String: ManagedRateRow]
+
+    static let none = ManagedPricingOverride(multiplier: nil, overrides: [:])
+    var isEmpty: Bool { multiplier == nil && overrides.isEmpty }
+
+    /// Parses `modelPricing` out of an already-deserialized settings dict.
+    /// Returns `.none` rather than nil when the key is absent, so callers have
+    /// one shape to handle.
+    static func parse(managedSettings: [String: Any]) -> ManagedPricingOverride {
+        guard let block = managedSettings["modelPricing"] as? [String: Any] else { return .none }
+
+        var multiplier: Double? = nil
+        if let n = block["multiplier"] as? NSNumber {
+            let v = n.doubleValue
+            if v.isFinite, v > 0, v <= 1 { multiplier = v }
+        }
+
+        var rows: [String: ManagedRateRow] = [:]
+        if let raw = block["overrides"] as? [String: Any] {
+            for (key, value) in raw {
+                guard let row = ManagedRateRow.parse(value) else { continue }
+                rows[key.lowercased()] = row
+            }
+        }
+        return ManagedPricingOverride(multiplier: multiplier, overrides: rows)
+    }
+}
+
+extension PricingTables {
+    /// The app-wide rate table: the built-in provider/region table with any
+    /// managed `modelPricing` applied. The single resolution point, so no cost
+    /// call site has to know overrides exist.
+    ///
+    /// Each override is written twice: once under `@id:<model>` so it wins for
+    /// that exact id, and once over the family row it resolves to, so dated
+    /// snapshots and provider-prefixed ids of a built-in model inherit it.
+    /// The multiplier is applied last, to every row and to the web-search fee.
+    static func resolvedTable(
+        provider: PricingProvider,
+        region: VertexRegion,
+        managed: ManagedPricingOverride? = nil
+    ) -> [String: ModelPricing] {
+        var table = self.table(provider: provider, region: region)
+        guard let managed, !managed.isEmpty else { return table }
+
+        // The fee is uniform across a table by construction. Carry it onto
+        // override rows so an `@id:` hit does not silently stop billing
+        // web searches.
+        let fee = webSearchFee(table: table)
+
+        for (modelId, row) in managed.overrides {
+            let priced = ModelPricing(
+                input: row.input,
+                output: row.output,
+                cacheRead: row.cacheRead,
+                cacheCreation5m: row.cacheWrite,
+                cacheCreation1h: row.cacheWrite,
+                webSearchRequestFee: fee,
+                isUnknown: false,
+                isManagedOverride: true
+            )
+            table[managedExactKeyPrefix + modelId] = priced
+            // Only widen to the family row for an id the pricing engine
+            // actually recognizes. A key that resolves to "unknown" would
+            // otherwise install itself as the rate for EVERY unrecognized
+            // model, silently repricing them and defeating the unpriced-model
+            // notice in Analytics. Such a key applies to itself alone.
+            let family = rateKey(for: modelId)
+            if looksLikeBuiltInModelId(modelId), family != getModelFamily(nil) {
+                table[family] = priced
+            }
+        }
+
+        if let m = managed.multiplier {
+            for (key, p) in table {
+                table[key] = ModelPricing(
+                    input: p.input * m,
+                    output: p.output * m,
+                    cacheRead: p.cacheRead * m,
+                    cacheCreation5m: p.cacheCreation5m * m,
+                    cacheCreation1h: p.cacheCreation1h * m,
+                    webSearchRequestFee: p.webSearchRequestFee * m,
+                    isUnknown: p.isUnknown,
+                    isManagedOverride: p.isManagedOverride
+                )
+            }
+        }
+        return table
+    }
+
+    /// The family/rate row a model id bills against. Wraps the private
+    /// `pricingKey` so the override merge resolves keys exactly the way the
+    /// cost engine does; merging by raw model id would silently no-op.
+    static func rateKey(for modelId: String) -> String {
+        pricingKey(modelId, on: "")
+    }
+
+    /// Whether an override key names a built-in model rather than one specific
+    /// snapshot or a gateway alias, and so should also replace its family row.
+    ///
+    /// A closed, conservative rule in the spirit of `legacyOpusMarkers`: a
+    /// dated snapshot (`-20260115`) or a namespaced gateway id (containing `/`
+    /// or `:`) applies only to itself. Misclassifying fails safe, because the
+    /// key still applies to itself through its `@id:` row either way.
+    static func looksLikeBuiltInModelId(_ id: String) -> Bool {
+        if id.contains("/") || id.contains(":") { return false }
+        if id.range(of: "-[0-9]{8}$", options: .regularExpression) != nil { return false }
+        return true
+    }
+
+    /// Invalidation key over the RESOLVED table, so adding, editing or removing
+    /// a managed override all change the key and wipe the cost baked into
+    /// cached summaries. With no override the resolved table is identical to
+    /// the built-in one, so the key is unchanged from before this feature.
+    static func cacheKey(
+        provider: PricingProvider,
+        region: VertexRegion,
+        managed: ManagedPricingOverride?
+    ) -> String {
+        let hash = tableHash(resolvedTable(provider: provider, region: region, managed: managed))
+        return "\(provider.rawValue)|\(region.rawValue)|\(hash)"
+    }
 }

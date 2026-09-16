@@ -220,13 +220,29 @@ final class SessionStore {
     }
 
     private static let monochromeMenuBarIconKey = "monochromeMenuBarIcon"
+    private static let pricingProviderKey = "pricingProvider"
+    private static let pricingRegionKey = "pricingRegion"
 
-    // Pricing configuration
-    var pricingProvider: PricingProvider = .anthropic
-    var pricingRegion: VertexRegion = .global
+    // Pricing configuration. Persisted: these feed the summary cache's
+    // invalidation key, so a value that silently reset on every launch would
+    // report list price until the user revisited Settings, then wipe and
+    // reindex the whole cache when they did.
+    var pricingProvider: PricingProvider = .anthropic {
+        didSet { UserDefaults.standard.set(pricingProvider.rawValue, forKey: Self.pricingProviderKey) }
+    }
+    var pricingRegion: VertexRegion = .global {
+        didSet { UserDefaults.standard.set(pricingRegion.rawValue, forKey: Self.pricingRegionKey) }
+    }
+
+    /// An organization's contracted rates from managed settings, resolved once
+    /// at launch before the first scan. Empty on an unmanaged machine, where
+    /// the resolved table is byte-identical to the built-in one.
+    @ObservationIgnored private(set) var managedPricing: ManagedPricingOverride = .none
 
     var pricingTable: [String: ModelPricing] {
-        PricingTables.table(provider: pricingProvider, region: pricingRegion)
+        PricingTables.resolvedTable(
+            provider: pricingProvider, region: pricingRegion, managed: managedPricing
+        )
     }
 
     private let claudeDir: URL
@@ -472,6 +488,22 @@ final class SessionStore {
         }
         self.monochromeMenuBarIcon = defaults.bool(forKey: Self.monochromeMenuBarIconKey)
 
+        // Both must be settled before performInitialScan() below: the scan's
+        // global-key check hashes the resolved rate table, and getting there
+        // with the wrong provider or without the managed override would index
+        // the corpus at the wrong price and wipe it on the next launch.
+        if let raw = defaults.string(forKey: Self.pricingProviderKey),
+           let provider = PricingProvider(rawValue: raw) {
+            self.pricingProvider = provider
+        }
+        if let raw = defaults.string(forKey: Self.pricingRegionKey),
+           let region = VertexRegion(rawValue: raw) {
+            self.pricingRegion = region
+        }
+        self.managedPricing = ManagedPricingOverride.parse(
+            managedSettings: ConfigService.loadManagedSettings()
+        )
+
         setupWatcher()
         setupCoworkWatcher()
         performInitialScan()
@@ -626,7 +658,9 @@ final class SessionStore {
         if let store = summaryStore {
             let keys = SessionSummaryStore.GlobalCacheKeys(
                 parserVersion: SessionParser.parserVersion,
-                pricingKey: PricingTables.cacheKey(provider: pricingProvider, region: pricingRegion),
+                pricingKey: PricingTables.cacheKey(
+                    provider: pricingProvider, region: pricingRegion, managed: managedPricing
+                ),
                 tzIdentifier: TimeZone.current.identifier
             )
             do {
