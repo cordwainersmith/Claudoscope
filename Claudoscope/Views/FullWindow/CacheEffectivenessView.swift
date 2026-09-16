@@ -104,6 +104,12 @@ struct CacheEffectivenessView: View {
                         .padding(.horizontal, 24)
                     }
 
+                    // Section 3b: prompt cache health (CC 2.1.251/2.1.260)
+                    if !data.promptCacheHealth.isEmpty {
+                        PromptCacheHealthView(health: data.promptCacheHealth)
+                            .padding(.horizontal, 24)
+                    }
+
                     // Section 4: Per-session cache efficiency table
                     if !data.sessionEfficiency.isEmpty {
                         SessionCacheEfficiencyView(sessions: data.sessionEfficiency)
@@ -297,6 +303,114 @@ private struct CacheTierBreakdownView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Prompt Cache Health
+
+/// Re-primes and wasted 1h writes. Every number here is inferred from day and
+/// family totals, so the header says so rather than letting the figures read as
+/// measured per-turn counts.
+private struct PromptCacheHealthView: View {
+    let health: PromptCacheHealth
+
+    var body: some View {
+        CardView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Text("Prompt Cache Health")
+                        .font(Typography.sectionTitle)
+                    Text("inferred")
+                        .font(Typography.micro)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(AnyShapeStyle(.quaternary))
+                        .clipShape(Capsule())
+                        .foregroundStyle(.secondary)
+                        .help("Derived from per-day and per-model totals, not from per-turn cache data, which transcripts do not carry. Counts are lower bounds.")
+                }
+
+                HStack(spacing: 24) {
+                    metric("Re-primed", formatTokens(health.recachedTokens),
+                           "Cache written again on a later day, after the prefix had already been paid for once.")
+                    metric("Re-prime cost", formatCost(health.recachedCost),
+                           "Those re-primes priced at the 5-minute write rate.")
+                    metric("Cold turns", "\(health.coldTurnsLowerBound) of \(health.totalTurns)",
+                           "Lower bound: one priming turn per day and model family that wrote cache. The real count can only be higher.")
+                }
+
+                if !health.inferredMissCauses.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Why the prefix was rebuilt")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(health.inferredMissCauses) { cause in
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(formatTokens(cause.recachedTokens))
+                                    .font(Typography.code)
+                                    .monospacedDigit()
+                                    .frame(width: 64, alignment: .trailing)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(cause.label) (\(cause.sessionCount) session\(cause.sessionCount == 1 ? "" : "s"))")
+                                        .font(Typography.body)
+                                    Text(cause.detail)
+                                        .font(Typography.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !health.wasted1hSessions.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Color.okabeOrange)
+                                .font(.system(size: 12))
+                            Text("\(health.wasted1hSessions.count) session\(health.wasted1hSessions.count == 1 ? "" : "s") bought the 1-hour TTL and read back less than they wrote, paying \(formatCost(health.wasted1hPremium)) over the 5-minute rate for nothing.")
+                                .font(Typography.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        ForEach(health.wasted1hSessions.prefix(5)) { session in
+                            HStack(spacing: 8) {
+                                Text(session.sessionTitle)
+                                    .font(Typography.body)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                                Text("\(formatTokens(session.cache1hTokens)) written, \(formatTokens(session.cacheReadTokens)) read")
+                                    .font(Typography.caption)
+                                    .foregroundStyle(.tertiary)
+                                Text(formatCost(session.premiumPaid))
+                                    .font(Typography.code)
+                                    .monospacedDigit()
+                                    .foregroundStyle(Color.okabeOrange)
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .background(Color.okabeOrange.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.md))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func metric(_ title: String, _ value: String, _ help: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(Typography.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(Typography.bodyMedium)
+                .monospacedDigit()
+        }
+        .help(help)
     }
 }
 

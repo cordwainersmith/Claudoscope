@@ -146,6 +146,7 @@ struct CacheAnalytics: Sendable {
     let sessionEfficiency: [SessionCacheEfficiency]
     let modelSavings: [ModelCacheSavings]
     let cacheBustingDays: [String]
+    let promptCacheHealth: PromptCacheHealth
 
     static let empty = CacheAnalytics(
         hitRatio: 0, cacheCoverage: 0, totalCacheReadTokens: 0, totalCacheWriteTokens: 0,
@@ -153,8 +154,68 @@ struct CacheAnalytics: Sendable {
         averageReuseRate: 0, dailyHitRatio: [],
         totalCache5mTokens: 0, totalCache1hTokens: 0,
         tierCostBreakdown: CacheTierCost(cost5m: 0, cost1h: 0),
-        sessionEfficiency: [], modelSavings: [], cacheBustingDays: []
+        sessionEfficiency: [], modelSavings: [], cacheBustingDays: [],
+        promptCacheHealth: .empty
     )
+}
+
+/// Prompt-cache health (Claude Code 2.1.251/2.1.260).
+///
+/// Everything here is a lower bound or an inference, never a measured per-turn
+/// figure: `SessionSummary` carries no per-turn cache split, and phase 4 does
+/// not touch the parser. The UI must present the cause rows as inferred.
+struct PromptCacheHealth: Sendable {
+    /// Cache written on a day after a session's first in-window day. Neither
+    /// TTL survives to the next calendar day, so every one of these is a
+    /// re-prime of a prefix that was already paid for once.
+    let recachedTokens: Int
+    let recachedCost: Double
+    /// Lower bound on cold (cache-priming) turns: one per (day, model family)
+    /// pair that wrote cache. The real count can only be higher.
+    let coldTurnsLowerBound: Int
+    /// Turns across the window, the denominator for the cold share.
+    let totalTurns: Int
+    /// Sessions that bought the 1h TTL and then barely read from it.
+    let wasted1hSessions: [Wasted1hSession]
+    /// What the 1h premium over the 5m rate cost on those sessions.
+    let wasted1hPremium: Double
+    /// Inferred re-prime causes, most tokens first.
+    let inferredMissCauses: [CacheMissCause]
+
+    var coldTurnShare: Double {
+        totalTurns > 0 ? Double(coldTurnsLowerBound) / Double(totalTurns) : 0
+    }
+
+    var isEmpty: Bool {
+        recachedTokens == 0 && wasted1hSessions.isEmpty && inferredMissCauses.isEmpty
+    }
+
+    static let empty = PromptCacheHealth(
+        recachedTokens: 0, recachedCost: 0, coldTurnsLowerBound: 0, totalTurns: 0,
+        wasted1hSessions: [], wasted1hPremium: 0, inferredMissCauses: []
+    )
+}
+
+/// A session that paid the 1h cache-write premium and then read back almost
+/// nothing, which costs roughly 2x the input price for no reuse.
+struct Wasted1hSession: Identifiable, Sendable {
+    var id: String { sessionId }
+    let sessionId: String
+    let sessionTitle: String
+    let cache1hTokens: Int
+    let cacheReadTokens: Int
+    /// The 1h rate minus the 5m rate on those tokens.
+    let premiumPaid: Double
+}
+
+/// An inferred reason a cache prefix had to be rebuilt. Only causes that are
+/// visible in a transcript are reported; tool-list churn is not guessed at.
+struct CacheMissCause: Identifiable, Sendable {
+    var id: String { label }
+    let label: String
+    let sessionCount: Int
+    let recachedTokens: Int
+    let detail: String
 }
 
 struct CacheTierCost: Sendable {

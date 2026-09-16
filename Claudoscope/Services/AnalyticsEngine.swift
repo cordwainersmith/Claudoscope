@@ -370,6 +370,10 @@ struct AnalyticsEngine {
             }
         }
 
+        let promptCacheHealth = computePromptCacheHealth(
+            windowed: windowed, pricingTable: pricingTable
+        )
+
         return CacheAnalytics(
             hitRatio: hitRatio,
             cacheCoverage: cacheCoverage,
@@ -385,7 +389,121 @@ struct AnalyticsEngine {
             tierCostBreakdown: tierCost,
             sessionEfficiency: sessionEfficiency,
             modelSavings: modelSavings,
-            cacheBustingDays: cacheBustingDays
+            cacheBustingDays: cacheBustingDays,
+            promptCacheHealth: promptCacheHealth
+        )
+    }
+
+    // MARK: - Prompt Cache Health
+
+    /// A session must write at least this much on the 1h tier before a low read
+    /// ratio is worth naming. Below it the premium is pennies and the ratio is
+    /// noise from a session that barely ran.
+    static let wasted1hMinWriteTokens = 50_000
+
+    /// Reads below this multiple of 1h writes means the long TTL bought nothing.
+    /// One full read-back of the primed prefix scores 1.0.
+    static let wasted1hMaxReadRatio = 1.0
+
+    /// Everything here is inferred from day and family totals, never measured
+    /// per turn. See `PromptCacheHealth`.
+    private static func computePromptCacheHealth(
+        windowed: [WindowedSession],
+        pricingTable: [String: ModelPricing]
+    ) -> PromptCacheHealth {
+        var recachedTokens = 0
+        var recachedCost = 0.0
+        var coldTurns = 0
+        var totalTurns = 0
+        var wasted: [Wasted1hSession] = []
+        var wasted1hPremium = 0.0
+
+        var dayBoundarySessions = 0
+        var dayBoundaryTokens = 0
+        var modelSwitchSessions = 0
+        var modelSwitchTokens = 0
+
+        for w in windowed {
+            let pricing = getModelPricing(w.session.primaryModel, table: pricingTable, on: w.firstDay)
+            totalTurns += w.family.values.reduce(0) { $0 + $1.turnCount }
+
+            let days = w.days.sorted { $0.date < $1.date }
+            for day in days {
+                guard day.cacheCreationTokens > 0 else { continue }
+                // One cold turn per family that primed the cache on this day.
+                let familiesThatRan = day.modelBreakdown.filter { $0.turnCount > 0 }.count
+                coldTurns += max(1, familiesThatRan)
+            }
+
+            // Cause 1: a resumed session. Neither TTL survives to the next
+            // calendar day, so every later day re-primes a paid-for prefix.
+            let laterDays = days.dropFirst().filter { $0.cacheCreationTokens > 0 }
+            let laterDayTokens = laterDays.reduce(0) { $0 + $1.cacheCreationTokens }
+            if laterDayTokens > 0 {
+                recachedTokens += laterDayTokens
+                dayBoundarySessions += 1
+                dayBoundaryTokens += laterDayTokens
+                if !pricing.isUnknown {
+                    recachedCost += Double(laterDayTokens) / 1e6 * pricing.cacheCreation5m
+                }
+            }
+
+            // Cause 2: a mid-session model switch. A different model cannot read
+            // the other's prefix, so the second family's writes are a rebuild.
+            let familiesWithTurns = w.family.values.filter { $0.turnCount > 0 }.count
+            if familiesWithTurns > 1, w.cacheCreationTokens > 0 {
+                // Attribute the share of writes beyond the first family. Day and
+                // family totals cannot say which family wrote what, so this
+                // splits evenly rather than pretending to know.
+                let share = w.cacheCreationTokens / familiesWithTurns * (familiesWithTurns - 1)
+                modelSwitchSessions += 1
+                modelSwitchTokens += share
+            }
+
+            // The 1h tier bought nothing.
+            if w.cacheCreation1hTokens >= wasted1hMinWriteTokens,
+               Double(w.cacheReadTokens) < Double(w.cacheCreation1hTokens) * wasted1hMaxReadRatio,
+               !pricing.isUnknown {
+                let premium = Double(w.cacheCreation1hTokens) / 1e6
+                    * (pricing.cacheCreation1h - pricing.cacheCreation5m)
+                guard premium > 0 else { continue }
+                wasted1hPremium += premium
+                wasted.append(Wasted1hSession(
+                    sessionId: w.session.id,
+                    sessionTitle: w.session.title,
+                    cache1hTokens: w.cacheCreation1hTokens,
+                    cacheReadTokens: w.cacheReadTokens,
+                    premiumPaid: premium
+                ))
+            }
+        }
+
+        var causes: [CacheMissCause] = []
+        if dayBoundaryTokens > 0 {
+            causes.append(CacheMissCause(
+                label: "Resumed the next day",
+                sessionCount: dayBoundarySessions,
+                recachedTokens: dayBoundaryTokens,
+                detail: "Neither the 5m nor the 1h TTL survives overnight, so the first turn of each later day rebuilds the whole prefix."
+            ))
+        }
+        if modelSwitchTokens > 0 {
+            causes.append(CacheMissCause(
+                label: "Switched model mid-session",
+                sessionCount: modelSwitchSessions,
+                recachedTokens: modelSwitchTokens,
+                detail: "A model cannot read another model's cached prefix. Tokens shown are an even split across the families that ran, not a measured figure."
+            ))
+        }
+
+        return PromptCacheHealth(
+            recachedTokens: recachedTokens,
+            recachedCost: recachedCost,
+            coldTurnsLowerBound: coldTurns,
+            totalTurns: totalTurns,
+            wasted1hSessions: wasted.sorted { $0.premiumPaid > $1.premiumPaid },
+            wasted1hPremium: wasted1hPremium,
+            inferredMissCauses: causes.sorted { $0.recachedTokens > $1.recachedTokens }
         )
     }
 
