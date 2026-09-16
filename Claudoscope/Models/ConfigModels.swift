@@ -85,6 +85,7 @@ struct SkillEntry: Identifiable, Sendable {
     let sizeBytes: Int
     var allowedTools: [String]? = nil      // frontmatter allowed-tools (CC 2.1.152)
     var disallowedTools: [String]? = nil   // frontmatter disallowed-tools (CC 2.1.152)
+    var path: String? = nil                // SKILL.md on disk, for lint findings
 }
 
 // MARK: - Agent Models

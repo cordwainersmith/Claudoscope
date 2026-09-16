@@ -4,17 +4,30 @@ extension ConfigLinterService {
 
     // MARK: - Skills Linting
 
-    func lintSkills(skillsDir: URL) -> (results: [LintResult], descriptions: [String]) {
+    /// One installed skill, for the cross-scope duplicate check (SKL015).
+    struct SkillIdentity: Sendable {
+        let name: String
+        let filePath: String
+        let scope: String
+        let displayPath: String
+    }
+
+    func lintSkills(
+        skillsDir: URL,
+        scope: String = "user",
+        mcpServerNames: Set<String> = []
+    ) -> (results: [LintResult], descriptions: [String], identities: [SkillIdentity]) {
         var results: [LintResult] = []
         var descriptions: [String] = []
+        var identities: [SkillIdentity] = []
 
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: skillsDir.path, isDirectory: &isDir), isDir.boolValue else {
-            return (results, descriptions)
+            return (results, descriptions, identities)
         }
 
         guard let skillDirs = try? fm.contentsOfDirectory(at: skillsDir, includingPropertiesForKeys: [.isDirectoryKey]) else {
-            return (results, descriptions)
+            return (results, descriptions, identities)
         }
 
         for skillDir in skillDirs {
@@ -181,12 +194,139 @@ extension ConfigLinterService {
             }
 
             // SKL013: allowed-tools / disallowed-tools malformed or contradictory
+            // SKL011: an mcp__ tool naming a server that is not configured
             results.append(contentsOf: lintSkillToolRestrictions(
-                content: content, filePath: path, displayPath: dirName
+                content: content, filePath: path, displayPath: dirName,
+                mcpServerNames: mcpServerNames
+            ))
+
+            // SKL010: relative links that point at nothing
+            results.append(contentsOf: lintSkillRelativeLinks(
+                body: parsed.body, skillDir: skillDir, filePath: path, displayPath: dirName
+            ))
+
+            identities.append(SkillIdentity(
+                name: parsed.name ?? dirName,
+                filePath: path,
+                scope: scope,
+                displayPath: dirName
             ))
         }
 
-        return (results, descriptions)
+        return (results, descriptions, identities)
+    }
+
+    // MARK: - SKL016: installed skill with no attributed run
+
+    /// Below this many attributed skill turns across the corpus, "never ran" is
+    /// indistinguishable from "the transcripts predate attribution tagging"
+    /// (Claude Code only started stamping `attributionSkill` in 2.1.24x, so
+    /// coverage on an older corpus is near zero). The check stays silent.
+    static let sklUnusedMinAttributedTurns = 200
+
+    /// SKL016: an installed skill that never appears in any attributed turn.
+    /// Informational, not a defect: it is the signal for pruning a skill that
+    /// is costing description budget (see SKL_AGG) and earning nothing.
+    func lintUnusedSkills(skills: [SkillEntry], attribution: AttributionRollup) -> [LintResult] {
+        let attributedTurns = attribution.skills.reduce(0) { $0 + $1.turnCount }
+        guard attributedTurns >= Self.sklUnusedMinAttributedTurns else { return [] }
+
+        let ranKeys = Set(attribution.skills.map { AttributionEngine.canonicalSkillKey($0.skill) })
+
+        return skills
+            .filter { !ranKeys.contains(AttributionEngine.canonicalSkillKey($0.name)) }
+            .sorted { $0.name < $1.name }
+            .map { skill in
+                LintResult(
+                    severity: .info,
+                    checkId: .SKL016,
+                    filePath: skill.path ?? skill.displayName,
+                    message: "Skill \"\(skill.name)\" has no attributed turns across \(attributedTurns) tagged skill turns. Its description still occupies context on every request.",
+                    fix: "Remove the skill, or sharpen its description so Claude reaches for it.",
+                    displayPath: skill.displayName
+                )
+            }
+    }
+
+    // MARK: - SKL015: duplicate skill names across scopes
+
+    /// One finding per duplicated name, listing the scopes it was found in.
+    /// Two copies in the same scope cannot happen (the directory name is the
+    /// key), so this is always a cross-scope collision.
+    func lintDuplicateSkillNames(_ identities: [SkillIdentity]) -> [LintResult] {
+        var byName: [String: [SkillIdentity]] = [:]
+        for identity in identities {
+            byName[identity.name, default: []].append(identity)
+        }
+
+        return byName
+            .filter { $0.value.count > 1 }
+            .sorted { $0.key < $1.key }
+            .map { name, copies in
+                let scopes = copies.map(\.scope).sorted().joined(separator: " and ")
+                return LintResult(
+                    severity: .warning,
+                    checkId: .SKL015,
+                    filePath: copies.sorted { $0.scope < $1.scope }[0].filePath,
+                    message: "Skill \"\(name)\" is defined in \(scopes) scope. Claude Code loads one of them without reporting which, so edits can land in the copy that is not running.",
+                    fix: "Rename one of the copies, or delete the one you do not want.",
+                    displayPath: copies[0].displayPath
+                )
+            }
+    }
+
+    // MARK: - SKL010: relative links
+
+    /// Flags a markdown link whose target is a relative path that does not exist
+    /// under the skill directory. Only paths that look like files (they contain a
+    /// "/" or a "." ) are checked, so prose placeholders like `[see](URL)` are not
+    /// reported as broken references.
+    func lintSkillRelativeLinks(body: String, skillDir: URL, filePath: String, displayPath: String) -> [LintResult] {
+        var seen: Set<String> = []
+        var results: [LintResult] = []
+
+        for target in Self.markdownLinkTargets(in: body) {
+            guard Self.isCheckableRelativePath(target) else { continue }
+            let path = String(target.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0])
+            guard !path.isEmpty, seen.insert(path).inserted else { continue }
+
+            let resolved = URL(fileURLWithPath: path, relativeTo: skillDir).standardizedFileURL
+            guard !fm.fileExists(atPath: resolved.path) else { continue }
+
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .SKL010,
+                filePath: filePath,
+                message: "SKILL.md links to \"\(path)\", which does not exist in the skill directory.",
+                fix: "Add the referenced file, or correct the path.",
+                displayPath: displayPath
+            ))
+        }
+        return results
+    }
+
+    /// Markdown link and image targets: the `(...)` half of `[text](target)`.
+    static func markdownLinkTargets(in body: String) -> [String] {
+        var targets: [String] = []
+        var searchRange = body.startIndex..<body.endIndex
+        while let match = body.range(of: "\\]\\([^)\\s]+\\)", options: .regularExpression, range: searchRange) {
+            let inner = body[match.lowerBound..<match.upperBound].dropFirst(2).dropLast()
+            targets.append(String(inner))
+            searchRange = match.upperBound..<body.endIndex
+        }
+        return targets
+    }
+
+    /// True for a link target worth resolving against the skill directory: a
+    /// relative path that names a file. Absolute paths, URLs, anchors, shell
+    /// variables and templated placeholders are somebody else's problem.
+    static func isCheckableRelativePath(_ target: String) -> Bool {
+        if target.isEmpty { return false }
+        if target.contains("://") { return false }
+        for prefix in ["#", "/", "~", "$", "mailto:", "tel:"] where target.hasPrefix(prefix) { return false }
+        if target.contains("{") || target.contains("<") { return false }
+        let path = target.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+        return path.contains("/") || path.contains(".")
     }
 
     // MARK: - Tool Restriction Validation
@@ -217,13 +357,31 @@ extension ConfigLinterService {
         "ReadMcpResourceDirTool",
     ]
 
+    /// The server half of an `mcp__<server>__<tool>` (or bare `mcp__<server>`)
+    /// reference. Server names can contain hyphens but never a `__` separator.
+    static func mcpServerSegment(of tool: String) -> String? {
+        guard tool.hasPrefix("mcp__") else { return nil }
+        let rest = String(tool.dropFirst(5))
+        guard !rest.isEmpty else { return nil }
+        if let sep = rest.range(of: "__") {
+            let server = String(rest[rest.startIndex..<sep.lowerBound])
+            return server.isEmpty ? nil : server
+        }
+        return rest
+    }
+
     /// Task-tracking tools, removed from Opus 4.8, Sonnet 5, Fable 5, Mythos 5, and
     /// newer models in CC 2.1.233 unless `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` is set.
     static let todoTools: Set<String> = [
         "TodoWrite", "TaskCreate", "TaskGet", "TaskUpdate", "TaskList"
     ]
 
-    func lintSkillToolRestrictions(content: String, filePath: String, displayPath: String) -> [LintResult] {
+    func lintSkillToolRestrictions(
+        content: String,
+        filePath: String,
+        displayPath: String,
+        mcpServerNames: Set<String> = []
+    ) -> [LintResult] {
         var results: [LintResult] = []
         let (allowed, disallowed) = parseToolRestrictions(from: content)
 
@@ -233,8 +391,29 @@ extension ConfigLinterService {
         let disallowedSet = Set(disallowed ?? [])
 
         // Check for unknown tool names in both lists
+        var reportedServers: Set<String> = []
         for tool in (allowed ?? []) + (disallowed ?? []) {
-            if !tool.hasPrefix("mcp__") && !Self.knownTools.contains(tool) {
+            if tool.hasPrefix("mcp__") {
+                // SKL011: the server half must name a server that is actually
+                // configured, or the restriction silently matches nothing.
+                // Skipped entirely when no servers are known, so a corpus with
+                // an unreadable MCP config does not flag every entry.
+                guard !mcpServerNames.isEmpty,
+                      let server = Self.mcpServerSegment(of: tool),
+                      !mcpServerNames.contains(server),
+                      reportedServers.insert(server).inserted
+                else { continue }
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .SKL011,
+                    filePath: filePath,
+                    message: "Tool restriction names MCP server \"\(server)\", which is not configured in any settings file.",
+                    fix: "Configure \"\(server)\" as an MCP server, or correct the tool name.",
+                    displayPath: displayPath
+                ))
+                continue
+            }
+            if !Self.knownTools.contains(tool) {
                 results.append(LintResult(
                     severity: .warning,
                     checkId: .SKL013,

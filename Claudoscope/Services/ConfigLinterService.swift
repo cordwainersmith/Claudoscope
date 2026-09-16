@@ -56,22 +56,39 @@ actor ConfigLinterService {
             results.append(contentsOf: lintRules(rulesDir: rulesDir, projectRoot: root))
         }
 
+        // MCP server inventory. Resolved before the skill pass because SKL011
+        // and HOOK003 both join against it.
+        let configService = ConfigService(claudeDir: globalClaudeDir, managedSettingsURL: managedSettingsURL)
+        let mcpServerNames = Set(await configService.loadMcpServers(projectPath: projectRoot).map { $0.name })
+
         // Discover and lint skills
         var allSkillDescriptions: [String] = []
+        var allSkillIdentities: [SkillIdentity] = []
 
         // Project skills
         if let root = projectRoot {
             let skillsDir = URL(fileURLWithPath: root).appendingPathComponent(".claude/skills")
-            let (skillResults, descs) = lintSkills(skillsDir: skillsDir)
+            let (skillResults, descs, ids) = lintSkills(
+                skillsDir: skillsDir, scope: "project", mcpServerNames: mcpServerNames
+            )
             results.append(contentsOf: skillResults)
             allSkillDescriptions.append(contentsOf: descs)
+            allSkillIdentities.append(contentsOf: ids)
         }
 
         // Global skills
         let globalSkillsDir = globalClaudeDir.appendingPathComponent("skills")
-        let (globalSkillResults, globalDescs) = lintSkills(skillsDir: globalSkillsDir)
+        let (globalSkillResults, globalDescs, globalIds) = lintSkills(
+            skillsDir: globalSkillsDir, scope: "user", mcpServerNames: mcpServerNames
+        )
         results.append(contentsOf: globalSkillResults)
         allSkillDescriptions.append(contentsOf: globalDescs)
+        allSkillIdentities.append(contentsOf: globalIds)
+
+        // SKL015: the same skill name in two scopes. Claude Code loads one of
+        // them and never says which, so an edit can land in the copy that is
+        // not running.
+        results.append(contentsOf: lintDuplicateSkillNames(allSkillIdentities))
 
         // SKL_AGG: aggregate description budget
         let totalDescChars = allSkillDescriptions.reduce(0) { $0 + $1.count }
@@ -104,7 +121,6 @@ actor ConfigLinterService {
         results.append(contentsOf: lintRouting(globalClaudeDir: globalClaudeDir, payload: routingPayload))
 
         // Plugin inventory checks (PLG001-PLG003)
-        let configService = ConfigService(claudeDir: globalClaudeDir, managedSettingsURL: managedSettingsURL)
         let plugins = await configService.loadPlugins()
         results.append(contentsOf: lintPlugins(plugins: plugins))
 
@@ -117,7 +133,6 @@ actor ConfigLinterService {
             hookProjectPaths.append((name: (root as NSString).lastPathComponent, path: root))
         }
         let hookGroups = await configService.loadHooks(projectPaths: hookProjectPaths)
-        let mcpServerNames = Set(await configService.loadMcpServers(projectPath: projectRoot).map { $0.name })
         results.append(contentsOf: lintHooks(hookGroups: hookGroups, mcpServerNames: mcpServerNames))
 
         // Sort by severity (errors first)

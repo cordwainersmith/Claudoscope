@@ -37,9 +37,13 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SKL007  // description >1024 chars
     case SKL008  // XML angle brackets in frontmatter
     case SKL009  // reserved words in name
+    case SKL010  // relative link in SKILL.md points at a missing file
+    case SKL011  // tool restriction names an MCP server that is not configured
     case SKL012  // body >500 lines
     case SKL013  // allowed-tools/disallowed-tools malformed or contradictory
     case SKL014  // allowed-tools restricted to todo tools, unavailable on current models (CC 2.1.233)
+    case SKL015  // the same skill name defined in two scopes
+    case SKL016  // installed skill with no attributed turns
     case SKL_AGG  // aggregate descriptions >16000 chars
 
     // Hook matcher checks

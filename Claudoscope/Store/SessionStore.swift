@@ -1411,6 +1411,13 @@ final class SessionStore {
         let sessionResults = await linterService.lintSessions(sessions)
         fastResults.append(contentsOf: sessionResults)
 
+        // SKL016 needs both halves that only the store has: the installed skill
+        // list and the cross-session attribution fold.
+        let unusedSkillResults = await linterService.lintUnusedSkills(
+            skills: skills, attribution: attributionRollup
+        )
+        fastResults.append(contentsOf: unusedSkillResults)
+
         // Canon (CAN family): only for the selected project when it is opted in.
         if let projectId, let projectRoot, let canonService, canonService.isOptedIn(projectId) {
             let canonResults = await linterService.lintCanon(

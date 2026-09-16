@@ -67,7 +67,8 @@ extension ConfigService {
             description: parsed.description,
             metadata: normalizedMetadata,
             body: parsed.body,
-            sizeBytes: sizeBytes
+            sizeBytes: sizeBytes,
+            path: url.path
         )
     }
 

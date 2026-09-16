@@ -100,6 +100,14 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Reserved word in skill name",
         hint: "Skill name uses a reserved word. Choose a different name to avoid conflicts."
     ),
+    .SKL010: RuleMetadata(
+        displayName: "Skill links to a missing file",
+        hint: "SKILL.md has a relative link to a file that is not in the skill directory. Claude reads the link, tries to open the reference and gets nothing, so the instructions it was meant to load are silently absent. Add the file or correct the path."
+    ),
+    .SKL011: RuleMetadata(
+        displayName: "Tool restriction names an unknown MCP server",
+        hint: "allowed-tools or disallowed-tools references an mcp__ tool whose server is not configured in any settings file. The restriction matches nothing: an allow entry grants no access, a deny entry blocks nothing. Configure the server or correct the name."
+    ),
     .SKL012: RuleMetadata(
         displayName: "Skill body exceeds 500 lines",
         hint: "Skill body is very long. Consider splitting into smaller, focused skills."
@@ -242,6 +250,14 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .SKL014: RuleMetadata(
         displayName: "Skill depends on todo tools",
         hint: "The skill's allowed-tools names TodoWrite or a Task* tracking tool. Claude Code 2.1.233 removed those tools from Opus 4.8, Sonnet 5, Fable 5, Mythos 5, and newer models, so on a current model the skill is restricted to a tool that isn't there and can do nothing. Set CLAUDE_CODE_ENABLE_TODO_TOOLS=1 to bring them back, or widen the restriction."
+    ),
+    .SKL015: RuleMetadata(
+        displayName: "Skill name defined in two scopes",
+        hint: "The same skill name exists in both user and project scope. Claude Code loads one of them and does not report which, so an edit can land in the copy that is not running and appear to do nothing. Rename one copy or delete it."
+    ),
+    .SKL016: RuleMetadata(
+        displayName: "Skill never runs",
+        hint: "The skill is installed but appears in no attributed turn, while other skills do. Its description is loaded into context on every request and earns nothing back. Either the description does not describe a situation Claude recognises, or the skill is obsolete. Only reported once the corpus holds enough tagged skill turns for the absence to mean something."
     ),
     .CMD007: RuleMetadata(
         displayName: "Command tool restriction malformed",
