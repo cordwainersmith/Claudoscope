@@ -4,10 +4,15 @@ import Foundation
 /// Handles settings.json (hooks), claude.json (MCPs), commands, skills, and memory files.
 actor ConfigService {
     let claudeDir: URL
+    let managedSettingsURL: URL
     let fm = FileManager.default
 
-    init(claudeDir: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude")) {
+    init(
+        claudeDir: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude"),
+        managedSettingsURL: URL = ConfigService.managedSettingsURL
+    ) {
         self.claudeDir = claudeDir
+        self.managedSettingsURL = managedSettingsURL
     }
 
     /// Where Claude Code reads an organization's managed policy on macOS.
@@ -75,7 +80,7 @@ actor ConfigService {
         }
 
         // 5. Managed settings
-        if let settings = readJSON(at: Self.managedSettingsURL) {
+        if let settings = readJSON(at: managedSettingsURL) {
             collectHooksFromSettings(settings, source: .managed, into: &byEvent)
         }
 

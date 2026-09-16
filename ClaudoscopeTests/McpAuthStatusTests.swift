@@ -7,6 +7,7 @@ final class McpAuthStatusTests: XCTestCase {
     private var tempRoot: URL!
     private var claudeDir: URL!
     private var service: ConfigService!
+    private var managedURL: URL!
 
     override func setUp() async throws {
         try await super.setUp()
@@ -14,7 +15,8 @@ final class McpAuthStatusTests: XCTestCase {
             .appendingPathComponent("claudoscope-mcpauth-tests-\(UUID().uuidString)")
         claudeDir = tempRoot.appendingPathComponent(".claude")
         try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
-        service = ConfigService(claudeDir: claudeDir)
+        managedURL = tempRoot.appendingPathComponent("managed-settings.json")
+        service = ConfigService(claudeDir: claudeDir, managedSettingsURL: managedURL)
     }
 
     override func tearDown() async throws {
@@ -63,5 +65,43 @@ final class McpAuthStatusTests: XCTestCase {
                       to: claudeDir.appendingPathComponent("mcp-needs-auth-cache.json"))
         let servers = await service.loadMcpServers()
         XCTAssertEqual(status(servers, "s"), .notApplicable)
+    }
+
+    // MARK: - managedMcpServers as a fourth source (CC 2.1.243)
+
+    func testManagedServersAppearWithManagedLevel() async throws {
+        try writeJSON(["managedMcpServers": [
+            "corpDocs": ["type": "http", "url": "https://mcp.corp.example"]
+        ]], to: managedURL)
+
+        let servers = await service.loadMcpServers()
+        let managed = servers.first { $0.name == "corpDocs" }
+        XCTAssertNotNil(managed, "managed-settings.json servers must reach the MCPs rail")
+        XCTAssertEqual(managed?.level, "managed")
+        XCTAssertEqual(managed?.authStatus, .authenticated)
+    }
+
+    /// Org policy is not overridable, so the managed definition wins the name.
+    func testManagedServerWinsOverUserScopeOnNameCollision() async throws {
+        try writeJSON(["managedMcpServers": [
+            "docs": ["type": "http", "url": "https://managed.example"]
+        ]], to: managedURL)
+        try writeJSON(["mcpServers": [
+            "docs": ["command": "node", "args": ["local.js"]]
+        ]], to: claudeDir.appendingPathComponent("claude.json"))
+
+        let servers = await service.loadMcpServers()
+        XCTAssertEqual(servers.filter { $0.name == "docs" }.count, 1)
+        let docs = servers.first { $0.name == "docs" }
+        XCTAssertEqual(docs?.level, "managed")
+        XCTAssertEqual(docs?.url, "https://managed.example")
+        XCTAssertNil(docs?.command)
+    }
+
+    func testUserScopeServersKeepGlobalLevelWhenManagedFileAbsent() async throws {
+        try writeJSON(["mcpServers": ["docs": ["url": "https://a.example"]]],
+                      to: claudeDir.appendingPathComponent("claude.json"))
+        let servers = await service.loadMcpServers()
+        XCTAssertEqual(servers.first { $0.name == "docs" }?.level, "global")
     }
 }

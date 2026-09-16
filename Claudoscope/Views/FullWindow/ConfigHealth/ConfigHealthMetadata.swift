@@ -287,6 +287,18 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Cross-session messages auto-accepted",
         hint: "crossSessionInbound is \"accept\" while permissions.defaultMode is \"bypassPermissions\". Claude Code holds inbound cross-session messages for approval in exactly this combination by default (2.1.224); \"accept\" removes the only review step before another session's instructions reach a session that approves every tool call."
     ),
+    .CFG019: RuleMetadata(
+        displayName: "Managed MCP server uses stdio",
+        hint: "A managedMcpServers entry in managed-settings.json defines a stdio command. Claude Code accepts only http and sse servers in managed scope and skips the entry without reporting it, so the server looks deployed fleet-wide while running nowhere. Convert it to http/sse, or ship it through .mcp.json."
+    ),
+    .CFG020: RuleMetadata(
+        displayName: "Bash allow rule wildcard is not terminal",
+        hint: "A permissions.allow Bash rule has a \"*\" before its last segment, e.g. Bash(git * main). Bash rules match a prefix, so the text after the wildcard is ignored and the rule allows every command with that prefix, including chained ones. Use a terminal form such as Bash(git push:*) or enumerate the subcommands."
+    ),
+    .CFG021: RuleMetadata(
+        displayName: "Output character cap out of range",
+        hint: "bashOutputMaxChars or taskOutputMaxChars is outside 4000-128000. Claude Code silently clamps the value, so the configured number is not the one in effect. Set it inside the range or remove the key."
+    ),
     .HRD012: RuleMetadata(
         displayName: "autoMode missing hard_deny baseline",
         hint: "settings.json has an autoMode block but no hard_deny baseline. hard_deny rules are the non-bypassable stops for unattended runs; without them the agent can take destructive actions autonomously during long or batch jobs. Add a hard_deny baseline."
@@ -294,6 +306,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .HRD013: RuleMetadata(
         displayName: "Model allowlist not enforced",
         hint: "availableModels lists models but enforceAvailableModels is not enabled, so the default model is not constrained to the allowlist. In managed/team setups, set enforceAvailableModels to true (and consider requiredMinimumVersion / requiredMaximumVersion to pin the Claude Code version range)."
+    ),
+    .HRD014: RuleMetadata(
+        displayName: "Reads not confined to working directories",
+        hint: "permissions.blockReadsOutsideWorkingDirectories is not enabled, so Read, Grep and Glob can reach any path on disk, including other repositories, SSH keys and credential files. Enable it to keep file access inside the directories the session was started with."
     ),
     .RTG001: RuleMetadata(
         displayName: "Routing agent file missing",

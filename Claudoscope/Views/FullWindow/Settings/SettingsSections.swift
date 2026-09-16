@@ -162,10 +162,24 @@ extension SettingsMainPanelView {
         let permissions = dict["permissions"] as? [String: Any]
         let allowList = permissions?["allow"] as? [String] ?? []
         let denyList = permissions?["deny"] as? [String] ?? []
+        let blockOutsideReads = permissions?["blockReadsOutsideWorkingDirectories"] as? Bool
 
         settingsSection(id: "permissions", icon: "shield", title: "Permissions") {
-            if !allowList.isEmpty || !denyList.isEmpty {
+            if !allowList.isEmpty || !denyList.isEmpty || blockOutsideReads != nil {
                 VStack(alignment: .leading, spacing: 12) {
+                    if let blockOutsideReads {
+                        HStack(spacing: 6) {
+                            Image(systemName: blockOutsideReads ? "lock.fill" : "lock.open")
+                                .font(.system(size: 11))
+                            Text(blockOutsideReads
+                                 ? "Reads confined to the working directories"
+                                 : "Reads not confined: blockReadsOutsideWorkingDirectories is off")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(blockOutsideReads ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
+                        .padding(.horizontal, 12)
+                    }
+
                     if !allowList.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Allow")

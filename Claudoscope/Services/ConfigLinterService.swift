@@ -4,6 +4,14 @@ import Darwin
 actor ConfigLinterService {
     let fm = FileManager.default
 
+    /// Injectable so tests can point the managed-scope rules (CFG019) at a
+    /// temp file instead of the real /Library path.
+    let managedSettingsURL: URL
+
+    init(managedSettingsURL: URL = ConfigService.managedSettingsURL) {
+        self.managedSettingsURL = managedSettingsURL
+    }
+
     // Session health check thresholds
     static let sesHighCostThreshold: Double = 25.0
     static let sesHighMessageThreshold = 200
@@ -96,7 +104,7 @@ actor ConfigLinterService {
         results.append(contentsOf: lintRouting(globalClaudeDir: globalClaudeDir, payload: routingPayload))
 
         // Plugin inventory checks (PLG001-PLG003)
-        let configService = ConfigService(claudeDir: globalClaudeDir)
+        let configService = ConfigService(claudeDir: globalClaudeDir, managedSettingsURL: managedSettingsURL)
         let plugins = await configService.loadPlugins()
         results.append(contentsOf: lintPlugins(plugins: plugins))
 

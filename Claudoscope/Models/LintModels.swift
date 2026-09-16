@@ -81,6 +81,9 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG016  // sandbox binary override in project scope, ignored (CC 2.1.232)
     case CFG017  // remoteControlAtStartup in project scope, ignored (CC 2.1.222)
     case CFG018  // crossSessionInbound "accept" under bypassPermissions (CC 2.1.224)
+    case CFG019  // managedMcpServers entry defines a stdio command (CC 2.1.243)
+    case CFG020  // permissions.allow Bash rule with a wildcard before its final segment
+    case CFG021  // bashOutputMaxChars/taskOutputMaxChars outside the clamp range
 
     // Hardening baseline checks
     case HRD001  // sandbox.enabled missing or false
@@ -96,6 +99,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case HRD011  // security awareness skill missing or drifted
     case HRD012  // autoMode present but missing hard_deny baseline
     case HRD013  // availableModels listed but not enforced
+    case HRD014  // blockReadsOutsideWorkingDirectories not enabled (CC 2.1.252)
 
     // Agent routing stack checks
     case RTG001  // installed agent file missing

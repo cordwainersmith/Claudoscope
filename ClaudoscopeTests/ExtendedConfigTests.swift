@@ -248,4 +248,46 @@ final class ExtendedConfigTests: XCTestCase {
         XCTAssertNil(ext.requiredMinimumVersion)
         XCTAssertNil(ext.requiredMaximumVersion)
     }
+
+    // MARK: - CC 2.1.250-2.1.253 scalar keys
+
+    func testOutputAndEffortAndCacheTtlKeysRoundTrip() async throws {
+        try writeSettings([
+            "maxEffortLevel": "medium",
+            "bashOutputMaxChars": 64_000,
+            "taskOutputMaxChars": 32_000,
+            "promptCacheTtl": "1h",
+            "subagentPromptCacheTtl": "5m"
+        ])
+
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.maxEffortLevel, "medium")
+        XCTAssertEqual(ext.bashOutputMaxChars, 64_000)
+        XCTAssertEqual(ext.taskOutputMaxChars, 32_000)
+        XCTAssertEqual(ext.promptCacheTtl, "1h")
+        XCTAssertEqual(ext.subagentPromptCacheTtl, "5m")
+    }
+
+    func testNewScalarKeysAreNilWhenAbsent() async throws {
+        try writeSettings([:])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertNil(ext.maxEffortLevel)
+        XCTAssertNil(ext.bashOutputMaxChars)
+        XCTAssertNil(ext.taskOutputMaxChars)
+        XCTAssertNil(ext.promptCacheTtl)
+        XCTAssertNil(ext.subagentPromptCacheTtl)
+        XCTAssertNil(ext.blockReadsOutsideWorkingDirectories)
+    }
+
+    /// blockReadsOutsideWorkingDirectories lives under `permissions`, not at the
+    /// top level, so a top-level copy must not be picked up.
+    func testBlockReadsOutsideWorkingDirectoriesReadsFromPermissions() async throws {
+        try writeSettings(["permissions": ["blockReadsOutsideWorkingDirectories": true]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.blockReadsOutsideWorkingDirectories, true)
+
+        try writeSettings(["blockReadsOutsideWorkingDirectories": true])
+        let topLevel = await service.loadExtendedConfig()
+        XCTAssertNil(topLevel.blockReadsOutsideWorkingDirectories)
+    }
 }

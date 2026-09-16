@@ -25,12 +25,23 @@ final class SettingsKeysLintTests: XCTestCase {
         try data.write(to: url)
     }
 
+    /// Points the managed-scope rules at a temp file so CFG019 never reads the
+    /// real /Library policy (and never depends on whether one exists).
+    private var managedURL: URL { tempDir.appendingPathComponent("managed-settings.json") }
+
+    private func writeManagedSettings(_ obj: [String: Any]) throws {
+        let data = try JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted])
+        try data.write(to: managedURL)
+    }
+
     private func runConfig() async -> [LintResult] {
-        await ConfigLinterService().lintConfig(globalClaudeDir: tempDir, projectRoot: nil)
+        await ConfigLinterService(managedSettingsURL: managedURL)
+            .lintConfig(globalClaudeDir: tempDir, projectRoot: nil)
     }
 
     private func runHardening() async -> [LintResult] {
-        await ConfigLinterService().lintHardening(globalClaudeDir: tempDir, projectRoot: nil)
+        await ConfigLinterService(managedSettingsURL: managedURL)
+            .lintHardening(globalClaudeDir: tempDir, projectRoot: nil)
     }
 
     private func has(_ r: [LintResult], _ id: LintCheckId) -> Bool { r.contains { $0.checkId == id } }
@@ -217,7 +228,8 @@ final class SettingsKeysLintTests: XCTestCase {
         try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
         let data = try JSONSerialization.data(withJSONObject: obj)
         try data.write(to: claudeDir.appendingPathComponent(fileName))
-        return await ConfigLinterService().lintConfig(globalClaudeDir: tempDir, projectRoot: projectRoot)
+        return await ConfigLinterService(managedSettingsURL: managedURL)
+            .lintConfig(globalClaudeDir: tempDir, projectRoot: projectRoot)
     }
 
     // CFG016: sandbox binary override in project scope (CC 2.1.232)
@@ -248,5 +260,151 @@ final class SettingsKeysLintTests: XCTestCase {
     func testCFG017DoesNotFireWhenDisabling() async throws {
         let r = try await runConfigWithProject(["remoteControlAtStartup": false])
         XCTAssertFalse(has(r, .CFG017))
+    }
+
+    // MARK: - CFG019: managedMcpServers stdio entry (CC 2.1.243)
+
+    func testCFG019FiresForStdioManagedServer() async throws {
+        try writeSettings([:])
+        try writeManagedSettings([
+            "managedMcpServers": ["inventory": ["command": "/usr/local/bin/inventory-mcp"]]
+        ])
+        let r = await runConfig()
+        XCTAssertTrue(has(r, .CFG019))
+    }
+
+    func testCFG019DoesNotFireForHttpManagedServer() async throws {
+        try writeSettings([:])
+        try writeManagedSettings([
+            "managedMcpServers": ["inventory": ["type": "http", "url": "https://mcp.example.com"]]
+        ])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG019))
+    }
+
+    /// A user-scope stdio server is normal; only the managed file is restricted.
+    func testCFG019DoesNotFireForUserScopeStdioServer() async throws {
+        try writeSettings(["mcpServers": ["inventory": ["command": "/usr/local/bin/inventory-mcp"]]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG019))
+    }
+
+    func testCFG019ReportsEachOffendingServerSeparately() async throws {
+        try writeSettings([:])
+        try writeManagedSettings([
+            "managedMcpServers": [
+                "inventory": ["command": "/usr/local/bin/inventory-mcp"],
+                "audit": ["type": "stdio", "args": ["run"]]
+            ]
+        ])
+        let r = await runConfig()
+        XCTAssertEqual(r.filter { $0.checkId == .CFG019 }.count, 2)
+    }
+
+    // MARK: - CFG020: non-terminal wildcard in a Bash allow rule
+
+    func testCFG020FiresForWildcardBeforeFinalSegment() async throws {
+        try writeSettings(["permissions": ["allow": ["Bash(git * main)"]]])
+        let r = await runConfig()
+        XCTAssertTrue(has(r, .CFG020))
+    }
+
+    func testCFG020DoesNotFireForTerminalColonWildcard() async throws {
+        try writeSettings(["permissions": ["allow": ["Bash(git push:*)"]]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG020))
+    }
+
+    func testCFG020DoesNotFireForTerminalSpaceWildcard() async throws {
+        try writeSettings(["permissions": ["allow": ["Bash(npm run *)"]]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG020))
+    }
+
+    /// Only Bash rules match by prefix; a Read glob is not the same shape.
+    func testCFG020DoesNotFireForNonBashTool() async throws {
+        try writeSettings(["permissions": ["allow": ["Read(//path/*/secrets)"]]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG020))
+    }
+
+    /// deny rules are the safe direction; a broad wildcard there is intended.
+    func testCFG020DoesNotFireForDenyRules() async throws {
+        try writeSettings(["permissions": ["deny": ["Bash(curl * | sh)"]]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG020))
+    }
+
+    func testCFG020ReportsEachOffendingRuleSeparately() async throws {
+        try writeSettings(["permissions": ["allow": ["Bash(git * main)", "Bash(docker * --rm)"]]])
+        let r = await runConfig()
+        XCTAssertEqual(r.filter { $0.checkId == .CFG020 }.count, 2)
+    }
+
+    /// The allow list usually lives in the repo, so project scope must be covered.
+    func testCFG020FiresForProjectScopedAllowRule() async throws {
+        let r = try await runConfigWithProject(["permissions": ["allow": ["Bash(git * main)"]]])
+        XCTAssertTrue(has(r, .CFG020))
+    }
+
+    func testCFG020FiresInSettingsLocalToo() async throws {
+        let r = try await runConfigWithProject(
+            ["permissions": ["allow": ["Bash(docker * --rm)"]]],
+            fileName: "settings.local.json"
+        )
+        XCTAssertTrue(has(r, .CFG020))
+    }
+
+    // MARK: - CFG021: output caps outside the clamp range (CC 2.1.253)
+
+    func testCFG021FiresBelowRange() async throws {
+        try writeSettings(["bashOutputMaxChars": 500])
+        let r = await runConfig()
+        XCTAssertTrue(has(r, .CFG021))
+    }
+
+    func testCFG021FiresAboveRange() async throws {
+        try writeSettings(["taskOutputMaxChars": 500_000])
+        let r = await runConfig()
+        XCTAssertTrue(has(r, .CFG021))
+    }
+
+    func testCFG021DoesNotFireInsideRange() async throws {
+        try writeSettings(["bashOutputMaxChars": 30_000, "taskOutputMaxChars": 128_000])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG021))
+    }
+
+    func testCFG021DoesNotFireWhenUnset() async throws {
+        try writeSettings([:])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG021))
+    }
+
+    /// Both keys out of range must survive `LintResult.id` dedup.
+    func testCFG021ReportsBothKeysSeparately() async throws {
+        try writeSettings(["bashOutputMaxChars": 100, "taskOutputMaxChars": 900_000])
+        let r = await runConfig()
+        XCTAssertEqual(r.filter { $0.checkId == .CFG021 }.count, 2)
+    }
+
+    // MARK: - HRD014: blockReadsOutsideWorkingDirectories (CC 2.1.252)
+
+    func testHRD014FiresWhenUnset() async throws {
+        try writeSettings([:])
+        let r = await runHardening()
+        XCTAssertTrue(has(r, .HRD014))
+    }
+
+    func testHRD014FiresWhenExplicitlyFalse() async throws {
+        try writeSettings(["permissions": ["blockReadsOutsideWorkingDirectories": false]])
+        let r = await runHardening()
+        XCTAssertTrue(has(r, .HRD014))
+    }
+
+    func testHRD014DoesNotFireWhenEnabled() async throws {
+        try writeSettings(["permissions": ["blockReadsOutsideWorkingDirectories": true]])
+        let r = await runHardening()
+        XCTAssertFalse(has(r, .HRD014))
     }
 }

@@ -314,6 +314,19 @@ extension ConfigLinterService {
             ))
         }
 
+        // HRD014: reads are not confined to the working directories (CC 2.1.252)
+        let blockOutsideReads = permissionsDict?["blockReadsOutsideWorkingDirectories"] as? Bool ?? false
+        if !blockOutsideReads {
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .HRD014,
+                filePath: settingsPath,
+                message: "permissions.blockReadsOutsideWorkingDirectories is not enabled. Read, Grep and Glob can reach any path on disk, including other repositories and credential files.",
+                fix: "Set permissions.blockReadsOutsideWorkingDirectories to true in settings.json",
+                displayPath: "settings.json"
+            ))
+        }
+
         return results
     }
 

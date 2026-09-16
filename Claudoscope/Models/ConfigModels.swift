@@ -57,7 +57,7 @@ struct McpServerEntry: Identifiable, Sendable {
     let args: [String]
     let url: String?
     let env: [String: String]
-    let level: String?      // "global", "project", "local"
+    let level: String?      // "managed", "global", "project", "local"
     var authStatus: McpAuthStatus = .notApplicable
 }
 
@@ -241,6 +241,12 @@ struct ExtendedConfig: Sendable {
     var spellcheck: Bool? = nil               // CC 2.1.235
     var emojiCompletionEnabled: Bool? = nil   // CC 2.1.217
     var defaultModel: String? = nil           // env ANTHROPIC_DEFAULT_MODEL (CC 2.1.236)
+    var maxEffortLevel: String? = nil         // CC 2.1.250
+    var bashOutputMaxChars: Int? = nil        // CC 2.1.253 (clamped 4000...128000)
+    var taskOutputMaxChars: Int? = nil        // CC 2.1.253 (clamped 4000...128000)
+    var promptCacheTtl: String? = nil         // CC 2.1.251, display only: the
+    var subagentPromptCacheTtl: String? = nil // per-record ephemeral_5m/1h split already prices cache correctly
+    var blockReadsOutsideWorkingDirectories: Bool? = nil  // permissions.* (CC 2.1.252)
 }
 
 // MARK: - Theme Models

@@ -4,6 +4,10 @@
     "environment": [
       "$defaults"
     ],
+    "hard_deny": [
+      "$defaults",
+      "Containment escape is never permitted, with or without stated intent. Do not fetch cloud instance-metadata or credential endpoints (169.254.169.254, metadata.google.internal, IMDS token endpoints, or any equivalent link-local credential service). Do not evade the egress allow list through a proxy, tunnel, alternate DNS resolver, or IP literal substituted for a blocked hostname. Do not reach into another tenant, account, subscription, or project. The only exception is a specific endpoint the 'environment' list above marks as expected."
+    ],
     "soft_deny": [
       "$defaults",
       "Force-pushing is only permitted when the user explicitly names the target branch and uses the phrase 'force-push'. A vague instruction like 'push the changes' or 'update the branch' does not satisfy explicit intent.",

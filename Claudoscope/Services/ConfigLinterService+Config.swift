@@ -235,9 +235,103 @@ extension ConfigLinterService {
             ))
         }
 
+        // CFG021: output caps outside the range Claude Code accepts (CC 2.1.253)
+        for key in ["bashOutputMaxChars", "taskOutputMaxChars"] {
+            guard let raw = json[key] as? Int else { continue }
+            guard raw < Self.outputCharCapRange.lowerBound || raw > Self.outputCharCapRange.upperBound else { continue }
+            let clamped = min(max(raw, Self.outputCharCapRange.lowerBound), Self.outputCharCapRange.upperBound)
+            results.append(LintResult(
+                severity: .info,
+                checkId: .CFG021,
+                filePath: settingsPath,
+                message: "\(key) is \(raw); Claude Code clamps it to \(clamped).",
+                fix: "Set \(key) between \(Self.outputCharCapRange.lowerBound) and \(Self.outputCharCapRange.upperBound), or remove the key.",
+                displayPath: "settings.json"
+            ))
+        }
+
+        results += lintBashAllowRules(json: json, filePath: settingsPath, displayPath: "settings.json")
+
+        results += lintManagedMcpServers()
         results += lintProjectScopedSettings(projectRoot: projectRoot)
 
         return results
+    }
+
+    /// Range Claude Code clamps `bashOutputMaxChars` / `taskOutputMaxChars` into.
+    static let outputCharCapRange = 4000...128000
+
+    /// CFG020: a Bash allow rule whose wildcard is not the final segment. Runs
+    /// against every scope that can hold a permissions block, because the allow
+    /// list usually lives in the repo rather than user settings.
+    private func lintBashAllowRules(json: [String: Any], filePath: String, displayPath: String) -> [LintResult] {
+        let allow = (json["permissions"] as? [String: Any])?["allow"] as? [String] ?? []
+        return allow.compactMap { rule in
+            guard let body = Self.bashRuleBody(rule), Self.hasNonTerminalWildcard(body) else { return nil }
+            let prefix = Self.bashRulePrefix(body)
+            return LintResult(
+                severity: .warning,
+                checkId: .CFG020,
+                filePath: filePath,
+                message: "permissions.allow rule \"\(rule)\" has a wildcard before its last segment. Bash rules match a prefix, so everything after the \"*\" is ignored and this allows any command starting \"\(prefix)\".",
+                fix: "Use a terminal prefix such as Bash(\(prefix):*), or enumerate the subcommands you mean to allow.",
+                displayPath: displayPath
+            )
+        }
+    }
+
+    /// CFG019: managed-scope MCP servers must be http or sse. Claude Code
+    /// silently skips a stdio entry here, so the admin believes a server is
+    /// deployed fleet-wide when it is not running anywhere.
+    private func lintManagedMcpServers() -> [LintResult] {
+        guard let data = try? Data(contentsOf: managedSettingsURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let servers = json["managedMcpServers"] as? [String: Any]
+        else { return [] }
+
+        var results: [LintResult] = []
+        for (name, value) in servers.sorted(by: { $0.key < $1.key }) {
+            guard let config = value as? [String: Any] else { continue }
+            let hasCommand = (config["command"] as? String)?.isEmpty == false
+            let type = (config["type"] as? String)?.lowercased()
+            let hasRemote = config["url"] != nil || type == "http" || type == "sse"
+            guard hasCommand || type == "stdio", !hasRemote else { continue }
+            results.append(LintResult(
+                severity: .error,
+                checkId: .CFG019,
+                filePath: managedSettingsURL.path,
+                message: "managedMcpServers entry \"\(name)\" defines a stdio command. Claude Code accepts only http and sse servers in managed scope and silently skips this one.",
+                fix: "Convert \"\(name)\" to an http or sse server, or deploy it through .mcp.json instead.",
+                displayPath: "managed-settings.json"
+            ))
+        }
+        return results
+    }
+
+    /// Returns the inner pattern of a `Bash(...)` permission rule, or nil for
+    /// any other tool.
+    static func bashRuleBody(_ rule: String) -> String? {
+        guard rule.hasPrefix("Bash("), rule.hasSuffix(")") else { return nil }
+        return String(rule.dropFirst(5).dropLast())
+    }
+
+    /// True when a `*` appears before the end of the pattern and is followed by
+    /// something other than the `:*` suffix form, i.e. the tail is dead text.
+    static func hasNonTerminalWildcard(_ body: String) -> Bool {
+        guard let star = body.range(of: "*") else { return false }
+        let tail = body[star.upperBound...]
+        if tail.isEmpty { return false }
+        // "git push:*" and "npm run *" are terminal; "git * main" is not.
+        return tail.contains { !$0.isWhitespace }
+    }
+
+    /// The literal prefix a Bash rule actually enforces: everything before the
+    /// first wildcard.
+    static func bashRulePrefix(_ body: String) -> String {
+        guard let star = body.range(of: "*") else { return body }
+        return String(body[body.startIndex..<star.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ":"))
     }
 
     /// Rules for keys that Claude Code reads only from user, managed, or `--settings`
@@ -253,6 +347,8 @@ extension ConfigLinterService {
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { continue }
             let displayPath = ".claude/\(name)"
+
+            results += lintBashAllowRules(json: json, filePath: url.path, displayPath: displayPath)
 
             // CFG016: sandbox binary overrides ignored outside user scope (CC 2.1.232)
             if let sandbox = json["sandbox"] as? [String: Any] {

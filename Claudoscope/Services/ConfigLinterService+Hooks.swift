@@ -15,7 +15,7 @@ extension ConfigLinterService {
     static let hookNoMatcherEvents: Set<String> = [
         "UserPromptSubmit", "PostToolBatch", "Stop", "TeammateIdle",
         "TaskCreated", "TaskCompleted", "WorktreeCreate", "WorktreeRemove",
-        "CwdChanged", "DirectoryAdded"
+        "CwdChanged", "DirectoryAdded", "PreModelSwitch", "PostModelSwitch"
     ]
 
     enum MatcherKind: Equatable {

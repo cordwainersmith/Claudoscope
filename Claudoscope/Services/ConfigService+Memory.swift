@@ -162,6 +162,12 @@ extension ConfigService {
         let spellcheck = settings["spellcheck"] as? Bool
         let emojiCompletionEnabled = settings["emojiCompletionEnabled"] as? Bool
         let defaultModel = (settings["env"] as? [String: Any])?["ANTHROPIC_DEFAULT_MODEL"] as? String
+        let maxEffortLevel = settings["maxEffortLevel"] as? String
+        let bashOutputMaxChars = settings["bashOutputMaxChars"] as? Int
+        let taskOutputMaxChars = settings["taskOutputMaxChars"] as? Int
+        let promptCacheTtl = settings["promptCacheTtl"] as? String
+        let subagentPromptCacheTtl = settings["subagentPromptCacheTtl"] as? String
+        let blockReadsOutsideWorkingDirectories = (settings["permissions"] as? [String: Any])?["blockReadsOutsideWorkingDirectories"] as? Bool
 
         // Plugins
         var plugins: [PluginInfo] = []
@@ -264,7 +270,13 @@ extension ConfigService {
             workflowSizeGuideline: workflowSizeGuideline,
             spellcheck: spellcheck,
             emojiCompletionEnabled: emojiCompletionEnabled,
-            defaultModel: defaultModel
+            defaultModel: defaultModel,
+            maxEffortLevel: maxEffortLevel,
+            bashOutputMaxChars: bashOutputMaxChars,
+            taskOutputMaxChars: taskOutputMaxChars,
+            promptCacheTtl: promptCacheTtl,
+            subagentPromptCacheTtl: subagentPromptCacheTtl,
+            blockReadsOutsideWorkingDirectories: blockReadsOutsideWorkingDirectories
         )
     }
 

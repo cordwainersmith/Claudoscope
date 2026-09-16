@@ -116,6 +116,20 @@ final class HookMatcherLintTests: XCTestCase {
         XCTAssertFalse(ids(r).contains(.HOOK004))
     }
 
+    func testHOOK004FiresForMatcherOnModelSwitchEvents() async {
+        for event in ["PreModelSwitch", "PostModelSwitch"] {
+            let r = await lint([group(event, ["Bash"])])
+            XCTAssertTrue(ids(r).contains(.HOOK004), "\(event) should report a dead matcher")
+        }
+    }
+
+    func testHOOK004DoesNotFireForEmptyMatcherOnModelSwitchEvents() async {
+        for event in ["PreModelSwitch", "PostModelSwitch"] {
+            let r = await lint([group(event, [""])])
+            XCTAssertFalse(ids(r).contains(.HOOK004), "\(event) with no matcher is valid")
+        }
+    }
+
     // MARK: - Clean config
 
     func testCleanMatchersProduceNoFindings() async {
