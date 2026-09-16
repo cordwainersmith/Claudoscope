@@ -83,6 +83,9 @@ final class SessionStore {
     var hookGroups: [HookEventGroup] = []
     /// Cross-session hook runtime rollup, recomputed with analytics.
     var hookRuntimeAggregates: [HookRuntimeAggregate] = []
+    /// Un-windowed cost attribution, for the Skills, MCPs and Agents rails.
+    /// The Analytics tab folds its own windowed rollup instead of reading this.
+    var attributionRollup: AttributionRollup = .empty
     var commands: [CommandEntry] = []
     var skills: [SkillEntry] = []
     var agents: [AgentEntry] = []
@@ -1032,6 +1035,13 @@ final class SessionStore {
         hookRuntimeAggregates = HookRuntimeEngine.aggregate(
             sessions: allSessionsWithProjects.map(\.session),
             hookGroups: hookGroups
+        )
+
+        // Un-windowed: the config rails show lifetime spend per skill/tool/agent,
+        // matching how the Hooks rail reports lifetime fire counts.
+        attributionRollup = AttributionEngine.aggregate(
+            sessions: allSessionsWithProjects.map(\.session),
+            skills: skills
         )
 
         evaluateCostAlerts(rebaselineLedger: rebaselineCostLedger)
