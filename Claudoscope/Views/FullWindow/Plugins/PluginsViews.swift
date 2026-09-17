@@ -66,7 +66,7 @@ private struct PluginRow: View {
                             .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(Color.okabeOrange.opacity(0.18)))
                             .clipShape(Capsule())
                             .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(Color.okabeOrange))
-                            .help("Installed at more than one scope, at different versions or commits.")
+                            .help("Installed more than once at different versions or commits. Which copy runs depends on where the session was started. Open the plugin for detail.")
                     }
                 }
 
@@ -246,11 +246,58 @@ private struct PluginDetail: View {
                         }
                     }
                 }
+
+                if plugin.hasScopeDrift {
+                    scopeDriftNote(installations)
+                }
             }
         }
         .padding(12)
         .background(Color.secondary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Says what scope drift is, in the place where someone first meets the
+    /// word. The badge alone reads like a status; the point is that two
+    /// sessions can run different code from the same plugin name.
+    @ViewBuilder
+    private func scopeDriftNote(_ installations: [PluginInstallation]) -> some View {
+        let projectNames = installations
+            .compactMap { $0.projectPath.map { ($0 as NSString).lastPathComponent } }
+            .sorted()
+
+        VStack(alignment: .leading, spacing: 4) {
+            Label("What scope drift means", systemImage: "arrow.triangle.branch")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.okabeOrange)
+
+            Text("This plugin is installed more than once, and the copies are not the same code. Claude Code loads the copy belonging to the directory a session starts in, so \(driftConsequence(projectNames)) The plugin name, the marketplace and the version shown elsewhere are identical, so nothing else in the UI distinguishes them.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Update or uninstall one scope so every session runs the same code.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.okabeOrange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// The concrete half of the explanation: name the projects that get the
+    /// other copy, rather than leaving it at "depends where you started".
+    private func driftConsequence(_ projectNames: [String]) -> String {
+        switch projectNames.count {
+        case 0:
+            return "two sessions can behave differently with no visible reason."
+        case 1:
+            return "sessions started in \(projectNames[0]) run one copy and every other session runs the other."
+        default:
+            return "sessions started in \(projectNames.joined(separator: " or ")) each run their own copy, and every other session runs the user-scope one."
+        }
     }
 
     private var findingsCard: some View {
