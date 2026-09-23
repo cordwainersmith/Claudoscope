@@ -156,7 +156,10 @@ actor CoworkService {
                 attributionAgent: s.attributionAgent,
                 sessionKind: s.sessionKind,
                 skillBreakdown: s.skillBreakdown,
-                mcpBreakdown: s.mcpBreakdown
+                mcpBreakdown: s.mcpBreakdown,
+                everBypassedPermissions: s.everBypassedPermissions,
+                lastPermissionMode: s.lastPermissionMode,
+                gitBranch: s.gitBranch
             )
             return (parsed, summary)
         } catch {

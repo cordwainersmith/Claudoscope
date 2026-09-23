@@ -65,9 +65,18 @@ struct MenuBarPopoverContent: View {
 
                 Divider()
 
+                // Fleet summary (only when something is live or waiting)
+                if fleetWorking + fleetWaiting + fleetBlocked > 0 {
+                    FleetStrip(working: fleetWorking, waiting: fleetWaiting, blocked: fleetBlocked) {
+                        store.requestedRail = .fleet
+                        MainWindowController.shared.open(store: store, updateService: updateService)
+                    }
+                    Divider()
+                }
+
                 // Active sessions (if any)
-                if !activeSessions.isEmpty {
-                    ActiveSessionsCard(sessions: activeSessions)
+                if !store.activeSessions.isEmpty {
+                    ActiveSessionsCard(sessions: store.activeSessions)
                         .padding(.vertical, 8)
                     Divider()
                 }
@@ -137,18 +146,9 @@ struct MenuBarPopoverContent: View {
         .onAppear { costAlertService.acknowledgeSeen() }
     }
 
-    private var activeSessions: [SessionSummary] {
-        let now = Date()
-        return (store.allSessionsWithProjects.map(\.session) + store.coworkSummaries)
-            .filter { session in
-                // Hide subagents from the active card — UUID titles look broken
-                // here. The badge/icon trigger uses store.hasActiveSession which
-                // still counts subagents so the menu bar dot remains accurate.
-                guard !session.isSubagent else { return false }
-                guard let date = ISO8601.parse(session.lastTimestamp) else { return false }
-                return now.timeIntervalSince(date) < SessionStore.activeThreshold
-            }
-    }
+    private var fleetWorking: Int { store.fleetAgents.filter { $0.state == .working }.count }
+    private var fleetBlocked: Int { store.fleetAgents.filter { $0.state == .blockedOnPermission }.count }
+    private var fleetWaiting: Int { store.attentionQueue.count - fleetBlocked }
 }
 
 // MARK: - Cost Alert Strip

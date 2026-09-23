@@ -64,7 +64,9 @@ actor SessionParser {
     /// Pricing rate-table edits do NOT need a bump: rates are hashed into the
     /// cache's pricing key, as are the dated-rate windows. See
     /// docs/sqlite-persistence-roadmap.md, section 9.
-    static let parserVersion: Int = 8
+    /// 9: SessionSummary gained everBypassedPermissions / lastPermissionMode /
+    ///    gitBranch (Fleet view).
+    static let parserVersion: Int = 9
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -507,6 +509,11 @@ actor SessionParser {
         // Scalars: one value per file across the corpus, so first non-nil wins.
         var attributionAgent: String?
         var sessionKind: String?
+        // Permission mode and branch change mid-session: last wins, plus a
+        // sticky flag for any bypassPermissions record.
+        var everBypassed = false
+        var lastPermissionMode: String?
+        var gitBranch: String?
         var isFirstRecord = true
         var parentSessionId: String? = nil
         var firstTimestamp = ""
@@ -627,6 +634,13 @@ actor SessionParser {
             }
             if sessionKind == nil, let k = raw.sessionKind, !k.isEmpty {
                 sessionKind = k
+            }
+            if let mode = raw.permissionMode, !mode.isEmpty {
+                lastPermissionMode = mode
+                if mode == "bypassPermissions" { everBypassed = true }
+            }
+            if let branch = raw.gitBranch, !branch.isEmpty {
+                gitBranch = branch
             }
 
             // Track user timestamps for turn duration computation
@@ -1142,7 +1156,10 @@ actor SessionParser {
             attributionAgent: attributionAgent,
             sessionKind: sessionKind,
             skillBreakdown: skillBreakdown,
-            mcpBreakdown: mcpBreakdown
+            mcpBreakdown: mcpBreakdown,
+            everBypassedPermissions: everBypassed,
+            lastPermissionMode: lastPermissionMode,
+            gitBranch: gitBranch
         )
     }
 

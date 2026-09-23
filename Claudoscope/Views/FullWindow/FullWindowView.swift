@@ -47,6 +47,7 @@ struct FullWindowView: View {
     // Plugins state
     @State private var selectedPluginId: String?
     @State private var selectedTasksJobsItem: TasksJobsSelection?
+    @State private var selectedFleetAgentId: String?
     @State private var selectedInsightSessionId: String?
     @State private var analyticsTab: AnalyticsTab = .usage
     @State private var healthSection: HealthSection = .health
@@ -113,8 +114,9 @@ struct FullWindowView: View {
             // Fire-and-forget data loading (don't block the UI)
             loadDataForRail(newRail)
         }
-        .onAppear { applyRequestedRail() }
+        .onAppear { applyRequestedRail(); applyRequestedSelection() }
         .onChange(of: store.requestedRail) { _, _ in applyRequestedRail() }
+        .onChange(of: store.requestedSelection) { _, _ in applyRequestedSelection() }
         .onChange(of: SessionSelection(projectId: selectedProjectId, sessionId: selectedSessionId)) { _, selection in
             if let sessionId = selection.sessionId, let projectId = selection.projectId {
                 let subagent = pendingSubagentFileName
@@ -180,6 +182,7 @@ struct FullWindowView: View {
                 selectedCoworkSessionId: $selectedCoworkSessionId,
                 selectedPluginId: $selectedPluginId,
                 selectedTasksJobsItem: $selectedTasksJobsItem,
+                selectedFleetAgentId: $selectedFleetAgentId,
                 selectedInsightSessionId: $selectedInsightSessionId,
                 analyticsTab: analyticsTab,
                 healthSection: $healthSection
@@ -205,6 +208,7 @@ struct FullWindowView: View {
                 selectedCoworkSessionId: $selectedCoworkSessionId,
                 selectedPluginId: $selectedPluginId,
                 selectedTasksJobsItem: selectedTasksJobsItem,
+                selectedFleetAgentId: selectedFleetAgentId,
                 selectedInsightSessionId: selectedInsightSessionId,
                 analyticsTab: $analyticsTab,
                 healthSection: healthSection,
@@ -243,9 +247,28 @@ struct FullWindowView: View {
         }
     }
 
+    /// Applies a session selection requested from outside the window (fleet
+    /// strip, hotkey, notification tap). Routes through pendingNavigation so
+    /// the rail switch bookkeeping loads the session.
+    private func applyRequestedSelection() {
+        guard let requested = store.requestedSelection else { return }
+        store.requestedSelection = nil
+        pendingSubagentFileName = nil
+        pendingNavigation = (requested.projectId, requested.sessionId)
+        if selectedRail == .sessions {
+            selectedProjectId = requested.projectId
+            selectedSessionId = requested.sessionId
+            pendingNavigation = nil
+        } else {
+            selectedRail = .sessions
+        }
+    }
+
     private func loadDataForRail(_ rail: RailItem) {
         Task {
             switch rail {
+            case .fleet:
+                await store.reloadRegistry()
             case .plans:
                 await store.loadPlans()
             case .timeline:

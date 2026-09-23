@@ -946,6 +946,15 @@ extension SettingsMainPanelView {
         }
     }
 
+    // MARK: - Fleet Section
+
+    @ViewBuilder
+    func fleetSection() -> some View {
+        settingsSection(id: "fleet", icon: "square.grid.2x2", title: "Fleet") {
+            FleetSettingsSectionContent(selectedSection: $selectedSection)
+        }
+    }
+
     // MARK: - Canon Section
 
     @ViewBuilder
@@ -1514,6 +1523,54 @@ struct NotificationsSectionContent: View {
 }
 
 // MARK: - Launch at Login Row
+
+struct FleetSettingsSectionContent: View {
+    @Environment(GlobalHotKeyService.self) private var hotKeyService
+    @Environment(SessionNotificationService.self) private var notificationService
+    @Binding var selectedSection: String?
+
+    var body: some View {
+        @Bindable var hotKeys = hotKeyService
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Jump to the oldest waiting agent with \(GlobalHotKeyService.chordLabel)", isOn: $hotKeys.isEnabled)
+                .toggleStyle(.checkbox)
+                .font(Typography.body)
+
+            Text("A system-wide shortcut. Brings forward the terminal tab of the agent that has waited longest for you; opens the Fleet view when nothing is waiting.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let error = hotKeyService.registrationError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 11))
+                    Text(error)
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(.orange)
+            }
+
+            Divider().padding(.vertical, 4)
+
+            Text("Permission waits")
+                .font(Typography.detailTitle)
+            Text(notificationService.config.masterEnabled
+                 ? "Notification hooks are installed. Agents blocked on a permission, plan or MCP prompt show up in the attention queue with the reason."
+                 : "Claudoscope learns that an agent is blocked on a permission from Claude Code's notification hooks. Enable Notifications to install them; without them the board still shows Claude Code's own waiting status, but not the reason.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if !notificationService.config.masterEnabled {
+                Button("Open Notifications") {
+                    selectedSection = "notifications"
+                }
+                .font(.system(size: 11))
+            }
+        }
+        .padding(12)
+    }
+}
 
 struct LaunchAtLoginRow: View {
     @Environment(LoginItemService.self) private var loginItemService

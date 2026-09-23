@@ -8,7 +8,7 @@ struct SettingsMainPanelView: View {
     @State var settings: [String: Any]?
     @State var loadError: String?
     @State var expandedSections: Set<String> = [
-        "appearance", "model", "permissions", "security", "attribution", "themes", "plugins", "account", "general", "environment", "pricing", "costAlerts", "notifications", "canon", "mcpServer", "updates"
+        "appearance", "model", "permissions", "security", "attribution", "themes", "plugins", "account", "general", "environment", "pricing", "costAlerts", "notifications", "fleet", "canon", "mcpServer", "updates"
     ]
 
     var settingsPath: String {
@@ -70,6 +70,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("costAlerts") { costAlertsSection() }
                     if shouldShow("notifications") { notificationsSection() }
+                    if shouldShow("fleet") { fleetSection() }
                     if shouldShow("canon") { canonSection() }
                     if shouldShow("mcpServer") { mcpServerSection() }
                     if shouldShow("updates") { updatesSection() }
@@ -134,6 +135,7 @@ struct SettingsMainPanelView: View {
                     if shouldShow("pricing") { pricingSection() }
                     if shouldShow("costAlerts") { costAlertsSection() }
                     if shouldShow("notifications") { notificationsSection() }
+                    if shouldShow("fleet") { fleetSection() }
                     if shouldShow("canon") { canonSection() }
                     if shouldShow("mcpServer") { mcpServerSection() }
                     if shouldShow("updates") { updatesSection() }

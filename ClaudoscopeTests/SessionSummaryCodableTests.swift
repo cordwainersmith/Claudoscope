@@ -80,10 +80,38 @@ final class SessionSummaryCodableTests: XCTestCase {
                 )],
                 stopHookRuns: 2,
                 preventedContinuationCount: 1
-            )
+            ),
+            everBypassedPermissions: true,
+            lastPermissionMode: "plan",
+            gitBranch: "feature/fleet"
         )
 
         XCTAssertEqual(try roundTrip(summary), summary)
+    }
+
+    /// Blobs written before parserVersion 9 have no permission-mode keys; they
+    /// must decode to nil rather than become cache misses.
+    func testLegacyBlobWithoutPermissionModeDecodes() throws {
+        let summary = SessionSummary(
+            id: "sess-legacy-v8", projectId: "p", slug: nil, title: "t",
+            firstTimestamp: "", lastTimestamp: "", messageCount: 0, primaryModel: nil,
+            totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
+            totalCacheCreationTokens: 0, totalCacheCreation5mTokens: 0,
+            totalCacheCreation1hTokens: 0, compactionCount: 0, estimatedCost: 0,
+            hasError: false, modelBreakdown: [], toolCallCount: 0,
+            observability: .empty, isSubagent: false, dailyContributions: []
+        )
+        var json = try XCTUnwrap(String(data: JSONEncoder().encode(summary), encoding: .utf8))
+        for key in ["everBypassedPermissions", "lastPermissionMode", "gitBranch"] {
+            json = json.replacingOccurrences(of: "\"\(key)\":null,", with: "")
+                .replacingOccurrences(of: ",\"\(key)\":null", with: "")
+        }
+        XCTAssertFalse(json.contains("everBypassedPermissions"))
+        let decoded = try JSONDecoder().decode(SessionSummary.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.everBypassedPermissions)
+        XCTAssertNil(decoded.lastPermissionMode)
+        XCTAssertNil(decoded.gitBranch)
+        XCTAssertEqual(decoded, summary)
     }
 
     /// Blobs written before parserVersion 7 have no hookRunStats key; they must

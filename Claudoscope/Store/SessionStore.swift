@@ -72,6 +72,23 @@ final class SessionStore {
     var insightsData: InsightsData = .empty
     var insightsLoading: Bool = false
 
+    // Fleet data: live registry entries joined with session summaries and
+    // hook events. Rebuilt on every session/registry/hook change; the pure
+    // derivation lives in FleetStateEngine.
+    var registryEntries: [RegistryEntry] = []
+    var fleetAgents: [FleetAgent] = []
+    var attentionQueue: [FleetAgent] = []
+    var fleetWaitingCount: Int { attentionQueue.count }
+    /// True while any live agent ran with skipped permissions.
+    var fleetHasWarning: Bool { fleetAgents.contains { $0.isBypass && $0.isLive } }
+    /// One-shot session selection requested from outside the dashboard
+    /// (popover, hotkey, notification tap). Consumed next to `requestedRail`.
+    var requestedSelection: RequestedSelection?
+    @ObservationIgnored private var fleetHookEvents: [String: FleetHookEvent] = [:]
+    @ObservationIgnored private var livenessTimer: Timer?
+    static let fleetRecentWindow: TimeInterval = 24 * 3600
+    static let livenessSweepInterval: TimeInterval = 15
+
     // Tasks & Jobs data
     var taskLists: [TaskListSummary] = []
     var jobs: [JobSummary] = []
@@ -259,6 +276,7 @@ final class SessionStore {
     private let watcher: ClaudeFileWatcher
     private let plansService: PlansService
     private let tasksJobsService: TasksJobsService
+    private let registryService: SessionRegistryService
     private let insightsService: InsightsService
     private let timelineService: TimelineService
     private let configService: ConfigService
@@ -474,6 +492,7 @@ final class SessionStore {
         self.watcher = ClaudeFileWatcher(claudeDir: claudeDir)
         self.plansService = PlansService(claudeDir: claudeDir)
         self.tasksJobsService = TasksJobsService(claudeDir: claudeDir)
+        self.registryService = SessionRegistryService(claudeDir: claudeDir)
         self.insightsService = InsightsService(claudeDir: claudeDir)
         self.timelineService = TimelineService(claudeDir: claudeDir)
         self.configService = ConfigService(claudeDir: claudeDir)
@@ -508,6 +527,7 @@ final class SessionStore {
         setupCoworkWatcher()
         performInitialScan()
         Task { await loadCowork() }
+        Task { await reloadRegistry() }
     }
 
     private func setupWatcher() {
@@ -711,7 +731,7 @@ final class SessionStore {
                     self.projects = hydratedProjects
                     self.sessionsByProject = grouped
                     self.isLoading = false
-                    self.checkActiveSession()
+                    self.rebuildFleet()
                     self.recomputeAnalytics()
                     Task { await self.recomputeDataCoverage() }
                     NSLog("[Claudoscope] SummaryCache: hydrated %d sessions in %.0f ms",
@@ -789,7 +809,7 @@ final class SessionStore {
 
         self.isReconciling = false
         self.isLoading = false
-        self.checkActiveSession()
+        self.rebuildFleet()
         // Rebaseline ALWAYS: on a warm launch the reconcile delta can be a
         // week of appends, which the rolling spend ledger would misread as a
         // burst; on a cold launch the first observe self-baselines anyway.
@@ -831,7 +851,15 @@ final class SessionStore {
                     title: summary.title
                 )
 
-                self.checkActiveSession()
+                // Transcript activity after a hook event means the user
+                // answered; drop the event so the card leaves the queue.
+                if let event = fleetHookEvents[summary.id],
+                   FleetStateEngine.hookEventIsStale(
+                       event, lastTimestamp: summary.lastTimestamp,
+                       registry: registryEntries.first { $0.sessionId == summary.id }) {
+                    fleetHookEvents[summary.id] = nil
+                }
+                self.rebuildFleet()
                 self.recomputeAnalytics()
                 // A brand-new transcript can close a coverage gap (a previously
                 // missing history session now has a file); recompute on create
@@ -878,13 +906,20 @@ final class SessionStore {
             }
 
             self.lintResultsValid = false
-            self.checkActiveSession()
+            fleetHookEvents[sessionId] = nil
+            self.rebuildFleet()
             self.recomputeAnalytics()
             // The known-id set shrank; the coverage badge must reflect it.
             await self.recomputeDataCoverage()
 
         case .notificationEvent(let url):
+            // Capture the fleet state change first: the notification service
+            // deletes the spool file, and drops it unread when delivery is off.
+            recordHookEvent(from: url)
             sessionNotificationService?.handleSpoolFile(url)
+
+        case .registryChanged:
+            await reloadRegistry()
 
         case .configChanged:
             // Handled by the debounced config-reload pipeline in setupWatcher().
@@ -979,11 +1014,87 @@ final class SessionStore {
     }
 
     private func checkActiveSession() {
+        hasActiveSession = !activeSessions.isEmpty
+    }
+
+    // MARK: - Fleet
+
+    /// Sessions considered active right now: any with a live registry entry,
+    /// plus any whose transcript moved within `activeThreshold`. Non-subagent,
+    /// CLI and Cowork. Shared by the popover card, the menu bar and the board.
+    var activeSessions: [SessionSummary] {
         let now = Date()
-        hasActiveSession = allSessionsWithProjects.contains { pair in
-            guard let date = ISO8601.parse(pair.session.lastTimestamp) else { return false }
+        let liveIds = Set(registryEntries.map(\.sessionId))
+        return (allSessionsWithProjects.map(\.session) + coworkSummaries).filter { session in
+            guard !session.isSubagent else { return false }
+            if liveIds.contains(session.id) { return true }
+            guard let date = ISO8601.parse(session.lastTimestamp) else { return false }
             return now.timeIntervalSince(date) < Self.activeThreshold
         }
+    }
+
+    /// Re-reads the whole registry (a handful of files) and rebuilds the board.
+    func reloadRegistry() async {
+        let entries = await registryService.loadEntries()
+        registryEntries = entries
+        rebuildFleet()
+        scheduleLivenessSweep()
+    }
+
+    private func rebuildFleet() {
+        let sessions = allSessionsWithProjects.map(\.session) + coworkSummaries
+        fleetAgents = FleetStateEngine.buildAgents(
+            sessions: sessions,
+            registry: registryEntries,
+            hookEvents: fleetHookEvents,
+            now: Date(),
+            activeThreshold: Self.activeThreshold,
+            recentWindow: Self.fleetRecentWindow
+        )
+        attentionQueue = FleetStateEngine.attentionQueue(fleetAgents)
+        checkActiveSession()
+    }
+
+    /// Registry files are not reliably removed on exit, so while anything is
+    /// live we re-probe pids every few seconds. This timer only drops dead
+    /// entries and refreshes the board; it never posts a notification.
+    private func scheduleLivenessSweep() {
+        if registryEntries.isEmpty {
+            livenessTimer?.invalidate()
+            livenessTimer = nil
+            return
+        }
+        guard livenessTimer == nil else { return }
+        livenessTimer = Timer.scheduledTimer(withTimeInterval: Self.livenessSweepInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let alive = self.registryEntries.filter { SessionRegistryService.isAlive(pid: $0.pid) }
+                if alive.count != self.registryEntries.count {
+                    self.registryEntries = alive
+                }
+                self.rebuildFleet()
+                if alive.isEmpty {
+                    self.livenessTimer?.invalidate()
+                    self.livenessTimer = nil
+                }
+            }
+        }
+    }
+
+    /// Reads a hook spool payload (before the notification service deletes
+    /// it) and records the session's latest state-changing event.
+    private func recordHookEvent(from url: URL) {
+        guard let data = try? Data(contentsOf: url),
+              let event = SessionNotificationEngine.parseSpoolPayload(data) else { return }
+        guard let kind = FleetStateEngine.classifyHookEvent(
+            notificationType: event.notificationType,
+            hookEventName: event.hookEventName,
+            message: event.message
+        ) else { return }
+        fleetHookEvents[event.sessionId] = FleetHookEvent(
+            kind: kind, message: event.message, receivedAt: Date(), cwd: event.cwd
+        )
+        rebuildFleet()
     }
 
     /// Re-scan all sessions with the current pricing table (e.g. after pricing

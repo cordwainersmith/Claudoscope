@@ -23,6 +23,11 @@ final class PersistentWindow: NSWindow {
     private var sessionNotificationService: SessionNotificationService?
     private var canonService: CanonService?
     private var mcpServerService: McpServerService?
+    private var hotKeyService: GlobalHotKeyService?
+
+    func setHotKeyService(_ service: GlobalHotKeyService) {
+        self.hotKeyService = service
+    }
 
     func setUpdateService(_ service: UpdateService) {
         self.updateService = service
@@ -67,6 +72,7 @@ final class PersistentWindow: NSWindow {
         precondition(self.sessionNotificationService != nil, "MainWindowController.open requires setSessionNotificationService first")
         precondition(self.canonService != nil, "MainWindowController.open requires setCanonService first")
         precondition(self.mcpServerService != nil, "MainWindowController.open requires setMcpServerService first")
+        precondition(self.hotKeyService != nil, "MainWindowController.open requires setHotKeyService first")
         let contentView = FullWindowView()
             .environment(store)
             .environment(self.updateService!)
@@ -75,6 +81,7 @@ final class PersistentWindow: NSWindow {
             .environment(self.sessionNotificationService!)
             .environment(self.canonService!)
             .environment(self.mcpServerService!)
+            .environment(self.hotKeyService!)
             .frame(minWidth: 900, minHeight: 600)
 
         let hostingView = NSHostingView(rootView: contentView)

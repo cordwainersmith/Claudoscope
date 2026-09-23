@@ -2,6 +2,7 @@ import Foundation
 
 enum RailItem: String, CaseIterable, Hashable, Sendable {
     // Primary (above separator)
+    case fleet
     case analytics
     case sessions
     case tools
@@ -26,6 +27,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
 
     var icon: String {
         switch self {
+        case .fleet:     return "square.grid.2x2"
         case .analytics: return "chart.bar"
         case .sessions:  return "text.line.first.and.arrowtriangle.forward"
         case .tools:     return "wrench.and.screwdriver"
@@ -48,6 +50,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
 
     var label: String {
         switch self {
+        case .fleet:     return "Fleet"
         case .analytics: return "Analytics"
         case .sessions:  return "Sessions"
         case .tools:     return "Tools"
@@ -75,7 +78,7 @@ enum RailItem: String, CaseIterable, Hashable, Sendable {
         self == .cowork
     }
 
-    static var primaryItems: [RailItem] { [.analytics, .sessions, .tools, .plans, .timeline, .cowork, .tasksJobs] }
+    static var primaryItems: [RailItem] { [.fleet, .analytics, .sessions, .tools, .plans, .timeline, .cowork, .tasksJobs] }
     static var configItems: [RailItem] { [.hooks, .commands, .mcps, .skills, .agents, .plugins, .memory, .canon, .configHealth] }
 }
 

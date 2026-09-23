@@ -9,6 +9,9 @@ enum FileChange: Sendable {
     /// A file dropped into ~/.claude/.claudoscope-events/ by our own Notification
     /// hook bridge (claudoscope-notify.sh). Carries the spool file URL.
     case notificationEvent(URL)
+    /// A Claude Code session-registry file (~/.claude/sessions/<pid>.json)
+    /// appeared, changed or vanished. Carries the registry file URL.
+    case registryChanged(URL)
     case mustRescan
 }
 
@@ -55,6 +58,48 @@ final class ClaudeFileWatcher: @unchecked Sendable {
 
     init(claudeDir: URL) {
         self.claudeDir = claudeDir
+        self.registryDirPrefix = Self.registryDirPrefix(claudeDir: claudeDir)
+    }
+
+    private let registryDirPrefix: String
+
+    /// Which pipeline a path under ~/.claude feeds. Pure, so the branch table
+    /// is unit-testable without an FSEvents stream.
+    enum PathKind: Equatable {
+        case session, notificationSpool, registry, config
+    }
+
+    static func registryDirPrefix(claudeDir: URL) -> String {
+        claudeDir.appendingPathComponent("sessions").path + "/"
+    }
+
+    static func classify(path: String, registryDirPrefix: String) -> PathKind? {
+        // Session .jsonl files only live under ~/.claude/projects/. Now that the
+        // watch root is the whole ~/.claude/ tree, gate on the path component to
+        // ignore unrelated .jsonl files (e.g. ~/.claude/history.jsonl).
+        if path.hasSuffix(".jsonl") && path.contains("/projects/") {
+            return .session
+        }
+        if path.contains("/.claudoscope-events/") && path.hasSuffix(".json") {
+            return .notificationSpool
+        }
+        // Registry files are <pid>.json; the <pid>.<sha>.key siblings hold
+        // per-process secrets and must never be picked up.
+        if path.hasPrefix(registryDirPrefix) && path.hasSuffix(".json") {
+            return .registry
+        }
+        if path.hasSuffix("settings.json") ||
+            path.hasSuffix("settings.local.json") ||
+            path.hasSuffix("mcp.json") ||
+            path.hasSuffix(".mcp.json") ||
+            path.hasSuffix("plugin.json") ||
+            path.hasSuffix("hooks.json") ||
+            path.contains("/commands/") ||
+            path.contains("/skills/") ||
+            path.contains("/themes/") {
+            return .config
+        }
+        return nil
     }
 
     @discardableResult
@@ -151,10 +196,10 @@ final class ClaudeFileWatcher: @unchecked Sendable {
         let isInodeMeta = flags & UInt32(kFSEventStreamEventFlagItemInodeMetaMod) != 0
         let isRemoved = flags & UInt32(kFSEventStreamEventFlagItemRemoved) != 0
 
-        // Session .jsonl files only live under ~/.claude/projects/. Now that the
-        // watch root is the whole ~/.claude/ tree, gate on the path component to
-        // ignore unrelated .jsonl files (e.g. ~/.claude/history.jsonl).
-        if path.hasSuffix(".jsonl") && path.contains("/projects/") {
+        switch Self.classify(path: path, registryDirPrefix: registryDirPrefix) {
+        case .none:
+            return
+        case .session:
             guard isCreated || isModified || isRenamed || isInodeMeta || isRemoved else { return }
             debounceEmit(key: path) {
                 // Existence decides at fire time, not event time: atomic saves
@@ -170,7 +215,7 @@ final class ClaudeFileWatcher: @unchecked Sendable {
                     return .sessionUpdated(url)
                 }
             }
-        } else if path.contains("/.claudoscope-events/") && path.hasSuffix(".json") {
+        case .notificationSpool:
             // Our own Notification hook spool. Emit on create/rename/modify only;
             // the app deletes files it has processed, and that removal must not
             // feed back as an event. The service tolerates a missing file, so an
@@ -179,15 +224,14 @@ final class ClaudeFileWatcher: @unchecked Sendable {
             debounceEmit(key: path) {
                 return .notificationEvent(url)
             }
-        } else if path.hasSuffix("settings.json") ||
-                  path.hasSuffix("settings.local.json") ||
-                  path.hasSuffix("mcp.json") ||
-                  path.hasSuffix(".mcp.json") ||
-                  path.hasSuffix("plugin.json") ||
-                  path.hasSuffix("hooks.json") ||
-                  path.contains("/commands/") ||
-                  path.contains("/skills/") ||
-                  path.contains("/themes/") {
+        case .registry:
+            // Removal matters here: a vanished registry file is the strongest
+            // "process exited" signal we get.
+            guard isCreated || isModified || isRenamed || isInodeMeta || isRemoved else { return }
+            debounceEmit(key: path) {
+                return .registryChanged(url)
+            }
+        case .config:
             guard isCreated || isModified else { return }
             // Skip config events while HardeningInstaller is mid-write.
             // Otherwise the debounced lint pipeline races a half-written

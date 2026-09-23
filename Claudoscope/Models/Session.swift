@@ -119,6 +119,14 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// "no attribution data in this blob"; [] means "parsed, nothing tagged".
     var skillBreakdown: [SkillAttribution]? = nil
     var mcpBreakdown: [McpAttribution]? = nil
+    /// Permission mode provenance for the Fleet view. `everBypassedPermissions`
+    /// is true if any record in the file ran under bypassPermissions (the mark
+    /// sticks for the session's whole life); `lastPermissionMode` is the most
+    /// recent mode seen. `gitBranch` is the last branch stamped on a human
+    /// prompt. Nil only for blobs cached before parserVersion 9.
+    var everBypassedPermissions: Bool? = nil
+    var lastPermissionMode: String? = nil
+    var gitBranch: String? = nil
 
     init(
         id: String,
@@ -154,7 +162,10 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         attributionAgent: String? = nil,
         sessionKind: String? = nil,
         skillBreakdown: [SkillAttribution]? = nil,
-        mcpBreakdown: [McpAttribution]? = nil
+        mcpBreakdown: [McpAttribution]? = nil,
+        everBypassedPermissions: Bool? = nil,
+        lastPermissionMode: String? = nil,
+        gitBranch: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -190,6 +201,9 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.sessionKind = sessionKind
         self.skillBreakdown = skillBreakdown
         self.mcpBreakdown = mcpBreakdown
+        self.everBypassedPermissions = everBypassedPermissions
+        self.lastPermissionMode = lastPermissionMode
+        self.gitBranch = gitBranch
     }
 }
 

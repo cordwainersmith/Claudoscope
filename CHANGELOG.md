@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0]
+Adds a Fleet view: one board for every Claude Code session that is running now or ran in the last 24 hours, across all projects, with an attention queue for the ones waiting on you. Built on the session registry Claude Code writes at `~/.claude/sessions/`, which Claudoscope had never read, so liveness comes from the process itself rather than from how recently a transcript grew.
+
+Requires a one-time full reparse on first launch (parser version 9), after which launches hydrate from cache as before.
+
+### New Features
+- **Fleet rail.** Every live agent and every session from the last 24 hours on one board, grouped by project, with state (working, idle, waiting on you, blocked on permission, done, failed), branch or worktree, model, elapsed time, tokens, estimated cost and last activity. State precedence is hook event, then Claude Code's own registry status, then transcript recency, so a card's state always traces to a concrete record. A "Needs you" section lists waiting agents oldest first with the reason. Filter pills by state and a skipped-permissions filter.
+- **Menu bar waiting count and popover fleet strip.** The menu bar icon shows how many agents are waiting on you, and turns its dot red when a live agent ran with skipped permissions. The popover gains a one-line working/waiting/blocked strip that opens the Fleet view.
+- **Jump shortcut.** An optional system-wide Control+Option+Command+J brings forward the terminal tab of the agent that has waited longest, or opens the Fleet view when nothing is waiting. Off by default; enable it under Settings, Fleet. No Accessibility permission needed.
+- **Skipped-permissions marking.** A session that ran with `--dangerously-skip-permissions` at any point carries a shield mark on its card for its whole life, derived from the transcript's permission-mode records. Cards also show the current permission mode and git branch.
+- **Live sessions in the popover.** The active-sessions card now counts a session as active while its process is alive, not only while its transcript is changing.
+- **Notification taps select the session.** Clicking a "Claude needs you" or "Claude is ready" notification still focuses the terminal, and additionally selects that session in the dashboard when the window is open.
+
+### Changed
+- **Hook events feed fleet state even when notification delivery is off.** The Notification and Stop hook spool is read for board state before the notification service drains it. The hooks are still installed only when Notifications are enabled; the Fleet sidebar says so and links to that setting.
+
 ## [1.2.0]
 Catches Claudoscope up with Claude Code 2.1.238 through 2.1.270. Claude Code now stamps transcripts with which skill, MCP tool, or subagent drove each billed turn, which turns three configuration rails into spend surfaces: the Skills, MCPs, and Agents rails can finally answer what a thing costs, not just whether it is installed. Alongside that, two cost corrections you could not have spotted from inside the app: organizations on contracted rates were shown list price, and the pricing provider silently reset to Anthropic on every launch.
 

@@ -115,6 +115,13 @@ struct ParsedRecordRaw: Decodable, Sendable {
     // "bg" for a background session. Single-valued per session.
     let sessionKind: String?
 
+    // Permission mode and git branch, stamped on type:"permission-mode" records
+    // and on human user records. Both change mid-session (bypass then plan, a
+    // branch switch), so the parser keeps last-wins plus an ever-bypassed flag.
+    // Decoded in both modes because they feed the Fleet view, not the chat.
+    let permissionMode: String?
+    let gitBranch: String?
+
     // Captures the raw `type` string when it doesn't match a known RecordType,
     // so a future telemetry layer can surface unrecognized record types instead
     // of silently dropping them.
@@ -162,6 +169,8 @@ struct ParsedRecordRaw: Decodable, Sendable {
         attributionMcpServer = try container.decodeIfPresent(String.self, forKey: .attributionMcpServer)
         attributionMcpTool = try container.decodeIfPresent(String.self, forKey: .attributionMcpTool)
         sessionKind = try container.decodeIfPresent(String.self, forKey: .sessionKind)
+        permissionMode = try container.decodeIfPresent(String.self, forKey: .permissionMode)
+        gitBranch = try container.decodeIfPresent(String.self, forKey: .gitBranch)
         if mode == .full {
             parentUuid = try container.decodeIfPresent(String.self, forKey: .parentUuid)
             cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
@@ -185,6 +194,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case hookCount, hookInfos, hookErrors, preventedContinuation, attachment
         case attributionAgent, attributionSkill, attributionMcpServer, attributionMcpTool
         case sessionKind
+        case permissionMode, gitBranch
     }
 }
 

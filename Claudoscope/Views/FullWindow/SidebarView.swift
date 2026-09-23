@@ -4,6 +4,7 @@ struct SidebarView: View {
     let rail: RailItem
     let width: CGFloat
     @Environment(SessionStore.self) private var store
+    @Environment(SessionNotificationService.self) private var sessionNotificationService
     @Binding var selectedProjectId: String?
     @Binding var selectedSessionId: String?
     @Binding var selectedPlanFilename: String?
@@ -23,6 +24,7 @@ struct SidebarView: View {
     @Binding var selectedCoworkSessionId: String?
     @Binding var selectedPluginId: String?
     @Binding var selectedTasksJobsItem: TasksJobsSelection?
+    @Binding var selectedFleetAgentId: String?
     @Binding var selectedInsightSessionId: String?
     let analyticsTab: AnalyticsTab
     @Binding var healthSection: HealthSection
@@ -114,6 +116,14 @@ struct SidebarView: View {
                         entries: store.filteredTimelineEntries,
                         globalFilterActive: store.globalFilterActive,
                         selectedDay: $selectedTimelineDay
+                    )
+                case .fleet:
+                    FleetSidebarContent(
+                        filterText: filterText,
+                        agents: store.fleetAgents,
+                        queue: store.attentionQueue,
+                        hooksInstalled: sessionNotificationService.config.masterEnabled,
+                        selection: $selectedFleetAgentId
                     )
                 case .tasksJobs:
                     TasksJobsSidebarContent(

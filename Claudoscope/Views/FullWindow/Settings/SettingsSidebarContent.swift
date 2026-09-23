@@ -20,6 +20,7 @@ struct SettingsSidebarContent: View {
         ("pricing", "dollarsign.circle", "Pricing"),
         ("costAlerts", "bell.badge", "Cost Alerts"),
         ("notifications", "bell", "Notifications"),
+        ("fleet", "square.grid.2x2", "Fleet"),
         ("canon", "building.columns", "Canon"),
         ("mcpServer", "point.3.connected.trianglepath.dotted", "MCP Server"),
         ("updates", "arrow.triangle.2.circlepath", "Updates"),

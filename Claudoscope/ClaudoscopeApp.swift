@@ -9,6 +9,7 @@ struct ClaudoscopeApp: App {
     @State private var sessionNotificationService: SessionNotificationService
     @State private var canonService: CanonService
     @State private var mcpServerService: McpServerService
+    @State private var hotKeyService: GlobalHotKeyService
     @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
 
     init() {
@@ -24,6 +25,8 @@ struct ClaudoscopeApp: App {
         )
         let canonService = CanonService()
         let mcpServerService = McpServerService()
+        let hotKeyService = GlobalHotKeyService()
+        _hotKeyService = State(initialValue: hotKeyService)
         _store = State(initialValue: store)
         _updateService = State(initialValue: updateService)
         _loginItemService = State(initialValue: loginItemService)
@@ -46,6 +49,21 @@ struct ClaudoscopeApp: App {
         costAlertService.onSessionNotificationTap = { [weak sessionNotificationService] userInfo in
             sessionNotificationService?.handleNotificationTap(userInfo: userInfo)
         }
+        // And selects it in the dashboard if that window is open.
+        sessionNotificationService.onSelectSession = { [weak store] projectId, sessionId in
+            store?.requestedSelection = RequestedSelection(projectId: projectId, sessionId: sessionId)
+        }
+        // Jump shortcut: focus the oldest waiting agent's terminal, or open the
+        // Fleet rail when nothing is waiting.
+        hotKeyService.onTrigger = { [weak store, weak updateService] in
+            guard let store else { return }
+            if let first = store.attentionQueue.first, !first.summary.isCowork {
+                TerminalFocuser.focus(matchingTitle: first.focusNeedle)
+            } else {
+                store.requestedRail = .fleet
+                MainWindowController.shared.open(store: store, updateService: updateService)
+            }
+        }
 
         MainWindowController.shared.setUpdateService(updateService)
         MainWindowController.shared.setLoginItemService(loginItemService)
@@ -53,6 +71,7 @@ struct ClaudoscopeApp: App {
         MainWindowController.shared.setSessionNotificationService(sessionNotificationService)
         MainWindowController.shared.setCanonService(canonService)
         MainWindowController.shared.setMcpServerService(mcpServerService)
+        MainWindowController.shared.setHotKeyService(hotKeyService)
 
         store.onSecretAlert = { [weak store] alert in
             guard let store else { return }
@@ -105,7 +124,9 @@ struct ClaudoscopeApp: App {
             MenuBarIcon(
                 hasUpdate: updateService.updateAvailable != nil,
                 hasCostAlert: costAlertService.hasUnseen,
-                monochrome: store.monochromeMenuBarIcon
+                monochrome: store.monochromeMenuBarIcon,
+                waitingCount: store.fleetWaitingCount,
+                hasFleetWarning: store.fleetHasWarning
             )
         }
         .menuBarExtraStyle(.window)
@@ -186,6 +207,10 @@ struct MenuBarIcon: View {
     var hasUpdate: Bool = false
     var hasCostAlert: Bool = false
     var monochrome: Bool = false
+    /// Agents waiting on the user; rendered as a small count capsule.
+    var waitingCount: Int = 0
+    /// A live agent ran with skipped permissions; red dot when no cost alert.
+    var hasFleetWarning: Bool = false
 
     var body: some View {
         let resourceName = monochrome ? "menu-bar-icon-mono" : "menu-bar-icon"
@@ -196,7 +221,7 @@ struct MenuBarIcon: View {
                 ZStack(alignment: .topTrailing) {
                     Image(nsImage: nsImage)
                         .renderingMode(monochrome ? .template : .original)
-                    if hasCostAlert {
+                    if hasCostAlert || hasFleetWarning {
                         Circle()
                             .fill(.red)
                             .frame(width: 6, height: 6)
@@ -206,6 +231,16 @@ struct MenuBarIcon: View {
                             .fill(.orange)
                             .frame(width: 6, height: 6)
                             .offset(x: 2, y: -2)
+                    }
+                    if waitingCount > 0 {
+                        Text("\(min(waitingCount, 9))")
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 3)
+                            .frame(minWidth: 10, minHeight: 10)
+                            .background(Color.okabeOrange)
+                            .clipShape(Capsule())
+                            .offset(x: 3, y: 9)
                     }
                 }
             )

@@ -143,6 +143,7 @@ final class SessionNotificationService {
             postNotification(
                 kind: .yourTurn,
                 sessionId: event.sessionId,
+                projectId: projectId,
                 title: "Claude is ready",
                 subtitle: label,
                 body: "Your turn.",
@@ -157,6 +158,7 @@ final class SessionNotificationService {
             postNotification(
                 kind: .waiting,
                 sessionId: event.sessionId,
+                projectId: projectId,
                 title: "Claude needs you",
                 subtitle: label,
                 body: event.message ?? "Waiting for your input.",
@@ -171,9 +173,17 @@ final class SessionNotificationService {
     /// calls this off the main thread; `nonisolated` because it touches no
     /// main-actor state and `TerminalFocuser` does its own dispatching.
     nonisolated func handleNotificationTap(userInfo: [AnyHashable: Any]) {
+        if let sessionId = userInfo["sessionId"] as? String, !sessionId.isEmpty,
+           let projectId = userInfo["projectId"] as? String, !projectId.isEmpty {
+            Task { @MainActor in self.onSelectSession?(projectId, sessionId) }
+        }
         guard let needle = userInfo["focusNeedle"] as? String, !needle.isEmpty else { return }
         TerminalFocuser.focus(matchingTitle: needle)
     }
+
+    /// Set by the app: selects the tapped session in the dashboard when that
+    /// window is open. Terminal focus stays the primary tap action.
+    @ObservationIgnored var onSelectSession: ((_ projectId: String, _ sessionId: String) -> Void)?
 
     /// Record a session's display title so notifications can show "Title (folder)".
     /// Subagents are skipped (their titles are UUIDs). A pure label cache with no
@@ -192,15 +202,18 @@ final class SessionNotificationService {
         return true
     }
 
-    private func postNotification(kind: Kind, sessionId: String, title: String, subtitle: String?, body: String, focusNeedle: String) {
+    private func postNotification(kind: Kind, sessionId: String, projectId: String?, title: String, subtitle: String?, body: String, focusNeedle: String) {
         guard let center = notificationCenter else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         if let subtitle, !subtitle.isEmpty { content.subtitle = subtitle }
         content.body = body
         content.sound = config.soundEnabled ? Self.sound(for: kind) : nil
-        // Carried to the tap handler so clicking focuses the originating terminal.
-        content.userInfo = ["focusNeedle": focusNeedle]
+        // Carried to the tap handler so clicking focuses the originating terminal
+        // and selects the session in the dashboard when it is open.
+        var userInfo: [String: Any] = ["focusNeedle": focusNeedle, "sessionId": sessionId]
+        if let projectId { userInfo["projectId"] = projectId }
+        content.userInfo = userInfo
         // Stable identifier: a repeat for the same (kind, session) replaces the
         // existing banner in Notification Center rather than stacking.
         let request = UNNotificationRequest(

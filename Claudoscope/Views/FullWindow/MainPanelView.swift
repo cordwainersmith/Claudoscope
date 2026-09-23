@@ -34,6 +34,7 @@ struct MainPanelView: View {
 
     // Tasks & Jobs
     var selectedTasksJobsItem: TasksJobsSelection?
+    var selectedFleetAgentId: String?
 
     // Insights (a tab inside the Analytics rail)
     var selectedInsightSessionId: String?
@@ -103,6 +104,11 @@ struct MainPanelView: View {
                 TimelineMainPanelView(
                     entries: store.timelineEntries,
                     isLoading: store.timelineLoading,
+                    onNavigateToSession: onNavigateToSession
+                )
+            case .fleet:
+                FleetMainPanelView(
+                    selection: selectedFleetAgentId,
                     onNavigateToSession: onNavigateToSession
                 )
             case .tasksJobs:
