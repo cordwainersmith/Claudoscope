@@ -21,6 +21,9 @@ extension Color {
     static let okabePurple      = Color(hex: 0xCC79A7)
     static let okabeYellow      = Color(hex: 0xF0E442)
     static let okabeGray        = Color(light: Color(hex: 0x6E6E6E), dark: Color(hex: 0x9A9A9A))
+    /// Blue that stays legible as text on both schemes: the darker Okabe blue
+    /// on light, sky blue on dark.
+    static let okabeBlueText    = Color(light: Color(hex: 0x0072B2), dark: Color(hex: 0x56B4E9))
 
     /// Categorical palette ordered most-distinct-first, so small-N charts get the
     /// strongest separations (blue + orange reads cleanly for every kind of color

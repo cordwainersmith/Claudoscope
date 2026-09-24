@@ -40,10 +40,10 @@ struct FleetStrip: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(Tower.bg)
+            .background(Tower.panel)
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(needsYou > 0 ? Tower.amber.opacity(0.4) : Color.white.opacity(0.08)))
+                .strokeBorder(needsYou > 0 ? Tower.amber.opacity(0.4) : Tower.line))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .contentShape(Rectangle())

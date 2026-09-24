@@ -1,27 +1,59 @@
 import SwiftUI
 
-// Fleet is a full-bleed control-tower board: always dark, monospaced, and
-// deliberately outside the dashboard style guide so it reads as a live ops
-// surface rather than another list/detail rail.
+// Fleet is a full-bleed control-tower board: lanes, tickers and a hero
+// headline instead of the list/detail layout of the other rails. It shares
+// the dashboard's ground, card surface, text colors and Okabe-Ito palette so
+// it reads as part of the same app.
 
 // MARK: - Palette
 
 enum Tower {
-    static let bg = Color(red: 0.047, green: 0.051, blue: 0.063)
-    static let panel = Color.white.opacity(0.035)
-    static let panelHover = Color.white.opacity(0.06)
-    static let line = Color.white.opacity(0.08)
-    static let text = Color(white: 0.93)
-    static let dim = Color(white: 0.58)
-    static let faint = Color(white: 0.36)
+    static let bg = Color(nsColor: .windowBackgroundColor)
+    static let panel = Color.cardBackground
+    /// Wash laid over `panel` on hover or selection.
+    static let panelHover = Color.primary.opacity(0.05)
+    static let line = Color.primary.opacity(0.1)
+    static let text = Color.primary
+    static let dim = Color.secondary
+    static let faint = Color.secondary.opacity(0.6)
 
-    static let amber = Color(red: 1.0, green: 0.72, blue: 0.22)
-    static let red = Color(red: 1.0, green: 0.34, blue: 0.31)
-    static let green = Color(red: 0.36, green: 0.9, blue: 0.6)
-    static let cyan = Color(red: 0.38, green: 0.8, blue: 1.0)
+    static let amber = Color.okabeOrange
+    static let red = Color.okabeVermillion
+    static let green = Color.okabeBluishGreen
+    static let cyan = Color.okabeBlueText
+    /// Text on a filled state-colored button.
+    static let onTint = Color.white
+
+    /// Labels and prose use the app's proportional system face, as the rest
+    /// of the dashboard does; `mono` is kept for clocks, costs, tokens and
+    /// code-like values.
+    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight)
+    }
 
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
+    }
+
+    /// One-second schedule anchored on a whole second, so every clock on the
+    /// board ticks in the same instant instead of each starting when its view
+    /// happened to appear.
+    static var secondTick: PeriodicTimelineSchedule {
+        let now = Date().timeIntervalSinceReferenceDate
+        return .periodic(from: Date(timeIntervalSinceReferenceDate: now.rounded(.down)), by: 1)
+    }
+
+    /// A wait that has gone on for this long stops being amber.
+    static let longWait: TimeInterval = 10 * 60
+
+    /// Waiting tint by age: amber, sliding to red after `longWait`. Blocked and
+    /// failed are red from the start.
+    static func color(_ state: FleetState, waitedFor: TimeInterval) -> Color {
+        guard case .waitingOnUser = state else { return color(state) }
+        let t = min(1, max(0, (waitedFor - longWait) / longWait))
+        guard t > 0 else { return amber }
+        // Okabe orange (E69F00) toward vermillion (D55E00).
+        return Color(red: 0.902 - 0.067 * t, green: 0.624 - 0.255 * t, blue: 0)
     }
 
     static func color(_ state: FleetState) -> Color {
@@ -62,9 +94,14 @@ struct FleetBoardView: View {
     @Environment(SessionNotificationService.self) private var sessionNotificationService
     var onNavigateToSession: ((String, String, String?) -> Void)?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: String?
     @State private var query = ""
     @State private var hazardOnly = false
+
+    private var laneAnimation: Animation? {
+        reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.1)
+    }
 
     private var visible: [FleetAgent] {
         store.fleetAgents.filter { agent in
@@ -113,26 +150,40 @@ struct FleetBoardView: View {
                         if !sessionNotificationService.config.masterEnabled {
                             hooksNotice
                         }
-                        if !needsYou.isEmpty {
-                            lane(title: "NEEDS YOU", count: needsYou.count, tint: Tower.amber) {
+                        // Always present so answering the last waiting agent
+                        // does not shift every other lane up the page.
+                        lane(title: "NEEDS YOU", count: needsYou.count, tint: Tower.amber) {
+                            if needsYou.isEmpty {
+                                Text(visible.isEmpty ? "—" : "nothing waiting")
+                                    .font(Tower.ui(11))
+                                    .foregroundStyle(Tower.faint)
+                                    .padding(.vertical, 6)
+                                    .transition(.opacity)
+                            } else {
                                 VStack(spacing: 10) {
                                     ForEach(Array(needsYou.enumerated()), id: \.element.id) { index, agent in
                                         NeedsYouTile(agent: agent, isFirst: index == 0,
                                                      onInspect: { selection = agent.id },
                                                      onOpen: { open(agent) })
+                                            .transition(.asymmetric(
+                                                insertion: .move(edge: .top).combined(with: .opacity),
+                                                removal: .opacity.combined(with: .scale(scale: 0.97))))
                                     }
                                 }
                             }
                         }
+                        .animation(laneAnimation, value: needsYou.map(\.id))
                         if !working.isEmpty {
                             lane(title: "WORKING", count: working.count, tint: Tower.green) {
                                 tileGrid(working)
                             }
+                            .transition(.opacity)
                         }
                         if !parked.isEmpty {
                             lane(title: "PARKED", count: parked.count, tint: Tower.cyan) {
                                 tileGrid(parked)
                             }
+                            .transition(.opacity)
                         }
                         if !landed.isEmpty {
                             lane(title: "LANDED · 24H", count: landed.count, tint: Tower.faint) {
@@ -141,15 +192,18 @@ struct FleetBoardView: View {
                                         LandedRow(agent: agent, isSelected: selection == agent.id) {
                                             selection = agent.id
                                         }
+                                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
                                     }
                                 }
                                 .background(Tower.panel)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
+                                .animation(laneAnimation, value: landed.map(\.id))
                             }
+                            .transition(.opacity)
                         }
                         if visible.isEmpty {
                             Text("NO MATCHES")
-                                .font(Tower.mono(12, .semibold))
+                                .font(Tower.ui(12, .semibold))
                                 .tracking(2)
                                 .foregroundStyle(Tower.faint)
                                 .frame(maxWidth: .infinity)
@@ -157,11 +211,12 @@ struct FleetBoardView: View {
                         }
                     }
                     .padding(32)
+                    .animation(laneAnimation, value: laneShape)
                 }
             }
 
             if let agent = selectedAgent {
-                Color.black.opacity(0.35)
+                Color.black.opacity(0.25)
                     .contentShape(Rectangle())
                     .onTapGesture { selection = nil }
                     .transition(.opacity)
@@ -170,9 +225,14 @@ struct FleetBoardView: View {
                     .transition(.move(edge: .trailing))
             }
         }
-        .environment(\.colorScheme, .dark)
-        .animation(.spring(duration: 0.28), value: selection)
-        .animation(.easeInOut(duration: 0.2), value: store.fleetAgents.map(\.state))
+        .animation(reduceMotion ? nil : .spring(duration: 0.28), value: selection != nil)
+    }
+
+    /// Which lanes exist and how many cards each holds. Animating on this,
+    /// rather than on every agent's state, moves lanes without re-flowing the
+    /// text inside each card.
+    private var laneShape: [Int] {
+        [needsYou.count, working.count, parked.count, landed.count]
     }
 
     private func tileGrid(_ agents: [FleetAgent]) -> some View {
@@ -182,8 +242,10 @@ struct FleetBoardView: View {
                 InFlightTile(agent: agent, isSelected: selection == agent.id) {
                     selection = agent.id
                 }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
+        .animation(laneAnimation, value: agents.map(\.id))
     }
 
     private func open(_ agent: FleetAgent) {
@@ -197,7 +259,7 @@ struct FleetBoardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("FLEET CONTROL")
-                    .font(Tower.mono(11, .semibold))
+                    .font(Tower.ui(11, .semibold))
                     .tracking(3)
                     .foregroundStyle(Tower.faint)
                 Spacer()
@@ -220,19 +282,25 @@ struct FleetBoardView: View {
     private var headline: some View {
         let waiting = store.attentionQueue.count
         let working = store.fleetAgents.filter { $0.state == .working }.count
-        if waiting > 0 {
-            (Text("\(waiting) ").foregroundColor(Tower.amber)
-             + Text(waiting == 1 ? "agent needs you" : "agents need you").foregroundColor(Tower.text))
-                .font(.system(size: 34, weight: .bold, design: .monospaced))
-        } else if working > 0 {
-            (Text("All clear. ").foregroundColor(Tower.text)
-             + Text("\(working) working").foregroundColor(Tower.text))
-                .font(.system(size: 34, weight: .bold, design: .monospaced))
-        } else {
-            Text("All quiet.")
-                .font(.system(size: 34, weight: .bold, design: .monospaced))
-                .foregroundStyle(Tower.text)
+        let variant = waiting > 0 ? "waiting" : (working > 0 ? "working" : "quiet")
+        Group {
+            if waiting > 0 {
+                (Text("\(waiting) ").foregroundColor(Tower.amber)
+                 + Text(waiting == 1 ? "agent needs you" : "agents need you").foregroundColor(Tower.text))
+            } else if working > 0 {
+                (Text("All clear. ").foregroundColor(Tower.text)
+                 + Text("\(working) working").foregroundColor(Tower.text))
+            } else {
+                Text("All quiet.")
+                    .foregroundStyle(Tower.text)
+            }
         }
+        .font(.system(size: 32, weight: .bold))
+        .contentTransition(.numericText())
+        .id(variant)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: variant)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: waiting + working)
     }
 
     private func counter(_ label: String, _ value: Int, _ tint: Color) -> some View {
@@ -242,7 +310,7 @@ struct FleetBoardView: View {
                 .foregroundStyle(value > 0 ? tint : Tower.faint)
                 .contentTransition(.numericText())
             Text(label)
-                .font(Tower.mono(9, .medium))
+                .font(Tower.ui(9, .medium))
                 .tracking(1.5)
                 .foregroundStyle(Tower.faint)
         }
@@ -256,7 +324,7 @@ struct FleetBoardView: View {
                     .foregroundStyle(Tower.faint)
                 TextField("filter", text: $query)
                     .textFieldStyle(.plain)
-                    .font(Tower.mono(12))
+                    .font(Tower.ui(12))
                     .frame(width: 140)
             }
             .padding(.horizontal, 10)
@@ -270,7 +338,7 @@ struct FleetBoardView: View {
             } label: {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 11))
-                    .foregroundStyle(hazardOnly ? Tower.bg : Tower.red)
+                    .foregroundStyle(hazardOnly ? Tower.onTint : Tower.red)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(hazardOnly ? Tower.red : Tower.panel)
@@ -287,7 +355,7 @@ struct FleetBoardView: View {
             Image(systemName: "antenna.radiowaves.left.and.right.slash")
                 .foregroundStyle(Tower.amber)
             Text("Permission prompts are invisible without the notification hooks.")
-                .font(Tower.mono(12))
+                .font(Tower.ui(12))
                 .foregroundStyle(Tower.dim)
             Spacer()
             Button("ENABLE") { store.requestedRail = .settings }
@@ -302,11 +370,11 @@ struct FleetBoardView: View {
             HStack(spacing: 10) {
                 Rectangle().fill(tint).frame(width: 14, height: 2)
                 Text(title)
-                    .font(Tower.mono(11, .bold))
+                    .font(Tower.ui(11, .semibold))
                     .tracking(2.5)
                     .foregroundStyle(tint)
                 Text("\(count)")
-                    .font(Tower.mono(11))
+                    .font(Tower.ui(11))
                     .foregroundStyle(Tower.faint)
                 Rectangle().fill(Tower.line).frame(height: 1)
             }
@@ -325,15 +393,15 @@ struct FleetBoardView: View {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 26))
                     .foregroundStyle(Tower.faint)
-                    .symbolEffect(.pulse)
+                    .symbolEffect(.pulse, isActive: !reduceMotion)
             }
             .frame(height: 220)
             Text("NO TRAFFIC")
-                .font(Tower.mono(16, .bold))
+                .font(Tower.ui(16, .semibold))
                 .tracking(4)
                 .foregroundStyle(Tower.dim)
             Text("Running Claude Code sessions and anything from the last 24 hours land here.")
-                .font(Tower.mono(12))
+                .font(Tower.ui(12))
                 .foregroundStyle(Tower.faint)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -347,9 +415,11 @@ private struct NeedsYouTile: View {
     let isFirst: Bool
     let onInspect: () -> Void
     let onOpen: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-
-    private var tint: Color { Tower.color(agent.state) }
+    /// Border strength: starts bright on arrival and settles to the resting
+    /// value, one pulse only.
+    @State private var arrivalGlow = 0.35
 
     private var reason: String {
         if case .waitingOnUser(let reason) = agent.state { return reason }
@@ -357,21 +427,31 @@ private struct NeedsYouTile: View {
     }
 
     var body: some View {
+        TimelineView(Tower.secondTick) { context in
+            let tint = Tower.color(agent.state, waitedFor: context.date.timeIntervalSince(agent.since))
+            tile(tint: tint, now: context.date)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            arrivalGlow = 0.9
+            withAnimation(.easeOut(duration: 0.8).delay(0.1)) { arrivalGlow = 0.35 }
+        }
+    }
+
+    private func tile(tint: Color, now: Date) -> some View {
         HStack(spacing: 0) {
             Rectangle().fill(tint).frame(width: 5)
 
             HStack(alignment: .center, spacing: 20) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(Tower.clock(from: agent.since, to: context.date))
-                            .font(Tower.mono(30, .bold))
-                            .foregroundStyle(tint)
-                            .monospacedDigit()
-                        Text("WAITING")
-                            .font(Tower.mono(9, .semibold))
-                            .tracking(2)
-                            .foregroundStyle(Tower.faint)
-                    }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Tower.clock(from: agent.since, to: now))
+                        .font(Tower.mono(30, .semibold))
+                        .foregroundStyle(tint)
+                        .monospacedDigit()
+                    Text("WAITING")
+                        .font(Tower.ui(9, .semibold))
+                        .tracking(2)
+                        .foregroundStyle(Tower.faint)
                 }
                 .frame(width: 150, alignment: .leading)
 
@@ -380,7 +460,7 @@ private struct NeedsYouTile: View {
                         Image(systemName: agent.state == .blockedOnPermission ? "lock.fill" : "hand.raised.fill")
                             .font(.system(size: 12))
                             .foregroundStyle(tint)
-                            .symbolEffect(.pulse)
+                            .symbolEffect(.pulse, isActive: !reduceMotion)
                         Text(reason)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Tower.text)
@@ -406,23 +486,25 @@ private struct NeedsYouTile: View {
                         .buttonStyle(TowerButtonStyle(tint: Tower.dim, filled: false))
                         .disabled(agent.summary.isCowork)
                     if !agent.summary.isCowork {
-                        jumpButton
+                        jumpButton(tint: tint)
                     }
                 }
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 16)
         }
-        .background(tint.opacity(hovering ? 0.12 : 0.07))
+        // The oldest wait sits slightly heavier than the rest of the queue.
+        .background(tint.opacity((hovering ? 0.12 : 0.07) + (isFirst ? 0.03 : 0)))
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.35)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(arrivalGlow)))
         .contentShape(Rectangle())
         .onTapGesture(perform: onInspect)
         .onHover { hovering = $0 }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.6), value: tint)
     }
 
     @ViewBuilder
-    private var jumpButton: some View {
+    private func jumpButton(tint: Color) -> some View {
         let button = Button {
             TerminalFocuser.focus(matchingTitle: agent.focusNeedle)
         } label: {
@@ -449,7 +531,12 @@ private struct InFlightTile: View {
     let agent: FleetAgent
     let isSelected: Bool
     let onSelect: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
+    /// Heartbeat: the top bar flares when the transcript moves, then decays,
+    /// so a card that is "busy" but stalled looks different from one that is
+    /// actually producing output.
+    @State private var beat = 0.0
 
     private var tint: Color { Tower.color(agent.state) }
 
@@ -459,23 +546,26 @@ private struct InFlightTile: View {
                 // Live sessions wear their state color across the top:
                 // green while working, cyan while parked.
                 if agent.isLive || agent.state == .working {
-                    Rectangle()
-                        .fill(tint)
-                        .frame(height: 3)
+                    ZStack {
+                        Rectangle().fill(tint)
+                        Rectangle().fill(Color.white).opacity(beat * 0.7)
+                    }
+                    .frame(height: 3)
+                    .shadow(color: tint.opacity(beat * 0.8), radius: 6, y: 2)
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 6) {
                         Image(systemName: agent.state == .working ? "waveform" : "pause.circle")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(tint)
-                            .symbolEffect(.variableColor.iterative, isActive: agent.state == .working)
+                            .symbolEffect(.variableColor.iterative, isActive: agent.state == .working && !reduceMotion)
                         Text(Tower.code(agent.state))
-                            .font(Tower.mono(10, .bold))
+                            .font(Tower.ui(10, .semibold))
                             .tracking(1.5)
                             .foregroundStyle(tint)
                         if agent.isBackgroundJob {
                             Text("BG")
-                                .font(Tower.mono(9, .bold))
+                                .font(Tower.ui(9, .semibold))
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
                                 .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Tower.faint))
@@ -483,7 +573,7 @@ private struct InFlightTile: View {
                         }
                         BypassTag(agent: agent)
                         Spacer()
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                        TimelineView(Tower.secondTick) { context in
                             HStack(spacing: 8) {
                                 Text(Tower.clock(from: agent.since, to: context.date))
                                     .font(Tower.mono(12, .semibold))
@@ -498,7 +588,7 @@ private struct InFlightTile: View {
                     }
 
                     Text(agent.projectName)
-                        .font(Tower.mono(18, .bold))
+                        .font(Tower.ui(18, .semibold))
                         .foregroundStyle(Tower.text)
                         .lineLimit(1)
 
@@ -522,21 +612,33 @@ private struct InFlightTile: View {
                         Spacer(minLength: 4)
                         Text(formatCost(agent.summary.estimatedCost))
                             .font(Tower.mono(12, .semibold))
-                            .foregroundStyle(Tower.amber)
+                            .foregroundStyle(Tower.text)
+                            .contentTransition(.numericText())
                     }
                 }
                 .padding(14)
             }
-            .background(hovering || isSelected ? Tower.panelHover : Tower.panel)
+            .background(hovering || isSelected ? Tower.panelHover : .clear)
+            .background(Tower.panel)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(isSelected ? tint : Tower.line, lineWidth: isSelected ? 1.5 : 1)
+                    .strokeBorder(isSelected ? tint : (hovering ? tint.opacity(0.4) : Tower.line),
+                                  lineWidth: isSelected ? 1.5 : 1)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: hovering)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: agent.summary.estimatedCost)
+        .onChange(of: agent.summary.lastTimestamp) { _, _ in
+            guard !reduceMotion, agent.isLive else { return }
+            var jump = Transaction()
+            jump.disablesAnimations = true
+            withTransaction(jump) { beat = 1 }
+            withAnimation(.easeOut(duration: 1.5).delay(0.1)) { beat = 0 }
+        }
     }
 }
 
@@ -552,12 +654,12 @@ private struct LandedRow: View {
         Button(action: onSelect) {
             HStack(spacing: 14) {
                 Text(Tower.code(agent.state))
-                    .font(Tower.mono(10, .bold))
+                    .font(Tower.ui(10, .semibold))
                     .tracking(1)
                     .foregroundStyle(Tower.color(agent.state).opacity(0.8))
                     .frame(width: 64, alignment: .leading)
                 Text(agent.projectName)
-                    .font(Tower.mono(12, .semibold))
+                    .font(Tower.ui(12, .semibold))
                     .foregroundStyle(Tower.dim)
                     .frame(width: 160, alignment: .leading)
                     .lineLimit(1)
@@ -572,13 +674,13 @@ private struct LandedRow: View {
                         .foregroundStyle(Tower.red.opacity(0.5))
                         .help("Ran with skipped permissions")
                 }
-                Text(agent.since, format: .relative(presentation: .numeric))
-                    .font(Tower.mono(11))
+                Text(agent.since, style: .relative)
+                    .font(Tower.ui(11))
                     .foregroundStyle(Tower.faint)
                     .frame(width: 110, alignment: .trailing)
                 Text(formatCost(agent.summary.estimatedCost))
                     .font(Tower.mono(11))
-                    .foregroundStyle(Tower.amber.opacity(0.7))
+                    .foregroundStyle(Tower.dim)
                     .frame(width: 70, alignment: .trailing)
             }
             .padding(.horizontal, 14)
@@ -589,6 +691,11 @@ private struct LandedRow: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .overlay(alignment: .bottom) { Rectangle().fill(Tower.line).frame(height: 1) }
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Tower.color(agent.state).opacity(hovering || isSelected ? 0.6 : 0))
+                .frame(width: 2)
+        }
     }
 }
 
@@ -599,18 +706,28 @@ private struct FleetInspector: View {
     let onClose: () -> Void
     let onOpen: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private var summary: SessionSummary { agent.summary }
     private var tint: Color { Tower.color(agent.state) }
 
     var body: some View {
+        panel
+            // Slide-in covers open; switching cards while open crossfades.
+            .id(agent.id)
+            .transition(.opacity)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: agent.id)
+    }
+
+    private var panel: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(Tower.code(agent.state))
-                    .font(Tower.mono(11, .bold))
+                    .font(Tower.ui(11, .semibold))
                     .tracking(2)
                     .foregroundStyle(tint)
-                Text("since \(agent.since, format: .relative(presentation: .named))")
-                    .font(Tower.mono(11))
+                (Text("since ") + Text(agent.since, style: .relative) + Text(" ago"))
+                    .font(Tower.ui(11))
                     .foregroundStyle(Tower.faint)
                 Spacer()
                 Button(action: onClose) {
@@ -630,7 +747,7 @@ private struct FleetInspector: View {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                     Text("RAN WITH SKIPPED PERMISSIONS")
-                        .font(Tower.mono(10, .bold))
+                        .font(Tower.ui(10, .semibold))
                         .tracking(1)
                 }
                 .foregroundStyle(Tower.red)
@@ -644,7 +761,7 @@ private struct FleetInspector: View {
                 VStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(agent.projectName)
-                            .font(Tower.mono(22, .bold))
+                            .font(Tower.ui(22, .semibold))
                             .foregroundStyle(Tower.text)
                         Text(summary.title)
                             .font(.system(size: 13))
@@ -706,7 +823,7 @@ private struct FleetInspector: View {
                             if agent.isLive, turn.cacheTTLSeconds != nil {
                                 HStack(spacing: 12) {
                                     Text("cache")
-                                        .font(Tower.mono(11))
+                                        .font(Tower.ui(11))
                                         .foregroundStyle(Tower.faint)
                                         .frame(width: 70, alignment: .leading)
                                     CacheCountdown(turn: turn)
@@ -731,16 +848,16 @@ private struct FleetInspector: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color(red: 0.07, green: 0.075, blue: 0.09))
+        .background(Tower.bg)
         .overlay(alignment: .leading) { Rectangle().fill(tint.opacity(0.6)).frame(width: 2) }
-        .shadow(color: .black.opacity(0.5), radius: 24, x: -8)
+        .shadow(color: .black.opacity(0.25), radius: 24, x: -8)
     }
 
     private func callout(_ text: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "hand.raised.fill")
                 .foregroundStyle(tint)
-                .symbolEffect(.pulse)
+                .symbolEffect(.pulse, isActive: !reduceMotion)
             Text(text)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Tower.text)
@@ -754,7 +871,7 @@ private struct FleetInspector: View {
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(Tower.mono(10, .bold))
+                .font(Tower.ui(10, .semibold))
                 .tracking(2)
                 .foregroundStyle(Tower.faint)
             VStack(alignment: .leading, spacing: 6) { content() }
@@ -766,7 +883,7 @@ private struct FleetInspector: View {
         if let value, !value.isEmpty {
             HStack(alignment: .top, spacing: 12) {
                 Text(label)
-                    .font(Tower.mono(11))
+                    .font(Tower.ui(11))
                     .foregroundStyle(Tower.faint)
                     .frame(width: 70, alignment: .leading)
                 Text(value)
@@ -798,7 +915,7 @@ private struct AgentMeta: View {
                 Text(getModelFamily(model))
             }
         }
-        .font(Tower.mono(11))
+        .font(Tower.ui(11))
         .foregroundStyle(Tower.faint)
         .lineLimit(1)
     }
@@ -808,6 +925,8 @@ private struct AgentMeta: View {
 /// then red as the session nears compaction; the text always states the value.
 private struct ContextGauge: View {
     let turn: LatestTurn?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var breathing = false
 
     /// Worst of two bands: share of the window (what triggers compaction) and
     /// absolute size (what a 1M window hides: cost and recall degrade long
@@ -825,16 +944,21 @@ private struct ContextGauge: View {
            let window = turn.contextWindowTokens {
             HStack(spacing: 8) {
                 Text("CTX")
-                    .font(Tower.mono(9, .bold))
+                    .font(Tower.ui(9, .semibold))
                     .foregroundStyle(Tower.faint)
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(Tower.line)
                         Capsule().fill(tint)
                             .frame(width: max(4, geo.size.width * min(1, utilization)))
+                            .opacity(tint == Tower.red && breathing ? 0.55 : 1)
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.4), value: utilization)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: tint)
                     }
                 }
                 .frame(height: 4)
+                .onAppear { startBreathingIfNeeded() }
+                .onChange(of: tint) { _, _ in startBreathingIfNeeded() }
                 Text("\(Int((utilization * 100).rounded()))%")
                     .font(Tower.mono(10, .semibold))
                     .foregroundStyle(Tower.text)
@@ -848,14 +972,25 @@ private struct ContextGauge: View {
         } else {
             HStack(spacing: 8) {
                 Text("CTX")
-                    .font(Tower.mono(9, .bold))
+                    .font(Tower.ui(9, .semibold))
                     .foregroundStyle(Tower.faint)
                 Capsule().fill(Tower.line).frame(height: 4)
                 Text("—")
-                    .font(Tower.mono(10))
+                    .font(Tower.ui(10))
                     .foregroundStyle(Tower.faint)
             }
             .help("No billed turn recorded yet")
+        }
+    }
+
+    /// A slow breath on the fill, only while the gauge is in the red band.
+    private func startBreathingIfNeeded() {
+        guard tint == Tower.red, !reduceMotion else {
+            breathing = false
+            return
+        }
+        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+            breathing = true
         }
     }
 }
@@ -881,7 +1016,7 @@ private struct LastActionLine: View {
                 Spacer(minLength: 4)
                 if let ts = turn.toolTimestamp {
                     Text(formatRelativeTime(ts))
-                        .font(Tower.mono(10))
+                        .font(Tower.ui(10))
                         .foregroundStyle(Tower.faint)
                         .fixedSize()
                 }
@@ -892,7 +1027,7 @@ private struct LastActionLine: View {
                 Image(systemName: "chevron.right.2")
                     .font(.system(size: 8, weight: .bold))
                 Text("no tool calls yet")
-                    .font(Tower.mono(11))
+                    .font(Tower.ui(11))
             }
             .foregroundStyle(Tower.faint)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -966,7 +1101,7 @@ private struct TelemetryStrip: View {
                         Spacer()
                         Text("peak \(hourly.max() ?? 0)")
                     }
-                    .font(Tower.mono(9, .medium))
+                    .font(Tower.ui(9, .medium))
                     .tracking(1.5)
                     .foregroundStyle(Tower.faint)
                 }
@@ -987,7 +1122,7 @@ private struct TelemetryStrip: View {
                 .foregroundStyle(Tower.text)
                 .contentTransition(.numericText())
             Text(label)
-                .font(Tower.mono(9, .medium))
+                .font(Tower.ui(9, .medium))
                 .tracking(1.5)
                 .foregroundStyle(Tower.faint)
         }
@@ -1012,6 +1147,7 @@ private struct ConcurrencySparkline: View {
             }
         }
         .frame(maxHeight: .infinity, alignment: .bottom)
+        .animation(.easeOut(duration: 0.4), value: counts)
     }
 }
 
@@ -1032,7 +1168,7 @@ private struct BypassTag: View {
     var body: some View {
         if agent.summary.lastPermissionMode == "bypassPermissions" {
             Text("BYPASS")
-                .font(Tower.mono(9, .bold))
+                .font(Tower.ui(9, .semibold))
                 .tracking(1)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 1)
@@ -1056,9 +1192,11 @@ private struct CacheCountdown: View {
     var body: some View {
         if let turn, let ttl = turn.cacheTTLSeconds,
            let last = turn.turnTimestamp.flatMap(ISO8601.parse) {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(Tower.secondTick) { context in
                 let remaining = Int(last.addingTimeInterval(TimeInterval(ttl)).timeIntervalSince(context.date))
-                let tint = remaining <= 0 ? Tower.faint : (remaining < 60 ? Tower.red : Tower.amber)
+                // Amber is reserved for agents that need you; the countdown
+                // only colors up when the cache is about to go cold.
+                let tint = remaining <= 0 ? Tower.faint : (remaining < 60 ? Tower.red : Tower.dim)
                 HStack(spacing: 4) {
                     Image(systemName: remaining > 0 ? "timer" : "snowflake")
                         .font(.system(size: 9, weight: .semibold))
@@ -1067,8 +1205,10 @@ private struct CacheCountdown: View {
                          : "cache cold")
                         .font(Tower.mono(10, .medium))
                         .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true))
                 }
                 .foregroundStyle(tint)
+                .animation(.linear(duration: 0.2), value: remaining)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(tint.opacity(0.4)))
@@ -1095,9 +1235,9 @@ struct TowerButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Tower.mono(11, .bold))
+            .font(Tower.ui(11, .semibold))
             .tracking(1)
-            .foregroundStyle(filled ? Tower.bg : tint)
+            .foregroundStyle(filled ? Tower.onTint : tint)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background(filled ? tint : Color.clear)
