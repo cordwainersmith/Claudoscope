@@ -65,19 +65,13 @@ struct MenuBarPopoverContent: View {
 
                 Divider()
 
-                // Fleet summary (only when something is live or waiting)
-                if fleetWorking + fleetWaiting + fleetBlocked > 0 {
-                    FleetStrip(working: fleetWorking, waiting: fleetWaiting, blocked: fleetBlocked) {
+                // Active sessions with their Fleet state (if any)
+                if !activeAgents.isEmpty {
+                    ActiveSessionsCard(agents: activeAgents) {
                         store.requestedRail = .fleet
                         MainWindowController.shared.open(store: store, updateService: updateService)
                     }
-                    Divider()
-                }
-
-                // Active sessions (if any)
-                if !store.activeSessions.isEmpty {
-                    ActiveSessionsCard(sessions: store.activeSessions)
-                        .padding(.vertical, 8)
+                    .padding(.vertical, 8)
                     Divider()
                 }
 
@@ -146,9 +140,11 @@ struct MenuBarPopoverContent: View {
         .onAppear { costAlertService.acknowledgeSeen() }
     }
 
-    private var fleetWorking: Int { store.fleetAgents.filter { $0.state == .working }.count }
-    private var fleetBlocked: Int { store.fleetAgents.filter { $0.state == .blockedOnPermission }.count }
-    private var fleetWaiting: Int { store.attentionQueue.count - fleetBlocked }
+    /// Same membership as `store.activeSessions` (live process or moved
+    /// within the active threshold), already sorted attention-first.
+    private var activeAgents: [FleetAgent] {
+        store.fleetAgents.filter { $0.isLive || $0.state == .working }
+    }
 }
 
 // MARK: - Cost Alert Strip
