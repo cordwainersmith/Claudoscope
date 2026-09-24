@@ -146,6 +146,29 @@ enum FleetStateEngine {
         return .genericBlock
     }
 
+    /// Agents active in each of the last `hours` hourly buckets, oldest first.
+    /// A session counts for every bucket its first..last activity overlaps
+    /// (live sessions run to `now`), so a long idle gap reads as active.
+    static func hourlyConcurrency(_ agents: [FleetAgent], now: Date, hours: Int = 24) -> [Int] {
+        let spans: [(Date, Date)] = agents.map { agent in
+            let end = agent.isLive ? now : (ISO8601.parse(agent.summary.lastTimestamp) ?? agent.since)
+            return (agent.startedAt, end)
+        }
+        return (0..<hours).map { i in
+            let bucketStart = now.addingTimeInterval(-Double(hours - i) * 3600)
+            let bucketEnd = bucketStart.addingTimeInterval(3600)
+            return spans.filter { $0.0 < bucketEnd && $0.1 >= bucketStart }.count
+        }
+    }
+
+    /// Cost the board's sessions incurred on the local calendar day of `now`.
+    static func spendOnDay(_ agents: [FleetAgent], now: Date) -> Double {
+        let key = ISO8601.localDayKey(for: now)
+        return agents.reduce(0) { total, agent in
+            total + agent.summary.dailyContributions.filter { $0.date == key }.reduce(0) { $0 + $1.estimatedCost }
+        }
+    }
+
     private static func nonEmpty(_ s: String) -> String? {
         s.isEmpty ? nil : s
     }

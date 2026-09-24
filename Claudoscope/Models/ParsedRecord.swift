@@ -92,6 +92,8 @@ struct ParsedRecordRaw: Decodable, Sendable {
     // GitLab MR opened from the session). Decoded in both modes because they feed
     // the session list, not the chat view.
     let aiTitle: String?
+    /// type:"last-prompt": the user's most recent prompt text.
+    let lastPrompt: String?
     let worktreeSession: WorktreeStateRaw?
     let prNumber: Int?
     let prUrl: String?
@@ -161,6 +163,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         agentName = try container.decodeIfPresent(String.self, forKey: .agentName)
         title = try container.decodeIfPresent(String.self, forKey: .title)
         aiTitle = try container.decodeIfPresent(String.self, forKey: .aiTitle)
+        lastPrompt = try container.decodeIfPresent(String.self, forKey: .lastPrompt)
         worktreeSession = try container.decodeIfPresent(WorktreeStateRaw.self, forKey: .worktreeSession)
         prNumber = try container.decodeIfPresent(Int.self, forKey: .prNumber)
         prUrl = try container.decodeIfPresent(String.self, forKey: .prUrl)
@@ -190,7 +193,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case toolUseResult, isCompactSummary, isVisibleInTranscriptOnly
         case customTitle, agentName, isSidechain, title
         case snapshot, isSnapshotUpdate, messageId
-        case aiTitle, worktreeSession, prNumber, prUrl
+        case aiTitle, lastPrompt, worktreeSession, prNumber, prUrl
         case hookCount, hookInfos, hookErrors, preventedContinuation, attachment
         case attributionAgent, attributionSkill, attributionMcpServer, attributionMcpTool
         case sessionKind
@@ -323,6 +326,10 @@ struct ContentBlockRaw: Decodable, Sendable {
     let id: String?
     let name: String?
     let input: [String: AnyCodableValue]?
+    /// tool_use only, both modes: the one input field that says what the call
+    /// touches (a file, a command, a pattern), so the lite scan can show a
+    /// session's latest action without decoding the full input.
+    let toolTarget: String?
 
     // tool_result block fields (embedded in user messages)
     let toolUseId: String?
@@ -336,9 +343,22 @@ struct ContentBlockRaw: Decodable, Sendable {
         case isError = "is_error"
     }
 
+    /// Checked in order; the first non-empty string wins.
+    private enum ToolTargetKeys: String, CodingKey, CaseIterable {
+        case filePath = "file_path", notebookPath = "notebook_path", path, command
+        case pattern, url, query, skill, subagentType = "subagent_type", description
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         type = try container.decodeIfPresent(String.self, forKey: .type)
+        if type == "tool_use", let input = try? container.nestedContainer(keyedBy: ToolTargetKeys.self, forKey: .input) {
+            toolTarget = ToolTargetKeys.allCases.lazy
+                .compactMap { try? input.decodeIfPresent(String.self, forKey: $0) }
+                .first { !$0.isEmpty }
+        } else {
+            toolTarget = nil
+        }
         text = try container.decodeIfPresent(String.self, forKey: .text)
         thinking = try container.decodeIfPresent(String.self, forKey: .thinking)
         name = try container.decodeIfPresent(String.self, forKey: .name)

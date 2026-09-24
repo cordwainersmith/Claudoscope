@@ -34,7 +34,6 @@ struct MainPanelView: View {
 
     // Tasks & Jobs
     var selectedTasksJobsItem: TasksJobsSelection?
-    var selectedFleetAgentId: String?
 
     // Insights (a tab inside the Analytics rail)
     var selectedInsightSessionId: String?
@@ -107,10 +106,7 @@ struct MainPanelView: View {
                     onNavigateToSession: onNavigateToSession
                 )
             case .fleet:
-                FleetMainPanelView(
-                    selection: selectedFleetAgentId,
-                    onNavigateToSession: onNavigateToSession
-                )
+                FleetBoardView(onNavigateToSession: onNavigateToSession)
             case .tasksJobs:
                 TasksJobsMainPanelView(
                     selection: selectedTasksJobsItem,

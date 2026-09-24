@@ -189,7 +189,8 @@ final class SessionSummaryStore: Sendable {
     // MARK: - Rows
 
     /// All rows decoded for launch hydration. Blobs that fail to decode (a
-    /// model field changed without a parserVersion bump) are reported by path,
+    /// model field changed without a parserVersion bump, or a row written by a
+    /// different parser version) are reported by path,
     /// not returned; the caller deletes them so they become plain cache misses
     /// for the reconcile pass.
     func fetchAllForHydration() async throws
@@ -199,7 +200,7 @@ final class SessionSummaryStore: Sendable {
             var rows: [(projectDir: String, summary: SessionSummary)] = []
             var undecodable: [String] = []
             for record in try SessionSummaryRecord.fetchAll(db) {
-                if let summary = try? decoder.decode(SessionSummary.self, from: record.summaryJson) {
+                if let summary = CachedSummaryEnvelope.decodeCurrent(record.summaryJson, decoder: decoder) {
                     rows.append((record.projectDir, summary))
                 } else {
                     undecodable.append(record.filePath)

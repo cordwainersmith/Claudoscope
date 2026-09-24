@@ -139,6 +139,26 @@ struct FleetAgent: Identifiable, Sendable, Equatable {
     var branchLabel: String? {
         summary.worktreeBranch ?? summary.worktreeName ?? summary.gitBranch
     }
+
+    var startedAt: Date {
+        ISO8601.parse(summary.firstTimestamp) ?? registry?.startedDate ?? since
+    }
+
+    /// Lifetime average spend rate. Nil for sessions younger than five minutes,
+    /// where one expensive first turn would read as an absurd hourly rate.
+    func burnRatePerHour(now: Date) -> Double? {
+        let end = isLive ? now : (ISO8601.parse(summary.lastTimestamp) ?? now)
+        let hours = end.timeIntervalSince(startedAt) / 3600
+        guard hours >= 5.0 / 60, summary.estimatedCost > 0 else { return nil }
+        return summary.estimatedCost / hours
+    }
+
+    /// Share of prompt tokens served from cache.
+    var cacheHitRate: Double? {
+        let prompt = summary.totalInputTokens + summary.totalCacheReadTokens + summary.totalCacheCreationTokens
+        guard prompt > 0 else { return nil }
+        return Double(summary.totalCacheReadTokens) / Double(prompt)
+    }
 }
 
 /// A one-shot request from outside the dashboard window (popover, hotkey,

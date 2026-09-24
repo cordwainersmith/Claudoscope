@@ -47,7 +47,25 @@ struct SessionSummaryRecord: Codable, FetchableRecord, PersistableRecord {
             parentFileMtime: identity.parentMtime,
             isSubagent: summary.isSubagent,
             lastTimestamp: summary.lastTimestamp,
-            summaryJson: try JSONEncoder().encode(summary)
+            summaryJson: try JSONEncoder().encode(CachedSummaryEnvelope(summary: summary))
         )
+    }
+}
+
+/// The blob stored in `summary_json`. Stamping each row with the parser
+/// version that wrote it closes a hole the global meta key cannot: an older
+/// build still running beside a newer one (e.g. during a Debug swap) writes
+/// rows under the newer meta version. Those rows either lack the envelope or
+/// carry the old version, and hydration rejects both.
+struct CachedSummaryEnvelope: Codable {
+    var parserVersion: Int = SessionParser.parserVersion
+    let summary: SessionSummary
+
+    /// The summary, or nil when the blob is not an envelope written by this
+    /// parser version.
+    static func decodeCurrent(_ data: Data, decoder: JSONDecoder) -> SessionSummary? {
+        guard let envelope = try? decoder.decode(CachedSummaryEnvelope.self, from: data),
+              envelope.parserVersion == SessionParser.parserVersion else { return nil }
+        return envelope.summary
     }
 }

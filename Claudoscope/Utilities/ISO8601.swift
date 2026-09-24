@@ -32,4 +32,8 @@ enum ISO8601 {
         guard let date = parse(s) else { return nil }
         return localDayFormatter.string(from: date)
     }
+
+    static func localDayKey(for date: Date) -> String {
+        localDayFormatter.string(from: date)
+    }
 }

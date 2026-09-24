@@ -66,7 +66,9 @@ actor SessionParser {
     /// docs/sqlite-persistence-roadmap.md, section 9.
     /// 9: SessionSummary gained everBypassedPermissions / lastPermissionMode /
     ///    gitBranch (Fleet view).
-    static let parserVersion: Int = 9
+    /// 10: SessionSummary gained latestTurn (Fleet context gauge, last action).
+    /// 11: LatestTurn gained turnTimestamp / cacheTTLSeconds / lastPrompt.
+    static let parserVersion: Int = 11
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -514,6 +516,7 @@ actor SessionParser {
         var everBypassed = false
         var lastPermissionMode: String?
         var gitBranch: String?
+        var latestTurn = LatestTurn()
         var isFirstRecord = true
         var parentSessionId: String? = nil
         var firstTimestamp = ""
@@ -642,6 +645,9 @@ actor SessionParser {
             if let branch = raw.gitBranch, !branch.isEmpty {
                 gitBranch = branch
             }
+            if let prompt = raw.lastPrompt, !prompt.isEmpty {
+                latestTurn.lastPrompt = Self.shortToolTarget(prompt)
+            }
 
             // Track user timestamps for turn duration computation
             if raw.type == .user {
@@ -656,6 +662,11 @@ actor SessionParser {
                     let toolUseBlocks = blocks.filter { $0.type == "tool_use" }
                     toolCallCount += toolUseBlocks.count
                     turnToolNames = toolUseBlocks.compactMap(\.name)
+                    if let lastTool = toolUseBlocks.last, let name = lastTool.name {
+                        latestTurn.toolName = name
+                        latestTurn.toolTarget = lastTool.toolTarget.map(Self.shortToolTarget)
+                        latestTurn.toolTimestamp = raw.timestamp
+                    }
                     if !hasWorktreeTool && turnToolNames.contains(where: { $0 == "EnterWorktree" || $0 == "ExitWorktree" }) {
                         hasWorktreeTool = true
                     }
@@ -695,6 +706,12 @@ actor SessionParser {
                     let msgOutput = usage.outputTokens ?? 0
                     let msgCacheRead = usage.cacheReadInputTokens ?? 0
                     let msgCacheCreate = usage.cacheCreationInputTokens ?? 0
+                    let msgContext = msgInput + msgCacheRead + msgCacheCreate
+                    if msgContext > 0 {
+                        latestTurn.contextTokens = msgContext
+                        latestTurn.contextWindowTokens = ContextWindow.tokens(for: raw.message?.model)
+                        latestTurn.turnTimestamp = raw.timestamp ?? latestTurn.turnTimestamp
+                    }
 
                     // The breakdown object is often present but with no sub-fields
                     // populated; in that case the legacy total is authoritative and
@@ -711,6 +728,12 @@ actor SessionParser {
                     } else {
                         msgCache5m = msgCacheCreate
                         msgCache1h = 0
+                    }
+                    // A pure cache-read turn keeps the tier the session last wrote.
+                    if msgCache1h > 0 {
+                        latestTurn.cacheTTLSeconds = 3600
+                    } else if msgCache5m > 0 {
+                        latestTurn.cacheTTLSeconds = 300
                     }
 
                     // Fast mode: usage.speed is per assistant message (sibling of
@@ -1159,8 +1182,20 @@ actor SessionParser {
             mcpBreakdown: mcpBreakdown,
             everBypassedPermissions: everBypassed,
             lastPermissionMode: lastPermissionMode,
-            gitBranch: gitBranch
+            gitBranch: gitBranch,
+            latestTurn: latestTurn == LatestTurn() ? nil : latestTurn
         )
+    }
+
+    /// File paths collapse to their last component; commands and free text to
+    /// their first line, capped so a long heredoc never lands in the cache.
+    static func shortToolTarget(_ target: String) -> String {
+        let trimmed = target.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("/") && !trimmed.contains(" ") {
+            return URL(fileURLWithPath: trimmed).lastPathComponent
+        }
+        let firstLine = trimmed.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? trimmed
+        return firstLine.count > 80 ? String(firstLine.prefix(79)) + "…" : firstLine
     }
 
     private func deriveProjectId(from url: URL) -> String {

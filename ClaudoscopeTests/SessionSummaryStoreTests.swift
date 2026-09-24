@@ -171,6 +171,30 @@ final class SessionSummaryStoreTests: XCTestCase {
         XCTAssertNotNil(identities["/tmp/good.jsonl"])
     }
 
+    /// A build older than the running one can write rows under the newer meta
+    /// version (both apps open during a swap). Its blobs are bare summaries or
+    /// carry a different version, and hydration must treat both as misses.
+    func testRowsFromOtherParserVersionsReportedAsMiss() async throws {
+        let store = try makeStore()
+        let bare = try JSONEncoder().encode(minimalSummary(id: "bare"))
+        var stale = CachedSummaryEnvelope(summary: minimalSummary(id: "stale"))
+        stale.parserVersion = SessionParser.parserVersion - 1
+        func row(_ path: String, _ id: String, _ blob: Data) -> SessionSummaryRecord {
+            SessionSummaryRecord(filePath: path, projectDir: "proj", sessionId: id, fileSize: 1,
+                                 fileMtime: 1, parentFileSize: nil, parentFileMtime: nil,
+                                 isSubagent: false, lastTimestamp: "", summaryJson: blob)
+        }
+        try await store.upsert([
+            makeRecord(path: "/tmp/current.jsonl", summary: minimalSummary(id: "current")),
+            row("/tmp/bare.jsonl", "bare", bare),
+            row("/tmp/stale.jsonl", "stale", try JSONEncoder().encode(stale)),
+        ])
+
+        let (rows, undecodable) = try await store.fetchAllForHydration()
+        XCTAssertEqual(rows.map(\.summary.id), ["current"])
+        XCTAssertEqual(Set(undecodable), ["/tmp/bare.jsonl", "/tmp/stale.jsonl"])
+    }
+
     // MARK: - Golden master: fresh parse == hydrated blob
 
     func testGoldenMasterFreshParseEqualsHydratedBlob() async throws {

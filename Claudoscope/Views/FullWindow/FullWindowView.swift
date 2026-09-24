@@ -47,7 +47,6 @@ struct FullWindowView: View {
     // Plugins state
     @State private var selectedPluginId: String?
     @State private var selectedTasksJobsItem: TasksJobsSelection?
-    @State private var selectedFleetAgentId: String?
     @State private var selectedInsightSessionId: String?
     @State private var analyticsTab: AnalyticsTab = .usage
     @State private var healthSection: HealthSection = .health
@@ -160,6 +159,7 @@ struct FullWindowView: View {
 
             Divider()
 
+            if selectedRail != .fleet {
             SidebarView(
                 rail: selectedRail,
                 width: sidebarWidth,
@@ -182,13 +182,13 @@ struct FullWindowView: View {
                 selectedCoworkSessionId: $selectedCoworkSessionId,
                 selectedPluginId: $selectedPluginId,
                 selectedTasksJobsItem: $selectedTasksJobsItem,
-                selectedFleetAgentId: $selectedFleetAgentId,
                 selectedInsightSessionId: $selectedInsightSessionId,
                 analyticsTab: analyticsTab,
                 healthSection: $healthSection
             )
 
             SidebarResizeHandle(sidebarWidth: $sidebarWidth, dragStartWidth: $dragStartWidth)
+            }
 
             MainPanelView(
                 rail: selectedRail,
@@ -208,7 +208,6 @@ struct FullWindowView: View {
                 selectedCoworkSessionId: $selectedCoworkSessionId,
                 selectedPluginId: $selectedPluginId,
                 selectedTasksJobsItem: selectedTasksJobsItem,
-                selectedFleetAgentId: selectedFleetAgentId,
                 selectedInsightSessionId: selectedInsightSessionId,
                 analyticsTab: $analyticsTab,
                 healthSection: healthSection,

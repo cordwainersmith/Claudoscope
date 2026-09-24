@@ -127,6 +127,10 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     var everBypassedPermissions: Bool? = nil
     var lastPermissionMode: String? = nil
     var gitBranch: String? = nil
+    /// The session's most recent billed turn and tool call, for the Fleet
+    /// board's context gauge and "last action" line. Nil for blobs cached
+    /// before parserVersion 10 or sessions with no assistant turns.
+    var latestTurn: LatestTurn? = nil
 
     init(
         id: String,
@@ -165,7 +169,8 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         mcpBreakdown: [McpAttribution]? = nil,
         everBypassedPermissions: Bool? = nil,
         lastPermissionMode: String? = nil,
-        gitBranch: String? = nil
+        gitBranch: String? = nil,
+        latestTurn: LatestTurn? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -204,6 +209,29 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.everBypassedPermissions = everBypassedPermissions
         self.lastPermissionMode = lastPermissionMode
         self.gitBranch = gitBranch
+        self.latestTurn = latestTurn
+    }
+}
+
+struct LatestTurn: Sendable, Codable, Equatable {
+    /// input + cache_read + cache_creation of the last billed assistant turn:
+    /// the whole prompt the model read, i.e. current context occupancy.
+    var contextTokens: Int?
+    var contextWindowTokens: Int?
+    var toolName: String?
+    /// Shortened target: a file's last path component, or a command's first line.
+    var toolTarget: String?
+    var toolTimestamp: String?
+    /// When the last billed turn landed and how long its prompt cache lives
+    /// (300 or 3600 seconds, from the tier the session last wrote to).
+    var turnTimestamp: String?
+    var cacheTTLSeconds: Int?
+    /// The user's most recent prompt (type:"last-prompt"), capped for the cache.
+    var lastPrompt: String?
+
+    var contextUtilization: Double? {
+        guard let used = contextTokens, let window = contextWindowTokens, window > 0 else { return nil }
+        return Double(used) / Double(window)
     }
 }
 

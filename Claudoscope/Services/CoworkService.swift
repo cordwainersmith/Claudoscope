@@ -159,7 +159,8 @@ actor CoworkService {
                 mcpBreakdown: s.mcpBreakdown,
                 everBypassedPermissions: s.everBypassedPermissions,
                 lastPermissionMode: s.lastPermissionMode,
-                gitBranch: s.gitBranch
+                gitBranch: s.gitBranch,
+                latestTurn: s.latestTurn
             )
             return (parsed, summary)
         } catch {
