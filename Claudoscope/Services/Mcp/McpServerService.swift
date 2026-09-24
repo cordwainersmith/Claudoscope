@@ -128,7 +128,9 @@ final class McpServerService {
                     sessionsByProject: store.sessionsByProject,
                     pricingTable: store.pricingTable,
                     canonOptedInProjectIds: canonService?.config.optedInProjectIds ?? [],
-                    bundledCanonProtocolVersion: canonService?.bundledProtocolVersion ?? 0
+                    bundledCanonProtocolVersion: canonService?.bundledProtocolVersion ?? 0,
+                    fleetAgents: store.fleetAgents,
+                    attentionQueue: store.attentionQueue
                 )
             },
             configService: ConfigService(claudeDir: claudeDir),

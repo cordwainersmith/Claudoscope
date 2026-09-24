@@ -83,7 +83,9 @@ final class SessionSummaryCodableTests: XCTestCase {
             ),
             everBypassedPermissions: true,
             lastPermissionMode: "plan",
-            gitBranch: "feature/fleet"
+            gitBranch: "feature/fleet",
+            blockedActionCount: 3,
+            changedFileCount: 7
         )
 
         XCTAssertEqual(try roundTrip(summary), summary)

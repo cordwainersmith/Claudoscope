@@ -126,6 +126,7 @@ struct ClaudoscopeApp: App {
                 hasCostAlert: costAlertService.hasUnseen,
                 monochrome: store.monochromeMenuBarIcon,
                 waitingCount: store.fleetWaitingCount,
+                waitingEscalated: store.fleetAttentionEscalated,
                 hasFleetWarning: store.fleetHasWarning
             )
         }
@@ -209,6 +210,8 @@ struct MenuBarIcon: View {
     var monochrome: Bool = false
     /// Agents waiting on the user; rendered as a small count capsule.
     var waitingCount: Int = 0
+    /// A wait went long or a waiting agent's cache is about to expire.
+    var waitingEscalated: Bool = false
     /// A live agent ran with skipped permissions; red dot when no cost alert.
     var hasFleetWarning: Bool = false
 
@@ -238,7 +241,7 @@ struct MenuBarIcon: View {
                             .foregroundStyle(.white)
                             .padding(.horizontal, 3)
                             .frame(minWidth: 10, minHeight: 10)
-                            .background(Color.okabeOrange)
+                            .background(waitingEscalated ? Color.okabeVermillion : Color.okabeOrange)
                             .clipShape(Capsule())
                             .offset(x: 3, y: 9)
                     }

@@ -299,4 +299,55 @@ final class SessionSummaryStoreTests: XCTestCase {
         XCTAssertEqual(fetched.mtime, mtime, "Double must round-trip the REAL column exactly")
         XCTAssertEqual(fetched.size, size)
     }
+
+    // MARK: - Fleet waits
+
+    private func waitRecord(session: String, start: Double, end: Double? = nil) -> FleetWaitRecord {
+        FleetWaitRecord(id: nil, sessionId: session, projectId: "proj", kind: "permission",
+                        startedAt: start, endedAt: end, contextTokens: 100, cacheTtlSeconds: 300,
+                        turnTimestamp: start - 5, model: "claude-sonnet-4-5")
+    }
+
+    func testFleetWaitsSurviveGlobalKeyWipe() async throws {
+        let store = try makeStore()
+        _ = try await store.checkAndApplyGlobalKeys(keysA)
+        try await store.openWait(waitRecord(session: "s1", start: 1_000))
+        let keysB = SessionSummaryStore.GlobalCacheKeys(
+            parserVersion: 2, pricingKey: keysA.pricingKey, tzIdentifier: keysA.tzIdentifier)
+        let wiped = try await store.checkAndApplyGlobalKeys(keysB)
+        XCTAssertTrue(wiped)
+        let waits = try await store.fetchWaits(startedAfter: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(waits.count, 1)
+    }
+
+    func testOpenWaitIsIdempotentPerSession() async throws {
+        let store = try makeStore()
+        let first = try await store.openWait(waitRecord(session: "s1", start: 1_000))
+        let second = try await store.openWait(waitRecord(session: "s1", start: 2_000))
+        let other = try await store.openWait(waitRecord(session: "s2", start: 2_000))
+        XCTAssertTrue(first)
+        XCTAssertFalse(second)
+        XCTAssertTrue(other)
+        let open = try await store.fetchOpenWaits()
+        XCTAssertEqual(Set(open.map(\.sessionId)), ["s1", "s2"])
+    }
+
+    func testCloseWaitOnlyClosesOpenRows() async throws {
+        let store = try makeStore()
+        try await store.openWait(waitRecord(session: "s1", start: 1_000))
+        try await store.closeWait(sessionId: "s1", at: Date(timeIntervalSince1970: 1_100))
+        try await store.openWait(waitRecord(session: "s1", start: 2_000))
+        try await store.closeWait(sessionId: "s1", at: Date(timeIntervalSince1970: 2_500))
+        let waits = try await store.fetchWaits(startedAfter: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(waits.map(\.endedAt), [1_100, 2_500])
+    }
+
+    func testPruneWaits() async throws {
+        let store = try makeStore()
+        try await store.openWait(waitRecord(session: "old", start: 1_000))
+        try await store.openWait(waitRecord(session: "new", start: 5_000))
+        try await store.pruneWaits(startedBefore: Date(timeIntervalSince1970: 2_000))
+        let waits = try await store.fetchWaits(startedAfter: Date(timeIntervalSince1970: 0))
+        XCTAssertEqual(waits.map(\.sessionId), ["new"])
+    }
 }

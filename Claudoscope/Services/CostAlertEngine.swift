@@ -82,22 +82,28 @@ enum CostAlertEngine {
         var newState = state
         var events: [CostAlertEvent] = []
 
-        if config.session.enabled {
-            for figure in snapshot.recentSessions {
-                let measured = config.session.unit == .dollars ? figure.cost : Double(figure.tokens)
-                let fired = newState.sessionLevel(for: figure.id)
-                if let newFired = crossedCount(measured: measured, threshold: config.session.threshold, fired: fired) {
-                    newState.setSessionLevel(newFired, for: figure.id)
-                    events.append(CostAlertEvent(
-                        kind: .session,
-                        scopeId: figure.id,
-                        scopeTitle: figure.title,
-                        unit: config.session.unit,
-                        measured: measured,
-                        effectiveThreshold: config.session.threshold * pow(2, Double(newFired - 1)),
-                        level: newFired - 1
-                    ))
-                }
+        for figure in snapshot.recentSessions {
+            // A per-session budget is always dollars and applies even when the
+            // session rule is off.
+            let budget = config.sessionBudgets[figure.id]
+            if !config.session.enabled && budget == nil { continue }
+            let unit = budget != nil ? CostAlertUnit.dollars : config.session.unit
+            let threshold = budget ?? config.session.threshold
+            let measured = unit == .dollars ? figure.cost : Double(figure.tokens)
+            let fired = newState.sessionLevel(for: figure.id)
+            if let newFired = crossedCount(measured: measured, threshold: threshold, fired: fired) {
+                newState.setSessionLevel(newFired, for: figure.id)
+                events.append(CostAlertEvent(
+                    kind: .session,
+                    scopeId: figure.id,
+                    scopeTitle: figure.title,
+                    unit: unit,
+                    measured: measured,
+                    effectiveThreshold: threshold * pow(2, Double(newFired - 1)),
+                    level: newFired - 1,
+                    projectId: figure.projectId,
+                    focusNeedle: figure.focusNeedle
+                ))
             }
         }
 

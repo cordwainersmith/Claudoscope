@@ -154,6 +154,12 @@ final class CostAlertService {
             content.title = event.headline
             content.body = event.detail
             content.sound = .default
+            if event.kind == .session {
+                var info: [String: String] = ["sessionId": event.scopeId]
+                if let projectId = event.projectId { info["projectId"] = projectId }
+                if let needle = event.focusNeedle { info["focusNeedle"] = needle }
+                content.userInfo = info
+            }
             let request = UNNotificationRequest(
                 identifier: "costAlert-\(event.kind.rawValue)-\(event.scopeId)-\(event.level)",
                 content: content,
@@ -216,7 +222,11 @@ private final class CostAlertNotificationDelegate: NSObject, UNUserNotificationC
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let identifier = response.notification.request.identifier
-        if identifier.hasPrefix("costAlert-") {
+        if identifier.hasPrefix("costAlert-session-") {
+            // Same routing as session notifications: select the session and
+            // focus its terminal.
+            onSessionTap?(response.notification.request.content.userInfo)
+        } else if identifier.hasPrefix("costAlert-") {
             let onTap = onTap
             Task { @MainActor in onTap?() }
         } else if identifier.hasPrefix("claudoscope-") {

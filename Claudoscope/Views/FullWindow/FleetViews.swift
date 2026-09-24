@@ -43,13 +43,11 @@ enum Tower {
         return .periodic(from: Date(timeIntervalSinceReferenceDate: now.rounded(.down)), by: 1)
     }
 
-    /// A wait that has gone on for this long stops being amber.
-    static let longWait: TimeInterval = 10 * 60
-
-    /// Waiting tint by age: amber, sliding to red after `longWait`. Blocked and
-    /// failed are red from the start.
+    /// Waiting tint by age: amber, sliding to red after
+    /// `FleetStateEngine.longWait`. Blocked and failed are red from the start.
     static func color(_ state: FleetState, waitedFor: TimeInterval) -> Color {
         guard case .waitingOnUser = state else { return color(state) }
+        let longWait = FleetStateEngine.longWait
         let t = min(1, max(0, (waitedFor - longWait) / longWait))
         guard t > 0 else { return amber }
         // Okabe orange (E69F00) toward vermillion (D55E00).
@@ -79,7 +77,11 @@ enum Tower {
 
     /// Stopwatch text: 42s, 04:12, 1:04:12, 2d 3h.
     static func clock(from start: Date, to end: Date) -> String {
-        let s = max(0, Int(end.timeIntervalSince(start)))
+        clock(seconds: end.timeIntervalSince(start))
+    }
+
+    static func clock(seconds: TimeInterval) -> String {
+        let s = max(0, Int(seconds))
         if s < 60 { return "\(s)s" }
         if s < 3600 { return String(format: "%02d:%02d", s / 60, s % 60) }
         if s < 86400 { return String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60) }
@@ -107,7 +109,7 @@ struct FleetBoardView: View {
         store.fleetAgents.filter { agent in
             if hazardOnly && !agent.isBypass { return false }
             guard !query.isEmpty else { return true }
-            return [agent.summary.title, agent.projectName, agent.branchLabel ?? ""]
+            return [agent.summary.title, agent.projectName, agent.branchLabel ?? "", agent.displayName ?? ""]
                 .joined(separator: " ")
                 .localizedCaseInsensitiveContains(query)
         }
@@ -146,7 +148,7 @@ struct FleetBoardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 32) {
                         header
-                        TelemetryStrip(agents: store.fleetAgents)
+                        TelemetryStrip(agents: store.fleetAgents, waitStats: store.fleetWaitStats)
                         if !sessionNotificationService.config.masterEnabled {
                             hooksNotice
                         }
@@ -187,17 +189,18 @@ struct FleetBoardView: View {
                         }
                         if !landed.isEmpty {
                             lane(title: "LANDED · 24H", count: landed.count, tint: Tower.faint) {
-                                VStack(spacing: 0) {
-                                    ForEach(landed) { agent in
-                                        LandedRow(agent: agent, isSelected: selection == agent.id) {
-                                            selection = agent.id
+                                if store.fleetGroupByProject {
+                                    VStack(alignment: .leading, spacing: 14) {
+                                        ForEach(FleetStateEngine.groupedByProject(landed), id: \.project) { group in
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                groupHeader(group.project)
+                                                landedList(group.agents)
+                                            }
                                         }
-                                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
                                     }
+                                } else {
+                                    landedList(landed)
                                 }
-                                .background(Tower.panel)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .animation(laneAnimation, value: landed.map(\.id))
                             }
                             .transition(.opacity)
                         }
@@ -235,13 +238,49 @@ struct FleetBoardView: View {
         [needsYou.count, working.count, parked.count, landed.count]
     }
 
+    @ViewBuilder
     private func tileGrid(_ agents: [FleetAgent]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 270, maximum: 420), spacing: 12, alignment: .top)],
-                  alignment: .leading, spacing: 12) {
+        if store.fleetGroupByProject {
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(FleetStateEngine.groupedByProject(agents), id: \.project) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        groupHeader(group.project)
+                        grid(group.agents)
+                    }
+                }
+            }
+        } else {
+            grid(agents)
+        }
+    }
+
+    private func groupHeader(_ project: String) -> some View {
+        Text(project)
+            .font(Tower.ui(10, .semibold))
+            .foregroundStyle(Tower.dim)
+    }
+
+    private func landedList(_ agents: [FleetAgent]) -> some View {
+        VStack(spacing: 0) {
             ForEach(agents) { agent in
-                InFlightTile(agent: agent, isSelected: selection == agent.id) {
+                LandedRow(agent: agent, isSelected: selection == agent.id) {
                     selection = agent.id
                 }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            }
+        }
+        .background(Tower.panel)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .animation(laneAnimation, value: agents.map(\.id))
+    }
+
+    private func grid(_ agents: [FleetAgent]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 300, maximum: 420), spacing: 12, alignment: .top)],
+                  alignment: .leading, spacing: 12) {
+            ForEach(agents) { agent in
+                InFlightTile(agent: agent, isSelected: selection == agent.id,
+                             onSelect: { selection = agent.id },
+                             onOpenTab: agent.summary.isCowork ? nil : { tab in openTab(agent, tab) })
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
             }
         }
@@ -251,6 +290,11 @@ struct FleetBoardView: View {
     private func open(_ agent: FleetAgent) {
         selection = nil
         onNavigateToSession?(agent.summary.projectId, agent.summary.id, nil)
+    }
+
+    private func openTab(_ agent: FleetAgent, _ tab: String) {
+        store.requestedSessionTab = RequestedSessionTab(sessionId: agent.summary.id, tab: tab)
+        open(agent)
     }
 
     // MARK: Header
@@ -347,6 +391,21 @@ struct FleetBoardView: View {
             }
             .buttonStyle(.plain)
             .help(hazardOnly ? "Show every agent" : "Only agents that skipped permissions")
+
+            Button {
+                store.fleetGroupByProject.toggle()
+            } label: {
+                Image(systemName: "rectangle.3.group")
+                    .font(.system(size: 11))
+                    .foregroundStyle(store.fleetGroupByProject ? Tower.onTint : Tower.dim)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(store.fleetGroupByProject ? Tower.dim : Tower.panel)
+                    .clipShape(Capsule())
+                    .overlay(Capsule().strokeBorder(Tower.line))
+            }
+            .buttonStyle(.plain)
+            .help("Group cards by project")
         }
     }
 
@@ -428,7 +487,9 @@ private struct NeedsYouTile: View {
 
     var body: some View {
         TimelineView(Tower.secondTick) { context in
-            let tint = Tower.color(agent.state, waitedFor: context.date.timeIntervalSince(agent.since))
+            let tint = agent.isCacheAboutToExpire(now: context.date)
+                ? Tower.red
+                : Tower.color(agent.state, waitedFor: context.date.timeIntervalSince(agent.since))
             tile(tint: tint, now: context.date)
         }
         .onAppear {
@@ -475,7 +536,7 @@ private struct NeedsYouTile: View {
                         LastActionLine(turn: agent.summary.latestTurn)
                         ContextGauge(turn: agent.summary.latestTurn)
                             .frame(width: 190)
-                        CacheCountdown(turn: agent.summary.latestTurn)
+                        CacheCountdown(agent: agent)
                     }
                 }
 
@@ -531,7 +592,9 @@ private struct InFlightTile: View {
     let agent: FleetAgent
     let isSelected: Bool
     let onSelect: () -> Void
+    var onOpenTab: ((String) -> Void)? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(CostAlertService.self) private var costAlertService
     @State private var hovering = false
     /// Heartbeat: the top bar flares when the transcript moves, then decays,
     /// so a card that is "busy" but stalled looks different from one that is
@@ -563,6 +626,7 @@ private struct InFlightTile: View {
                             .font(Tower.ui(10, .semibold))
                             .tracking(1.5)
                             .foregroundStyle(tint)
+                            .fixedSize()
                         if agent.isBackgroundJob {
                             Text("BG")
                                 .font(Tower.ui(9, .semibold))
@@ -583,14 +647,21 @@ private struct InFlightTile: View {
                                     .foregroundStyle(Tower.faint)
                             }
                             .monospacedDigit()
+                            .fixedSize()
                             .help("Time in this state, then time since the session started")
                         }
                     }
 
-                    Text(agent.projectName)
-                        .font(Tower.ui(18, .semibold))
-                        .foregroundStyle(Tower.text)
-                        .lineLimit(1)
+                    HStack(spacing: 8) {
+                        Text(agent.projectName)
+                            .font(Tower.ui(18, .semibold))
+                            .foregroundStyle(Tower.text)
+                            .lineLimit(1)
+                            .layoutPriority(1)
+                        if let name = agent.displayName {
+                            NameTag(name: name)
+                        }
+                    }
 
                     Text(agent.displayPrompt)
                         .font(.system(size: 12))
@@ -603,7 +674,8 @@ private struct InFlightTile: View {
                     // grid row has the same height.
                     LastActionLine(turn: agent.summary.latestTurn)
                     ContextGauge(turn: agent.summary.latestTurn)
-                    StatChips(agent: agent)
+                    StatChips(agent: agent, onOpenTab: onOpenTab,
+                              budget: costAlertService.config.sessionBudgets[agent.id])
 
                     Rectangle().fill(Tower.line).frame(height: 1)
 
@@ -663,6 +735,16 @@ private struct LandedRow: View {
                     .foregroundStyle(Tower.dim)
                     .frame(width: 160, alignment: .leading)
                     .lineLimit(1)
+                if let name = agent.displayName {
+                    NameTag(name: name)
+                }
+                if let reason = agent.failureReason {
+                    Text(reason)
+                        .font(Tower.ui(11, .medium))
+                        .foregroundStyle(Tower.red.opacity(0.8))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
                 Text(agent.displayPrompt)
                     .font(.system(size: 12))
                     .foregroundStyle(Tower.faint)
@@ -674,6 +756,12 @@ private struct LandedRow: View {
                         .foregroundStyle(Tower.red.opacity(0.5))
                         .help("Ran with skipped permissions")
                 }
+                Group {
+                    if hovering && !agent.isLive && !agent.summary.isCowork {
+                        CopyResumeButton(agent: agent, compact: true)
+                    }
+                }
+                .frame(width: 90, alignment: .trailing)
                 Text(agent.since, style: .relative)
                     .font(Tower.ui(11))
                     .foregroundStyle(Tower.faint)
@@ -707,6 +795,8 @@ private struct FleetInspector: View {
     let onOpen: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(CostAlertService.self) private var costAlertService
+    @State private var budgetText = ""
 
     private var summary: SessionSummary { agent.summary }
     private var tint: Color { Tower.color(agent.state) }
@@ -780,6 +870,8 @@ private struct FleetInspector: View {
                         callout(reason)
                     } else if agent.state == .blockedOnPermission {
                         callout("Waiting for a permission decision.")
+                    } else if agent.state == .failed, let reason = agent.failureReason {
+                        callout(reason, icon: "xmark.octagon.fill")
                     }
 
                     HStack(spacing: 8) {
@@ -794,6 +886,37 @@ private struct FleetInspector: View {
                         Button("OPEN SESSION", action: onOpen)
                             .buttonStyle(TowerButtonStyle(tint: Tower.dim, filled: false))
                             .disabled(summary.isCowork)
+                        if !agent.isLive && !summary.isCowork {
+                            CopyResumeButton(agent: agent, compact: false)
+                        }
+                    }
+
+                    section("BUDGET") {
+                        HStack(spacing: 8) {
+                            Text("$")
+                                .font(Tower.mono(12))
+                                .foregroundStyle(Tower.faint)
+                            TextField("none", text: $budgetText)
+                                .textFieldStyle(.plain)
+                                .font(Tower.mono(12))
+                                .frame(width: 80)
+                                .onSubmit(commitBudget)
+                            if costAlertService.config.sessionBudgets[agent.id] != nil {
+                                Button("CLEAR") {
+                                    budgetText = ""
+                                    costAlertService.config.sessionBudgets[agent.id] = nil
+                                }
+                                .buttonStyle(TowerButtonStyle(tint: Tower.dim, filled: false))
+                            }
+                        }
+                        Text(costAlertService.config.masterEnabled
+                             ? "Notifies when this session's estimated cost passes the budget, then at each doubling."
+                             : "Cost alerts are off in Settings, so the budget only shows on the card.")
+                            .font(Tower.ui(11))
+                            .foregroundStyle(Tower.faint)
+                    }
+                    .onAppear {
+                        budgetText = costAlertService.config.sessionBudgets[agent.id].map { String(format: "%.2f", $0) } ?? ""
                     }
 
                     section("AGENT") {
@@ -826,7 +949,7 @@ private struct FleetInspector: View {
                                         .font(Tower.ui(11))
                                         .foregroundStyle(Tower.faint)
                                         .frame(width: 70, alignment: .leading)
-                                    CacheCountdown(turn: turn)
+                                    CacheCountdown(agent: agent)
                                 }
                             }
                         }
@@ -835,6 +958,7 @@ private struct FleetInspector: View {
                     if let reg = agent.registry {
                         section("PROCESS") {
                             row("pid", "\(reg.pid)")
+                            row("name", reg.name)
                             row("status", reg.status)
                             row("kind", reg.kind)
                             row("version", reg.version)
@@ -853,9 +977,18 @@ private struct FleetInspector: View {
         .shadow(color: .black.opacity(0.25), radius: 24, x: -8)
     }
 
-    private func callout(_ text: String) -> some View {
+    private func commitBudget() {
+        let trimmed = budgetText.trimmingCharacters(in: .whitespaces)
+        if let value = Double(trimmed), value > 0 {
+            costAlertService.config.sessionBudgets[agent.id] = value
+        } else if trimmed.isEmpty {
+            costAlertService.config.sessionBudgets[agent.id] = nil
+        }
+    }
+
+    private func callout(_ text: String, icon: String = "hand.raised.fill") -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "hand.raised.fill")
+            Image(systemName: icon)
                 .foregroundStyle(tint)
                 .symbolEffect(.pulse, isActive: !reduceMotion)
             Text(text)
@@ -906,6 +1039,9 @@ private struct AgentMeta: View {
             if showsProject {
                 Text(agent.projectName)
                     .foregroundStyle(Tower.text.opacity(0.8))
+                if let name = agent.displayName {
+                    NameTag(name: name)
+                }
             }
             if let branch = agent.branchLabel {
                 Label(branch, systemImage: "arrow.triangle.branch")
@@ -918,6 +1054,22 @@ private struct AgentMeta: View {
         .font(Tower.ui(11))
         .foregroundStyle(Tower.faint)
         .lineLimit(1)
+    }
+}
+
+/// Claude Code's session name, next to the project.
+private struct NameTag: View {
+    let name: String
+
+    var body: some View {
+        Text(name)
+            .font(Tower.mono(9, .semibold))
+            .foregroundStyle(Tower.dim)
+            .lineLimit(1)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Tower.line))
+            .help("Session name")
     }
 }
 
@@ -1039,30 +1191,86 @@ private struct LastActionLine: View {
 /// only appear when they carry a value.
 private struct StatChips: View {
     let agent: FleetAgent
+    var onOpenTab: ((String) -> Void)? = nil
+    var budget: Double? = nil
+
+    /// One chip, in priority order: when the row is too narrow, chips drop
+    /// from the end instead of wrapping (wrapping broke values mid-token and
+    /// made cards in one grid row different heights).
+    private enum Item: Hashable {
+        case budget(used: Double, budget: Double)
+        case errors(Int)
+        case blocked(Int)
+        case cache
+        case burn(Double)
+        case files(Int)
+        case hit(Double)
+        case compactions(Int)
+    }
+
+    private func items(now: Date) -> [Item] {
+        var items: [Item] = []
+        if let budget, budget > 0 { items.append(.budget(used: agent.summary.estimatedCost, budget: budget)) }
+        let errors = agent.summary.observability.errorClassifications.count
+        if errors > 0 { items.append(.errors(errors)) }
+        if let blocked = agent.summary.blockedActionCount, blocked > 0 { items.append(.blocked(blocked)) }
+        if agent.isLive && agent.state != .working && agent.cacheExpiry() != nil { items.append(.cache) }
+        if let rate = agent.burnRatePerHour(now: now) { items.append(.burn(rate)) }
+        if let files = agent.summary.changedFileCount, files > 0 { items.append(.files(files)) }
+        if let hit = agent.cacheHitRate { items.append(.hit(hit)) }
+        if agent.summary.compactionCount > 0 { items.append(.compactions(agent.summary.compactionCount)) }
+        return items
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
-            HStack(spacing: 6) {
-                if let rate = agent.burnRatePerHour(now: context.date) {
-                    chip("\(formatCost(rate))/hr", help: "Average spend rate since the session started")
+            let all = items(now: context.date)
+            ViewThatFits(in: .horizontal) {
+                ForEach((0...all.count).reversed(), id: \.self) { count in
+                    HStack(spacing: 6) {
+                        ForEach(all.prefix(count), id: \.self) { item in
+                            view(for: item)
+                        }
+                        Spacer(minLength: 0)
+                    }
                 }
-                if agent.isLive && agent.state != .working {
-                    CacheCountdown(turn: agent.summary.latestTurn)
-                }
-                if let hit = agent.cacheHitRate {
-                    chip("cache \(Int((hit * 100).rounded()))%", help: "Share of prompt tokens read from cache",
-                         warn: hit < 0.5)
-                }
-                if agent.summary.compactionCount > 0 {
-                    chip("⟳\(agent.summary.compactionCount)", help: "Context compactions",
-                         warn: agent.summary.compactionCount > 1)
-                }
-                let errors = agent.summary.observability.errorClassifications
-                if !errors.isEmpty {
-                    chip("⚠ \(errors.count)", help: errors.map(\.rawValue).joined(separator: ", "), alert: true)
-                }
-                Spacer(minLength: 0)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func view(for item: Item) -> some View {
+        switch item {
+        case .budget(let used, let budget):
+            chip("budget \(formatCost(used)) / \(formatCost(budget))",
+                 help: "Spend against this session's budget", warn: used / budget >= 0.8, alert: used / budget >= 1)
+        case .errors(let count):
+            chip("⚠ \(count)", help: agent.summary.observability.errorClassifications.map(\.rawValue)
+                .joined(separator: ", "), alert: true)
+        case .blocked(let count):
+            chipButton("⛔ \(count)", tab: "chat:blocked",
+                       help: "Tool calls you or a permission rule refused", warn: true)
+        case .cache:
+            CacheCountdown(agent: agent)
+        case .burn(let rate):
+            chip("\(formatCost(rate))/hr", help: "Average spend rate since the session started")
+        case .files(let count):
+            chipButton("±\(count) file\(count == 1 ? "" : "s")", tab: "files", help: "Files this session edited")
+        case .hit(let hit):
+            chip("cache \(Int((hit * 100).rounded()))%", help: "Share of prompt tokens read from cache",
+                 warn: hit < 0.5)
+        case .compactions(let count):
+            chip("⟳\(count)", help: "Context compactions", warn: count > 1)
+        }
+    }
+
+    @ViewBuilder
+    private func chipButton(_ text: String, tab: String, help: String, warn: Bool = false) -> some View {
+        if let onOpenTab {
+            Button { onOpenTab(tab) } label: { chip(text, help: help, warn: warn) }
+                .buttonStyle(.plain)
+        } else {
+            chip(text, help: help, warn: warn)
         }
     }
 
@@ -1071,9 +1279,11 @@ private struct StatChips: View {
         return Text(text)
             .font(Tower.mono(10, .medium))
             .foregroundStyle(alert || warn ? tint : Tower.dim)
+            .lineLimit(1)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(tint.opacity(0.35)))
+            .fixedSize()
             .help(help)
     }
 }
@@ -1082,6 +1292,7 @@ private struct StatChips: View {
 /// concurrency sparkline.
 private struct TelemetryStrip: View {
     let agents: [FleetAgent]
+    let waitStats: FleetWaitStats.Summary?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -1093,6 +1304,12 @@ private struct TelemetryStrip: View {
                        help: "Spend by the sessions on this board on today's date")
                 metric("LIVE BURN", "\(formatCost(burn))/hr",
                        help: "Sum of the live sessions' average spend rates")
+                metric("WAITED ON YOU · TODAY",
+                       waitStats.map { "\(Tower.clock(seconds: $0.meanSeconds)) / \(Tower.clock(seconds: $0.maxSeconds))" } ?? "—",
+                       help: "Mean and longest time an agent waited for you today, over \(waitStats?.count ?? 0) answered waits")
+                metric("COLD RESTARTS",
+                       waitStats.map { "\($0.coldRestartCount) · ~\(formatCost($0.coldRestartCost))" } ?? "—",
+                       help: "Answers that came after the prompt cache expired today. The cost is an estimate: the context at the wait's start, re-written at the cache-write rate of the tier in use")
                 VStack(alignment: .leading, spacing: 4) {
                     ConcurrencySparkline(counts: hourly, now: now)
                         .frame(height: 30)
@@ -1187,16 +1404,16 @@ private struct BypassTag: View {
 /// Time left on the prompt cache since the last billed turn. Answering after
 /// it expires means paying to write the whole context back into cache.
 private struct CacheCountdown: View {
-    let turn: LatestTurn?
+    let agent: FleetAgent
 
     var body: some View {
-        if let turn, let ttl = turn.cacheTTLSeconds,
-           let last = turn.turnTimestamp.flatMap(ISO8601.parse) {
+        if let expiry = agent.cacheExpiry(), let ttl = agent.summary.latestTurn?.cacheTTLSeconds {
             TimelineView(Tower.secondTick) { context in
-                let remaining = Int(last.addingTimeInterval(TimeInterval(ttl)).timeIntervalSince(context.date))
+                let remaining = Int(expiry.timeIntervalSince(context.date))
                 // Amber is reserved for agents that need you; the countdown
                 // only colors up when the cache is about to go cold.
-                let tint = remaining <= 0 ? Tower.faint : (remaining < 60 ? Tower.red : Tower.dim)
+                let tint = remaining <= 0 ? Tower.faint
+                    : (remaining <= Int(FleetStateEngine.cacheExpiryWarning) ? Tower.red : Tower.dim)
                 HStack(spacing: 4) {
                     Image(systemName: remaining > 0 ? "timer" : "snowflake")
                         .font(.system(size: 9, weight: .semibold))
@@ -1218,6 +1435,34 @@ private struct CacheCountdown: View {
                       : "Prompt cache expired; the next turn re-writes the context")
             }
         }
+    }
+}
+
+/// Copies a `claude --resume` line for a session whose process has exited.
+/// Claudoscope never runs it; the user pastes it into a terminal.
+private struct CopyResumeButton: View {
+    let agent: FleetAgent
+    let compact: Bool
+    @Environment(SessionStore.self) private var store
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            Task {
+                var path = agent.registry?.cwd
+                if path == nil { path = await store.resolveProjectPath(agent.summary.projectId) }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(agent.resumeCommand(projectPath: path), forType: .string)
+                copied = true
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                copied = false
+            }
+        } label: {
+            Text(copied ? "COPIED" : (compact ? "RESUME" : "COPY RESUME"))
+        }
+        .buttonStyle(TowerButtonStyle(tint: Tower.dim, filled: false))
+        .controlSize(compact ? .small : .regular)
+        .help("Copy a shell command that resumes this session")
     }
 }
 

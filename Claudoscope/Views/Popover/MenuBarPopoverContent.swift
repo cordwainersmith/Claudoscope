@@ -67,7 +67,21 @@ struct MenuBarPopoverContent: View {
 
                 // Active sessions with their Fleet state (if any)
                 if !activeAgents.isEmpty {
-                    ActiveSessionsCard(agents: activeAgents) {
+                    ActiveSessionsCard(
+                        agents: activeAgents,
+                        escalated: store.fleetAttentionEscalated,
+                        onFocus: { agent in TerminalFocuser.focus(matchingTitle: agent.focusNeedle) },
+                        onOpen: { agent in
+                            // Cowork ids are not in the sessions rail.
+                            if agent.summary.isCowork {
+                                store.requestedRail = .fleet
+                            } else {
+                                store.requestedSelection = RequestedSelection(
+                                    projectId: agent.summary.projectId, sessionId: agent.summary.id)
+                            }
+                            MainWindowController.shared.open(store: store, updateService: updateService)
+                        }
+                    ) {
                         store.requestedRail = .fleet
                         MainWindowController.shared.open(store: store, updateService: updateService)
                     }
@@ -140,8 +154,10 @@ struct MenuBarPopoverContent: View {
         .onAppear { costAlertService.acknowledgeSeen() }
     }
 
-    /// Same membership as `store.activeSessions` (live process or moved
-    /// within the active threshold), already sorted attention-first.
+    /// Live processes plus agents the last fleet rebuild derived as working,
+    /// sorted attention-first. The 15s liveness sweep re-derives this, so a
+    /// non-live agent leaves once it ages past the active threshold. Not the
+    /// same as `store.activeSessions`, which re-reads `Date()` on every access.
     private var activeAgents: [FleetAgent] {
         store.fleetAgents.filter { $0.isLive || $0.state == .working }
     }

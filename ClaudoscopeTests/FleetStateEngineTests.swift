@@ -8,9 +8,10 @@ final class FleetStateEngineTests: XCTestCase {
 
     private func summary(id: String = "s1", last: String = "2026-09-23T12:00:00.000Z",
                          hasError: Bool = false, isSubagent: Bool = false,
-                         bypass: Bool? = nil, kind: String? = nil, cowork: Bool = false) -> SessionSummary {
+                         bypass: Bool? = nil, kind: String? = nil, cowork: Bool = false,
+                         project: String = "-Users-x-proj") -> SessionSummary {
         SessionSummary(
-            id: id, projectId: "-Users-x-proj", slug: nil, title: id,
+            id: id, projectId: project, slug: nil, title: id,
             firstTimestamp: last, lastTimestamp: last, messageCount: 1, primaryModel: nil,
             totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
             totalCacheCreationTokens: 0, totalCacheCreation5mTokens: 0,
@@ -22,9 +23,10 @@ final class FleetStateEngineTests: XCTestCase {
     }
 
     private func registry(sessionId: String = "s1", status: String, statusAt: Date? = nil,
-                          waitingFor: String? = nil, kind: String = "interactive") -> RegistryEntry {
+                          waitingFor: String? = nil, kind: String = "interactive",
+                          name: String? = nil, nameSource: String? = nil) -> RegistryEntry {
         RegistryEntry(pid: 1, sessionId: sessionId, cwd: "/Users/x/proj-wt", startedAt: 1,
-                      kind: kind, status: status,
+                      kind: kind, name: name, nameSource: nameSource, status: status,
                       statusUpdatedAt: (statusAt ?? now).timeIntervalSince1970 * 1000,
                       updatedAt: now.timeIntervalSince1970 * 1000, waitingFor: waitingFor)
     }
@@ -147,6 +149,109 @@ final class FleetStateEngineTests: XCTestCase {
             now: now, activeThreshold: threshold, recentWindow: window)
         XCTAssertEqual(agents.first?.registry?.pid, 1)
         XCTAssertEqual(agents.first?.state, .working)
+    }
+
+    // MARK: crash detection
+
+    private func exit(status: String, statusAt: Date? = nil, at: Date) -> RegistryExit {
+        RegistryExit(entry: registry(status: status, statusAt: statusAt), at: at)
+    }
+
+    func testRegistryExitMidTurnIsFailedWithReason() {
+        let s = summary(last: "2026-09-23T12:09:50.000Z")
+        let e = exit(status: "busy", statusAt: now.addingTimeInterval(-60), at: now.addingTimeInterval(-5))
+        let derived = FleetStateEngine.state(summary: s, registry: nil, hookEvent: nil, exit: e,
+                                             now: now, activeThreshold: threshold)
+        XCTAssertEqual(derived.state, .failed, "exit beats transcript-recency Working")
+        XCTAssertEqual(derived.since, e.at)
+        XCTAssertEqual(derived.failureReason, "Process exited mid-turn")
+    }
+
+    func testRegistryExitAfterStopHookIsNotFailure() {
+        let e = exit(status: "busy", statusAt: now.addingTimeInterval(-60), at: now.addingTimeInterval(-5))
+        let h = hook(.yourTurn, at: now.addingTimeInterval(-30))
+        XCTAssertFalse(FleetStateEngine.exitedMidTurn(e, hookEvent: h, lastTimestamp: "2026-09-23T12:00:00.000Z"))
+        let derived = FleetStateEngine.state(summary: summary(), registry: nil, hookEvent: h, exit: e,
+                                             now: now, activeThreshold: threshold)
+        XCTAssertNotEqual(derived.state, .failed)
+        XCTAssertNil(derived.failureReason)
+    }
+
+    func testRegistryExitClearedByTranscriptActivity() {
+        let e = exit(status: "busy", at: now.addingTimeInterval(-30))
+        XCTAssertFalse(FleetStateEngine.exitedMidTurn(e, hookEvent: nil, lastTimestamp: "2026-09-23T12:09:50.000Z"))
+        let derived = FleetStateEngine.state(summary: summary(last: "2026-09-23T12:09:50.000Z"), registry: nil,
+                                             hookEvent: nil, exit: e, now: now, activeThreshold: threshold)
+        XCTAssertEqual(derived.state, .working)
+    }
+
+    func testRegistryExitIgnoredWhenIdle() {
+        let e = exit(status: "idle", at: now.addingTimeInterval(-5))
+        XCTAssertFalse(FleetStateEngine.exitedMidTurn(e, hookEvent: nil, lastTimestamp: "2026-09-23T12:00:00.000Z"))
+        XCTAssertEqual(FleetStateEngine.state(summary: summary(), registry: nil, hookEvent: nil, exit: e,
+                                              now: now, activeThreshold: threshold).state, .done)
+    }
+
+    func testBuildAgentsCarriesFailureReason() {
+        let agents = FleetStateEngine.buildAgents(
+            sessions: [summary(id: "s1"), summary(id: "s2")], registry: [], hookEvents: [:],
+            exits: ["s1": exit(status: "shell", at: now.addingTimeInterval(-5))],
+            now: now, activeThreshold: threshold, recentWindow: window)
+        XCTAssertEqual(agents.first { $0.id == "s1" }?.state, .failed)
+        XCTAssertEqual(agents.first { $0.id == "s1" }?.failureReason, "Process exited mid-turn")
+        XCTAssertNil(agents.first { $0.id == "s2" }?.failureReason)
+    }
+
+    // MARK: periodic refresh
+
+    func testNeedsPeriodicRefreshForNonLiveWorking() {
+        let build: ([SessionSummary], [RegistryEntry]) -> [FleetAgent] = { sessions, reg in
+            FleetStateEngine.buildAgents(sessions: sessions, registry: reg, hookEvents: [:], now: self.now,
+                                         activeThreshold: self.threshold, recentWindow: self.window)
+        }
+        XCTAssertTrue(FleetStateEngine.needsPeriodicRefresh(build([summary(last: "2026-09-23T12:09:30.000Z")], [])))
+        XCTAssertFalse(FleetStateEngine.needsPeriodicRefresh(build([summary(last: "2026-09-23T12:00:00.000Z")], [])))
+        XCTAssertFalse(FleetStateEngine.needsPeriodicRefresh(build([summary()], [registry(status: "busy")])))
+    }
+
+    func testNeedsPeriodicRefreshForAttentionAgents() {
+        let agents = FleetStateEngine.buildAgents(
+            sessions: [summary()], registry: [registry(status: "waiting")], hookEvents: [:],
+            now: now, activeThreshold: threshold, recentWindow: window)
+        XCTAssertTrue(FleetStateEngine.needsPeriodicRefresh(agents))
+    }
+
+    func testNonLiveWorkingBecomesDoneAfterThreshold() {
+        let s = summary(last: "2026-09-23T12:10:00.000Z")
+        XCTAssertEqual(FleetStateEngine.state(summary: s, registry: nil, hookEvent: nil, now: now,
+                                              activeThreshold: threshold).state, .working)
+        XCTAssertEqual(FleetStateEngine.state(summary: s, registry: nil, hookEvent: nil, now: now.addingTimeInterval(61),
+                                              activeThreshold: threshold).state, .done)
+    }
+
+    // MARK: registry name
+
+    func testDisplayNameFromRegistry() {
+        func agent(_ r: RegistryEntry?) -> FleetAgent? {
+            FleetStateEngine.buildAgents(sessions: [summary()], registry: r.map { [$0] } ?? [], hookEvents: [:],
+                                         now: now, activeThreshold: threshold, recentWindow: window).first
+        }
+        XCTAssertEqual(agent(registry(status: "idle", name: "fix-gauge", nameSource: "auto"))?.displayName, "fix-gauge")
+        XCTAssertNil(agent(registry(status: "idle", name: "", nameSource: "auto"))?.displayName)
+        XCTAssertNil(agent(registry(status: "idle", name: "proj-9b", nameSource: "derived"))?.displayName)
+        XCTAssertNil(agent(nil)?.displayName)
+    }
+
+    // MARK: grouping
+
+    func testGroupedByProjectSortsByNameKeepsOrder() {
+        func s(_ id: String, _ project: String) -> SessionSummary { summary(id: id, project: project) }
+        let agents = FleetStateEngine.buildAgents(
+            sessions: [s("a", "-Users-x-zeta"), s("b", "-Users-x-Alpha"), s("c", "-Users-x-zeta")],
+            registry: [], hookEvents: [:], now: now, activeThreshold: threshold, recentWindow: window)
+        let groups = FleetStateEngine.groupedByProject(agents)
+        XCTAssertEqual(groups.map(\.project), ["Alpha", "zeta"])
+        XCTAssertEqual(groups.last?.agents.map(\.id), agents.filter { $0.projectName == "zeta" }.map(\.id))
     }
 
     // MARK: hook classification

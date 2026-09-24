@@ -8,6 +8,8 @@ struct ChatView: View {
     @Binding var scrollTargetUuid: String?
     /// Navigates to the Files tab; nil hides the file-changes link (Cowork).
     var onOpenFilesTab: (() -> Void)? = nil
+    /// Opens with the blocked-actions disclosure expanded (Fleet chip).
+    var expandBlockedActions: Bool = false
     @State private var isNearTop = true
     @State private var isNearBottom = false
     @State private var searchText = ""
@@ -147,7 +149,10 @@ struct ChatView: View {
                     }
                 }
             }
-            .onAppear { consumeScrollTarget(proxy: proxy) }
+            .onAppear {
+                consumeScrollTarget(proxy: proxy)
+                if expandBlockedActions { blockedActionsExpanded = true }
+            }
             .onChange(of: scrollTargetUuid) { _, _ in consumeScrollTarget(proxy: proxy) }
         }
     }

@@ -15,7 +15,9 @@ enum McpToolRegistry {
             Read-only access to Claudoscope, the local Claude Code observability app. \
             Costs are estimates computed from local transcripts with the same engine as \
             the Claudoscope dashboard. Session tools return transcript_file paths; read \
-            those JSONL files directly for full conversation content.
+            those JSONL files directly for full conversation content. Fleet tools \
+            (list_agents, get_agent) show running and recent agents with the same \
+            states and attention order as the Fleet board.
             """,
             capabilities: .init(tools: .init(listChanged: false))
         )
@@ -168,6 +170,38 @@ enum McpToolRegistry {
                 "properties": [
                     "project": projectProperty,
                 ],
+            ],
+            annotations: readOnly
+        ),
+        Tool(
+            name: "list_agents",
+            description: "Running and recent (24h) Claude Code agents from the Fleet board: state, why it is waiting, how long, live process info, cost and context. Agents that need the user come first, oldest wait first.",
+            inputSchema: [
+                "type": "object",
+                "properties": [
+                    "state": [
+                        "type": "string",
+                        "enum": ["blocked", "waiting", "working", "idle", "failed", "done"],
+                        "description": "Only agents in this state",
+                    ],
+                    "project": [
+                        "type": "string",
+                        "description": "Project display name or encoded project id",
+                    ],
+                    "limit": limitProperty,
+                ],
+            ],
+            annotations: readOnly
+        ),
+        Tool(
+            name: "get_agent",
+            description: "One Fleet agent by session id: its state plus the last prompt, last tool call, working directory, refused tool calls and changed-file count.",
+            inputSchema: [
+                "type": "object",
+                "properties": [
+                    "session_id": ["type": "string", "description": "Session id"],
+                ],
+                "required": ["session_id"],
             ],
             annotations: readOnly
         ),

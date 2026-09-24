@@ -79,13 +79,27 @@ final class SessionStore {
     var fleetAgents: [FleetAgent] = []
     var attentionQueue: [FleetAgent] = []
     var fleetWaitingCount: Int { attentionQueue.count }
+    /// Some waiting agent waited past `FleetStateEngine.longWait` or is about
+    /// to lose its prompt cache. Refreshed on rebuild and by the 15s sweep.
+    var fleetAttentionEscalated = false
+    /// Today's closed waits and cold restarts, from the `fleet_waits` table.
+    var fleetWaitStats: FleetWaitStats.Summary?
+    /// Start of each session's open wait, so transcript activity can close it.
+    @ObservationIgnored private var openWaitStarts: [String: Date] = [:]
+    @ObservationIgnored private var waitStatsTask: Task<Void, Never>?
+    static let fleetWaitRetention: TimeInterval = 30 * 24 * 3600
     /// True while any live agent ran with skipped permissions.
     var fleetHasWarning: Bool { fleetAgents.contains { $0.isBypass && $0.isLive } }
     /// One-shot session selection requested from outside the dashboard
     /// (popover, hotkey, notification tap). Consumed next to `requestedRail`.
     var requestedSelection: RequestedSelection?
+    /// One-shot tab for the session detail view, consumed when that session
+    /// is shown.
+    var requestedSessionTab: RequestedSessionTab?
     @ObservationIgnored private var fleetHookEvents: [String: FleetHookEvent] = [:]
     @ObservationIgnored private var livenessTimer: Timer?
+    @ObservationIgnored private var lastRegistryBySession: [String: RegistryEntry] = [:]
+    @ObservationIgnored private var registryExits: [String: RegistryExit] = [:]
     static let fleetRecentWindow: TimeInterval = 24 * 3600
     static let livenessSweepInterval: TimeInterval = 15
 
@@ -236,7 +250,14 @@ final class SessionStore {
         }
     }
 
+    var fleetGroupByProject: Bool = false {
+        didSet {
+            UserDefaults.standard.set(fleetGroupByProject, forKey: Self.fleetGroupByProjectKey)
+        }
+    }
+
     private static let monochromeMenuBarIconKey = "monochromeMenuBarIcon"
+    private static let fleetGroupByProjectKey = "fleetGroupByProject"
     private static let pricingProviderKey = "pricingProvider"
     private static let pricingRegionKey = "pricingRegion"
 
@@ -463,21 +484,29 @@ final class SessionStore {
     }
 
     /// Sessions eligible for the per-session cost alert: activity within the
-    /// last 30 minutes, subagents excluded (their UUID titles make useless
-    /// alerts; fan-out spend is the rolling rule's job).
+    /// last 30 minutes, or listed in `alwaysInclude` (live agents with a
+    /// budget), subagents excluded (their UUID titles make useless alerts;
+    /// fan-out spend is the rolling rule's job).
     nonisolated static func recentSessionFigures(
         sessions: [SessionSummary],
-        now: Date
+        now: Date,
+        alwaysInclude: Set<String> = [],
+        registry: [String: RegistryEntry] = [:]
     ) -> [CostSessionFigure] {
         sessions.compactMap { session in
-            guard !session.isSubagent,
-                  let date = ISO8601.parse(session.lastTimestamp),
-                  now.timeIntervalSince(date) < 30 * 60 else { return nil }
+            guard !session.isSubagent else { return nil }
+            if !alwaysInclude.contains(session.id) {
+                guard let date = ISO8601.parse(session.lastTimestamp),
+                      now.timeIntervalSince(date) < 30 * 60 else { return nil }
+            }
             return CostSessionFigure(
                 id: session.id,
                 title: session.title,
                 cost: session.estimatedCost,
-                tokens: session.totalInputTokens + session.totalOutputTokens
+                tokens: session.totalInputTokens + session.totalOutputTokens,
+                projectId: session.isCowork ? nil : session.projectId,
+                focusNeedle: session.isCowork ? nil
+                    : (registry[session.id]?.cwdFolderName ?? decodeProjectName(session.projectId))
             )
         }
     }
@@ -506,6 +535,7 @@ final class SessionStore {
             self.realtimeSecretScanEnabled = defaults.bool(forKey: Self.realtimeSecretScanKey)
         }
         self.monochromeMenuBarIcon = defaults.bool(forKey: Self.monochromeMenuBarIconKey)
+        self.fleetGroupByProject = defaults.bool(forKey: Self.fleetGroupByProjectKey)
 
         // Both must be settled before performInitialScan() below: the scan's
         // global-key check hashes the resolved rate table, and getting there
@@ -691,6 +721,13 @@ final class SessionStore {
             } catch {
                 NSLog("[Claudoscope] SummaryCache: global key check failed: %@", error.localizedDescription)
             }
+            try? await store.pruneWaits(startedBefore: Date().addingTimeInterval(-Self.fleetWaitRetention))
+            if let open = try? await store.fetchOpenWaits() {
+                for wait in open {
+                    openWaitStarts[wait.sessionId] = Date(timeIntervalSince1970: wait.startedAt)
+                }
+            }
+            scheduleWaitStatsRefresh()
         }
 
         // Hydrate: first paint from SQLite before any JSONL is parsed. Only
@@ -859,6 +896,14 @@ final class SessionStore {
                        registry: registryEntries.first { $0.sessionId == summary.id }) {
                     fleetHookEvents[summary.id] = nil
                 }
+                if let start = openWaitStarts[summary.id],
+                   let last = ISO8601.parse(summary.lastTimestamp), last > start {
+                    closeWait(sessionId: summary.id)
+                }
+                if let exit = registryExits[summary.id],
+                   let last = ISO8601.parse(summary.lastTimestamp), last > exit.at {
+                    registryExits[summary.id] = nil
+                }
                 self.rebuildFleet()
                 self.recomputeAnalytics()
                 // A brand-new transcript can close a coverage gap (a previously
@@ -907,6 +952,8 @@ final class SessionStore {
 
             self.lintResultsValid = false
             fleetHookEvents[sessionId] = nil
+            registryExits[sessionId] = nil
+            closeWait(sessionId: sessionId)
             self.rebuildFleet()
             self.recomputeAnalytics()
             // The known-id set shrank; the coverage badge must reflect it.
@@ -1033,12 +1080,17 @@ final class SessionStore {
         }
     }
 
+    /// The checkout path encoded in a `~/.claude/projects/<id>` directory name.
+    func resolveProjectPath(_ projectId: String) async -> String? {
+        await configService.decodeProjectPath(projectId)
+    }
+
     /// Re-reads the whole registry (a handful of files) and rebuilds the board.
     func reloadRegistry() async {
         let entries = await registryService.loadEntries()
+        noteRegistryChange(to: entries)
         registryEntries = entries
         rebuildFleet()
-        scheduleLivenessSweep()
     }
 
     private func rebuildFleet() {
@@ -1047,19 +1099,28 @@ final class SessionStore {
             sessions: sessions,
             registry: registryEntries,
             hookEvents: fleetHookEvents,
+            exits: registryExits,
             now: Date(),
             activeThreshold: Self.activeThreshold,
             recentWindow: Self.fleetRecentWindow
         )
         attentionQueue = FleetStateEngine.attentionQueue(fleetAgents)
+        let now = Date()
+        let escalated = attentionQueue.contains { $0.isEscalated(now: now) }
+        if escalated != fleetAttentionEscalated { fleetAttentionEscalated = escalated }
         checkActiveSession()
+        syncLivenessSweep()
+        scheduleWaitStatsRefresh()
     }
 
     /// Registry files are not reliably removed on exit, so while anything is
-    /// live we re-probe pids every few seconds. This timer only drops dead
-    /// entries and refreshes the board; it never posts a notification.
-    private func scheduleLivenessSweep() {
-        if registryEntries.isEmpty {
+    /// live we re-probe pids every few seconds. The same sweep re-derives
+    /// agents whose state moves with the clock alone (a non-live agent aging
+    /// out of Working). It only refreshes the board; it never posts a
+    /// notification.
+    private func syncLivenessSweep() {
+        let wanted = !registryEntries.isEmpty || FleetStateEngine.needsPeriodicRefresh(fleetAgents)
+        guard wanted else {
             livenessTimer?.invalidate()
             livenessTimer = nil
             return
@@ -1070,14 +1131,82 @@ final class SessionStore {
                 guard let self else { return }
                 let alive = self.registryEntries.filter { SessionRegistryService.isAlive(pid: $0.pid) }
                 if alive.count != self.registryEntries.count {
+                    self.noteRegistryChange(to: alive)
                     self.registryEntries = alive
                 }
                 self.rebuildFleet()
-                if alive.isEmpty {
-                    self.livenessTimer?.invalidate()
-                    self.livenessTimer = nil
-                }
             }
+        }
+    }
+
+    /// Remembers busy processes that disappeared (a crash or kill candidate)
+    /// and forgets exits for sessions that came back.
+    private func noteRegistryChange(to entries: [RegistryEntry]) {
+        let current = FleetStateEngine.registryBySession(entries)
+        let now = Date()
+        for (sessionId, entry) in lastRegistryBySession where current[sessionId] == nil {
+            if entry.status == "busy" || entry.status == "shell" {
+                registryExits[sessionId] = RegistryExit(entry: entry, at: now)
+            }
+            closeWait(sessionId: sessionId)
+        }
+        for (sessionId, entry) in current {
+            registryExits[sessionId] = nil
+            let wasWaiting = Self.registryWaitingStatuses.contains(lastRegistryBySession[sessionId]?.status ?? "")
+            let isWaiting = Self.registryWaitingStatuses.contains(entry.status ?? "")
+            if isWaiting && !wasWaiting {
+                openWait(sessionId: sessionId, kind: "registry_waiting")
+            } else if wasWaiting && !isWaiting {
+                closeWait(sessionId: sessionId)
+            }
+        }
+        lastRegistryBySession = current
+    }
+
+    private static let registryWaitingStatuses: Set<String> = ["waiting", "blocked", "needs_input"]
+
+    /// Records the start of a wait, snapshotting the prompt cache so a late
+    /// answer can be priced as a cold restart. Fire-and-forget.
+    private func openWait(sessionId: String, kind: String) {
+        guard let store = summaryStore, openWaitStarts[sessionId] == nil else { return }
+        guard let summary = fleetAgents.first(where: { $0.id == sessionId })?.summary
+            ?? sessionsByProject.values.lazy.flatMap({ $0 }).first(where: { $0.id == sessionId })
+            ?? coworkSummaries.first(where: { $0.id == sessionId }) else { return }
+        let now = Date()
+        openWaitStarts[sessionId] = now
+        let turn = summary.latestTurn
+        let record = FleetWaitRecord(
+            id: nil, sessionId: sessionId, projectId: summary.projectId, kind: kind,
+            startedAt: now.timeIntervalSince1970, endedAt: nil,
+            contextTokens: turn?.contextTokens, cacheTtlSeconds: turn?.cacheTTLSeconds,
+            turnTimestamp: turn?.turnTimestamp.flatMap(ISO8601.parse)?.timeIntervalSince1970,
+            model: summary.primaryModel
+        )
+        Task { try? await store.openWait(record) }
+    }
+
+    private func closeWait(sessionId: String) {
+        guard let store = summaryStore, openWaitStarts.removeValue(forKey: sessionId) != nil else { return }
+        let now = Date()
+        Task {
+            try? await store.closeWait(sessionId: sessionId, at: now)
+            self.scheduleWaitStatsRefresh()
+        }
+    }
+
+    /// Debounced read of today's waits into `fleetWaitStats`.
+    private func scheduleWaitStatsRefresh() {
+        guard let store = summaryStore else { return }
+        waitStatsTask?.cancel()
+        waitStatsTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled, let self else { return }
+            let now = Date()
+            let startOfDay = Calendar.current.startOfDay(for: now)
+            guard let waits = try? await store.fetchWaits(startedAfter: startOfDay), !Task.isCancelled else { return }
+            let stats = FleetWaitStats.summarize(waits, dayKey: ISO8601.localDayKey(for: now),
+                                                 pricingTable: self.pricingTable)
+            if stats != self.fleetWaitStats { self.fleetWaitStats = stats }
         }
     }
 
@@ -1095,6 +1224,14 @@ final class SessionStore {
             kind: kind, message: event.message, receivedAt: Date(), cwd: event.cwd
         )
         rebuildFleet()
+        let waitKind: String
+        switch kind {
+        case .permissionPrompt: waitKind = "permission"
+        case .elicitation: waitKind = "elicitation"
+        case .genericBlock: waitKind = "block"
+        case .yourTurn: waitKind = "your_turn"
+        }
+        openWait(sessionId: event.sessionId, kind: waitKind)
     }
 
     /// Re-scan all sessions with the current pricing table (e.g. after pricing
@@ -1228,7 +1365,12 @@ final class SessionStore {
             snapshot: CostSnapshot(
                 cumulativeCost: cumulativeCost,
                 cumulativeTokens: cumulativeTokens,
-                recentSessions: Self.recentSessionFigures(sessions: all, now: now),
+                recentSessions: Self.recentSessionFigures(
+                    sessions: all, now: now,
+                    alwaysInclude: Set(registryEntries.map(\.sessionId))
+                        .filter { costAlertService.config.sessionBudgets[$0] != nil },
+                    registry: FleetStateEngine.registryBySession(registryEntries)
+                ),
                 todayCost: today.cost,
                 todayTokens: today.tokens,
                 monthCost: month.cost,

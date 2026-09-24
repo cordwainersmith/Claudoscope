@@ -456,6 +456,11 @@ struct ToolUseResultRaw: Decodable, Sendable {
     // usage.server_tool_use.web_search_requests is always 0 (verified on Vertex),
     // so the web-search request fee is billed from here. See ConfigCanon note.
     let searchCount: Int?
+    let filePath: String?
+    let hasStructuredPatch: Bool
+    // Refused and invalid tool calls are written as a bare string
+    // ("Error: The user doesn't want to proceed...") instead of an object.
+    let isBareString: Bool
 
     enum CodingKeys: String, CodingKey {
         case toolUseId = "tool_use_id"
@@ -464,6 +469,37 @@ struct ToolUseResultRaw: Decodable, Sendable {
         case childAgentId = "agentId"
         case childAgentType = "agentType"
         case searchCount
+        case filePath
+        case structuredPatch
+    }
+
+    init(from decoder: Decoder) throws {
+        if let text = try? decoder.singleValueContainer().decode(String.self) {
+            toolUseId = nil
+            content = text
+            isError = nil
+            childAgentId = nil
+            childAgentType = nil
+            searchCount = nil
+            filePath = nil
+            hasStructuredPatch = false
+            isBareString = true
+            return
+        }
+        // Some MCP tools write an array here; it carries nothing we read, so it
+        // decodes as an empty result instead of dropping the whole line.
+        let c = try? decoder.container(keyedBy: CodingKeys.self)
+        toolUseId = try? c?.decodeIfPresent(String.self, forKey: .toolUseId)
+        // Agent results carry an array of text blocks here; lenient so the
+        // spawn edge on the same object still decodes.
+        content = try? c?.decodeIfPresent(String.self, forKey: .content)
+        isError = try? c?.decodeIfPresent(Bool.self, forKey: .isError)
+        childAgentId = try? c?.decodeIfPresent(String.self, forKey: .childAgentId)
+        childAgentType = try? c?.decodeIfPresent(String.self, forKey: .childAgentType)
+        searchCount = try? c?.decodeIfPresent(Int.self, forKey: .searchCount)
+        filePath = try? c?.decodeIfPresent(String.self, forKey: .filePath)
+        hasStructuredPatch = c?.contains(.structuredPatch) ?? false
+        isBareString = false
     }
 }
 

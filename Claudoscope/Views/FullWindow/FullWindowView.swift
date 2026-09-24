@@ -252,6 +252,9 @@ struct FullWindowView: View {
     private func applyRequestedSelection() {
         guard let requested = store.requestedSelection else { return }
         store.requestedSelection = nil
+        if let tab = requested.tab {
+            store.requestedSessionTab = RequestedSessionTab(sessionId: requested.sessionId, tab: tab)
+        }
         pendingSubagentFileName = nil
         pendingNavigation = (requested.projectId, requested.sessionId)
         if selectedRail == .sessions {

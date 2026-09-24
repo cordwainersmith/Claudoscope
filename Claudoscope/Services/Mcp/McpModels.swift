@@ -38,6 +38,8 @@ struct McpStoreSnapshot: Sendable {
     let pricingTable: [String: ModelPricing]
     let canonOptedInProjectIds: Set<String>
     let bundledCanonProtocolVersion: Int
+    var fleetAgents: [FleetAgent] = []
+    var attentionQueue: [FleetAgent] = []
 
     static let empty = McpStoreSnapshot(
         projects: [],

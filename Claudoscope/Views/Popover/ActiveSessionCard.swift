@@ -5,6 +5,12 @@ import SwiftUI
 /// header opens the Fleet rail.
 struct ActiveSessionsCard: View {
     let agents: [FleetAgent]
+    /// A wait went long or a waiting agent's cache is about to expire.
+    let escalated: Bool
+    /// Raises the agent's terminal tab (waiting, live CLI agents).
+    let onFocus: (FleetAgent) -> Void
+    /// Opens the agent's session in the dashboard.
+    let onOpen: (FleetAgent) -> Void
     let onOpenFleet: () -> Void
     @State private var headerHovered = false
 
@@ -12,7 +18,7 @@ struct ActiveSessionsCard: View {
     private var blocked: Int { agents.filter { $0.state == .blockedOnPermission }.count }
 
     private var tint: Color {
-        if blocked > 0 { return .red }
+        if blocked > 0 || escalated { return .red }
         if needsYou > 0 { return .orange }
         return .green
     }
@@ -51,7 +57,7 @@ struct ActiveSessionsCard: View {
                         .frame(height: 1)
                         .padding(.vertical, 6)
                 }
-                ActiveSessionRow(agent: agent)
+                ActiveSessionRow(agent: agent, onFocus: onFocus, onOpen: onOpen)
             }
 
             if agents.count > 4 {
@@ -79,8 +85,17 @@ struct ActiveSessionsCard: View {
 
 private struct ActiveSessionRow: View {
     let agent: FleetAgent
+    let onFocus: (FleetAgent) -> Void
+    let onOpen: (FleetAgent) -> Void
+    @State private var hovered = false
 
     private var session: SessionSummary { agent.summary }
+
+    /// A live CLI agent waiting on you is answered in its terminal; anything
+    /// else opens in the dashboard.
+    private var focusesTerminal: Bool {
+        agent.state.needsAttention && !agent.summary.isCowork && agent.isLive
+    }
 
     private var stateColor: Color {
         switch agent.state {
@@ -92,14 +107,42 @@ private struct ActiveSessionRow: View {
     }
 
     var body: some View {
+        Button {
+            focusesTerminal ? onFocus(agent) : onOpen(agent)
+        } label: {
+            content
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .help(focusesTerminal ? "Bring the terminal tab titled \(agent.focusNeedle) forward"
+              : (agent.summary.isCowork ? "Open the Fleet board" : "Open this session"))
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(session.title)
-                .font(.system(size: 13, weight: .medium))
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Text(session.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: focusesTerminal ? "terminal" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(hovered ? .secondary : .quaternary)
+            }
 
             HStack(spacing: 0) {
                 Text(agent.projectName)
                     .lineLimit(1)
+                if let name = agent.displayName {
+                    Text(name)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .layoutPriority(-1)
+                        .padding(.leading, 6)
+                }
                 Spacer(minLength: 8)
                 Text(formatCost(session.estimatedCost))
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -138,16 +181,24 @@ private struct ActiveSessionRow: View {
         switch agent.state {
         case .blockedOnPermission, .waitingOnUser:
             TimelineView(Tower.secondTick) { context in
+                let tint = agent.isEscalated(now: context.date) ? Color.red : stateColor
                 HStack(spacing: 4) {
-                    Circle().fill(stateColor).frame(width: 5, height: 5)
+                    Circle().fill(tint).frame(width: 5, height: 5)
                     Text(agent.state == .blockedOnPermission ? "Blocked" : "Waiting")
-                        .foregroundStyle(stateColor)
+                        .foregroundStyle(tint)
                     Text(Tower.clock(from: agent.since, to: context.date))
                         .monospacedDigit()
-                        .foregroundStyle(stateColor)
+                        .foregroundStyle(tint)
+                    if agent.isCacheAboutToExpire(now: context.date) {
+                        Text("\u{00B7} cache expiring")
+                            .foregroundStyle(tint)
+                            .fixedSize()
+                    }
                     if case .waitingOnUser(let reason) = agent.state {
                         Text("\u{00B7} \(reason)")
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(-1)
                     }
                 }
             }

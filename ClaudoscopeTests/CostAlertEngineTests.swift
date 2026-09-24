@@ -357,4 +357,63 @@ final class CostAlertEngineTests: XCTestCase {
         XCTAssertEqual(figures[0].cost, 3)
         XCTAssertEqual(figures[0].tokens, 150, "tokens are input + output, matching todayTokens")
     }
+
+    // MARK: - Per-session budgets
+
+    private func fig(_ id: String, cost: Double, tokens: Int = 0) -> CostSessionFigure {
+        CostSessionFigure(id: id, title: id, cost: cost, tokens: tokens, projectId: "p", focusNeedle: "proj")
+    }
+
+    func testSessionBudgetOverridesGlobalThreshold() {
+        var cfg = config(session: CostAlertRule(enabled: true, threshold: 5, unit: .dollars))
+        cfg.sessionBudgets = ["a": 1]
+        let result = evaluate(cfg, snapshot(recentSessions: [fig("a", cost: 1.5), fig("b", cost: 2)]))
+        XCTAssertEqual(result.events.map(\.scopeId), ["a"])
+        XCTAssertEqual(result.events.first?.effectiveThreshold, 1)
+        XCTAssertEqual(result.events.first?.focusNeedle, "proj")
+        XCTAssertEqual(result.events.first?.projectId, "p")
+    }
+
+    func testSessionBudgetFiresWhenSessionRuleDisabled() {
+        var cfg = config()
+        cfg.sessionBudgets = ["a": 1]
+        let result = evaluate(cfg, snapshot(recentSessions: [fig("a", cost: 2), fig("b", cost: 50)]))
+        XCTAssertEqual(result.events.map(\.scopeId), ["a"])
+        var off = cfg
+        off.masterEnabled = false
+        XCTAssertTrue(evaluate(off, snapshot(recentSessions: [fig("a", cost: 2)])).events.isEmpty)
+    }
+
+    func testSessionBudgetIsDollarsEvenWhenGlobalUnitIsTokens() {
+        var cfg = config(session: CostAlertRule(enabled: true, threshold: 1_000_000, unit: .tokens))
+        cfg.sessionBudgets = ["a": 1]
+        let result = evaluate(cfg, snapshot(recentSessions: [fig("a", cost: 1.5, tokens: 10)]))
+        XCTAssertEqual(result.events.first?.unit, .dollars)
+        XCTAssertEqual(result.events.first?.measured, 1.5)
+    }
+
+    func testRecentSessionFiguresAlwaysIncludesBudgetedLive() {
+        let now = t0
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let stale = iso.string(from: now.addingTimeInterval(-minutes(120)))
+        let sessions = [summary(id: "live", lastTimestamp: stale), summary(id: "other", lastTimestamp: stale)]
+        let reg = ["live": RegistryEntry(pid: 1, sessionId: "live", cwd: "/Users/x/wt")]
+        let figures = SessionStore.recentSessionFigures(sessions: sessions, now: now,
+                                                        alwaysInclude: ["live"], registry: reg)
+        XCTAssertEqual(figures.map(\.id), ["live"])
+        XCTAssertEqual(figures.first?.focusNeedle, "wt")
+    }
+
+    func testConfigDecodesWithoutSessionBudgetsKey() throws {
+        var legacy = CostAlertConfig.default
+        legacy.sessionBudgets = ["x": 3]
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy)) as! [String: Any]
+        json.removeValue(forKey: "sessionBudgets")
+        let decoded = try JSONDecoder().decode(CostAlertConfig.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(decoded.sessionBudgets, [:])
+        XCTAssertEqual(decoded.session, CostAlertConfig.default.session)
+        let roundTrip = try JSONDecoder().decode(CostAlertConfig.self, from: JSONEncoder().encode(legacy))
+        XCTAssertEqual(roundTrip.sessionBudgets, ["x": 3])
+    }
 }

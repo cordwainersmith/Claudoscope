@@ -216,6 +216,8 @@ private struct SessionDetailTabView: View {
     @State private var selectedTab: SessionTab = .chat
     /// Set by the Files tab's jump-to-chat; ChatView consumes and clears it.
     @State private var chatScrollTargetUuid: String?
+    /// Set by a Fleet blocked-actions chip; passed to the next ChatView.
+    @State private var expandBlocked = false
 
     enum SessionTab: String, CaseIterable {
         case chat = "Chat"
@@ -271,7 +273,8 @@ private struct SessionDetailTabView: View {
                 ChatView(
                     session: session,
                     scrollTargetUuid: $chatScrollTargetUuid,
-                    onOpenFilesTab: { selectedTab = .files }
+                    onOpenFilesTab: { selectedTab = .files },
+                    expandBlockedActions: expandBlocked
                 )
                 .id(session.id)
             case .files:
@@ -290,6 +293,26 @@ private struct SessionDetailTabView: View {
                 AgentTreeView(session: session)
                     .id(session.id)
             }
+        }
+        .onAppear { consumeRequestedTab() }
+        .onChange(of: store.requestedSessionTab) { _, _ in consumeRequestedTab() }
+        .onChange(of: session.id) { _, _ in
+            expandBlocked = false
+            consumeRequestedTab()
+        }
+    }
+
+    private func consumeRequestedTab() {
+        guard let requested = store.requestedSessionTab, requested.sessionId == session.id else { return }
+        store.requestedSessionTab = nil
+        switch requested.tab {
+        case "files":
+            selectedTab = .files
+        case "chat:blocked":
+            selectedTab = .chat
+            expandBlocked = true
+        default:
+            selectedTab = .chat
         }
     }
 

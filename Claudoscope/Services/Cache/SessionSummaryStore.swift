@@ -6,8 +6,9 @@ import GRDB
 ///
 /// A derivative store by design: a row is valid only while the file's
 /// fingerprint AND the global keys (parser version, pricing key, timezone)
-/// match, and the whole database can be deleted at any time with zero data
-/// loss. Not an actor: DatabaseQueue is Sendable and serializes internally,
+/// match. The one exception is the small `fleet_waits` table (wait history
+/// for the Fleet board), which is not derivable from transcripts and so
+/// survives global-key wipes; deleting the database loses only that history. Not an actor: DatabaseQueue is Sendable and serializes internally,
 /// and every stored property is immutable.
 final class SessionSummaryStore: Sendable {
 
@@ -141,6 +142,24 @@ final class SessionSummaryStore: Sendable {
                 )
                 """)
             try db.execute(sql: "CREATE INDEX idx_summaries_project ON session_summaries(project_dir)")
+        }
+        migrator.registerMigration("v2") { db in
+            try db.execute(sql: """
+                CREATE TABLE fleet_waits (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    started_at REAL NOT NULL,
+                    ended_at REAL,
+                    context_tokens INTEGER,
+                    cache_ttl_seconds INTEGER,
+                    turn_timestamp REAL,
+                    model TEXT
+                )
+                """)
+            try db.execute(sql: "CREATE INDEX idx_fleet_waits_session_open ON fleet_waits(session_id, ended_at)")
+            try db.execute(sql: "CREATE INDEX idx_fleet_waits_started ON fleet_waits(started_at)")
         }
         return migrator
     }

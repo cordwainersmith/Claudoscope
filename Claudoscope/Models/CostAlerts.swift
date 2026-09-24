@@ -20,6 +20,10 @@ struct CostAlertConfig: Codable, Sendable, Equatable {
     var rollingWindowMinutes: Int
     var daily: CostAlertRule
     var monthly: CostAlertRule
+    /// Per-session dollar budgets set from the Fleet inspector, keyed by
+    /// session id. They apply even when the session rule is off; the master
+    /// switch still gates them.
+    var sessionBudgets: [String: Double] = [:]
 
     static let `default` = CostAlertConfig(
         masterEnabled: false,
@@ -52,6 +56,19 @@ struct CostAlertConfig: Codable, Sendable, Equatable {
     }
 }
 
+extension CostAlertConfig {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        masterEnabled = try c.decode(Bool.self, forKey: .masterEnabled)
+        session = try c.decode(CostAlertRule.self, forKey: .session)
+        rolling = try c.decode(CostAlertRule.self, forKey: .rolling)
+        rollingWindowMinutes = try c.decode(Int.self, forKey: .rollingWindowMinutes)
+        daily = try c.decode(CostAlertRule.self, forKey: .daily)
+        monthly = try c.decode(CostAlertRule.self, forKey: .monthly)
+        sessionBudgets = try c.decodeIfPresent([String: Double].self, forKey: .sessionBudgets) ?? [:]
+    }
+}
+
 // MARK: - Snapshot (built by SessionStore, consumed by the engine)
 
 struct CostSessionFigure: Sendable {
@@ -59,6 +76,9 @@ struct CostSessionFigure: Sendable {
     let title: String
     let cost: Double
     let tokens: Int
+    var projectId: String? = nil
+    /// Terminal title needle, so a budget notification tap can focus it.
+    var focusNeedle: String? = nil
 }
 
 struct CostSnapshot: Sendable {
@@ -97,6 +117,8 @@ struct CostAlertEvent: Identifiable, Sendable {
     let effectiveThreshold: Double
     /// 0 = base threshold, 1 = 2x, 2 = 4x, ...
     let level: Int
+    var projectId: String? = nil
+    var focusNeedle: String? = nil
 
     var headline: String {
         let limit = Self.amount(effectiveThreshold, unit: unit)

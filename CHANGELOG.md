@@ -3,7 +3,7 @@
 ## [1.3.0]
 Adds a Fleet view: one board for every Claude Code session that is running now or ran in the last 24 hours, across all projects, with an attention queue for the ones waiting on you. Built on the session registry Claude Code writes at `~/.claude/sessions/`, which Claudoscope had never read, so liveness comes from the process itself rather than from how recently a transcript grew.
 
-Requires a one-time full reparse on first launch (parser version 11), after which launches hydrate from cache as before.
+Requires a one-time full reparse on first launch (parser version 12), after which launches hydrate from cache as before.
 
 ### New Features
 - **Fleet rail.** A full-width board instead of the usual list and detail columns. A headline says how many agents need you, with live, working, waiting and skipped-permission counters beside it. Below that, a "Needs you" lane lists waiting agents oldest first with a ticking wait timer, the reason, and Open and Jump buttons (Command+Return jumps to the oldest). Working and Parked lanes show live agents as cards, and a dimmed Landed list covers everything else from the last 24 hours. Clicking any card slides in an inspector with the agent and process details, Focus terminal and Open session. State precedence is hook event, then Claude Code's own registry status, then transcript recency, so a card's state always traces to a concrete record. A filter field and a skipped-permissions toggle narrow the board.
@@ -14,8 +14,20 @@ Requires a one-time full reparse on first launch (parser version 11), after whic
 - **Skipped-permissions marking.** A card carries a red Bypass tag while its session is running with `--dangerously-skip-permissions`, and a faint shield if it bypassed earlier and has since left the mode. Derived from the transcript's permission-mode records. Cards also show the current permission mode and git branch.
 - **Live sessions in the popover.** The active-sessions card now counts a session as active while its process is alive, not only while its transcript is changing.
 - **Notification taps select the session.** Clicking a "Claude needs you" or "Claude is ready" notification still focuses the terminal, and additionally selects that session in the dashboard when the window is open.
+- **Popover rows act on click.** Clicking a waiting row in the popover's Active Sessions card brings its terminal tab forward; clicking any other row opens that session in the dashboard (Cowork rows open the Fleet view).
+- **Crash detection.** When a process disappears from Claude Code's registry while it was reported busy, and no Stop hook arrived, its card lands as Failed with "Process exited mid-turn". Resuming the session and sending a prompt clears it.
+- **Long waits escalate.** A wait longer than ten minutes, or one whose prompt cache is about to expire, turns the menu bar count, the popover row and card, and the board tile red. This is visual only; no extra notification is posted.
+- **Response time and cold-cache cost.** The telemetry strip now shows how long agents waited on you today (mean and longest) and how many answers came after the prompt cache expired, with an estimate of what re-caching the context cost. Wait history is kept locally for 30 days.
+- **Copy resume command.** Landed rows (on hover) and the inspector copy a ready-to-paste `cd <checkout> && claude --resume <id>` line for sessions whose process has exited. Claudoscope never runs it.
+- **Session names.** Cards, landed rows, the inspector and popover rows show the session name Claude Code gives a running session (its auto topic name or a rename), and the filter matches it.
+- **Refused-call and changed-file chips.** Cards show how many tool calls you or a permission rule refused and how many files the session edited. Clicking the refused chip opens Chat with the blocked actions expanded; clicking the files chip opens the Files tab.
+- **Group by project.** A toggle in the Fleet header groups cards and landed rows under project headings. The choice is remembered.
+- **Per-agent budgets.** Set a dollar budget for a session in the Fleet inspector. When cost alerts are on, crossing it (and each doubling after) posts a notification whose tap selects the session and focuses its terminal, even if the general per-session rule is off. A budget chip on the card turns amber at 80% and red at 100%.
+- **Fleet tools for the MCP server.** Two new read-only tools, `list_agents` and `get_agent`, return the Fleet board's agents, states, wait reasons and times, process details, cost and context, with agents that need you first.
 
 ### Fixed
+- **Quiet agents no longer stick at Working.** A session with no live process (Cowork, or a CLI process whose registry file is gone) stayed in the popover card and the Working lane after its transcript went quiet, because the board was only re-derived while a CLI process was live. The board now keeps re-deriving until such agents age out.
+- **Refused tool calls are parsed again.** Transcript lines where Claude Code records a refused or invalid tool call as a plain string were dropped whole by the parser, so Chat's blocked-actions section never showed real refusals. Subagent results with block content were dropped the same way, which lost the link from a session to the subagents it spawned. Both now parse.
 - **A second copy of Claudoscope can no longer leave stale data in the cache.** If an older build was still running when a newer one started, the older one could write session summaries in its own format into the newer build's cache, and the newer build trusted them on its next launch. Each cached summary now records the parser version that wrote it, and anything from another version is discarded and reparsed.
 
 ### Changed

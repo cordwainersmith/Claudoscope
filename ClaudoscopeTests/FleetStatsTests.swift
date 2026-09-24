@@ -94,4 +94,73 @@ final class FleetStatsTests: XCTestCase {
         XCTAssertEqual(turn.cacheTTLSeconds, 300)
         XCTAssertEqual(turn.lastPrompt, "fix the gauge")
     }
+
+    func testParserCountsBlockedActionsAndChangedFiles() async throws {
+        func user(_ id: String, _ result: String) -> String {
+            #"{"type":"user","uuid":""# + id + #"","sessionId":"s","timestamp":"2026-09-23T10:00:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t"# + id + #"","content":"x"}]},"toolUseResult":"# + result + "}"
+        }
+        let patch = #"[{"oldStart":1,"oldLines":1,"newStart":1,"newLines":1,"lines":["-a","+b"]}]"#
+        let lines = [
+            #"{"type":"assistant","uuid":"a1","sessionId":"s","timestamp":"2026-09-23T10:00:00.000Z","message":{"role":"assistant","id":"m1","model":"claude-sonnet-4-5","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":10,"output_tokens":5}}}"#,
+            user("1", #""Error: The user doesn't want to proceed with this tool use. The tool use was rejected.""#),
+            user("2", #""Permission to use Bash has been denied by your permission settings.""#),
+            user("3", #""InputValidationError: file_path is required""#),
+            user("4", #"{"filePath":"/p/A.swift","structuredPatch":"# + patch + "}"),
+            user("5", #"{"filePath":"/p/A.swift","structuredPatch":"# + patch + "}"),
+            user("6", #"{"type":"create","filePath":"/p/B.swift","content":"new","structuredPatch":[]}"#),
+            user("7", #"{"filePath":"/p/C.swift","content":"read only"}"#),
+        ]
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("fleet-counts-\(UUID().uuidString).jsonl")
+        try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let summary = try await SessionParser().parseMetadata(url: url, sessionId: "s", pricingTable: PricingTables.anthropic)
+        XCTAssertEqual(summary.blockedActionCount, 2)
+        XCTAssertEqual(summary.changedFileCount, 2)
+        XCTAssertEqual(summary.messageCount, lines.count, "bare-string lines are no longer dropped")
+        XCTAssertFalse(summary.hasError, "a refusal is not a failure")
+    }
+
+    private func waitingAgent(since: Date, turnAt: Date? = nil, ttl: Int? = nil,
+                              state: FleetState = .waitingOnUser(reason: "x")) -> FleetAgent {
+        var summary = agent(first: "2026-09-23T10:00:00.000Z", last: "2026-09-23T11:00:00.000Z").summary
+        if let turnAt {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            summary.latestTurn = LatestTurn(turnTimestamp: formatter.string(from: turnAt), cacheTTLSeconds: ttl)
+        }
+        return FleetAgent(summary: summary, registry: nil, state: state, since: since,
+                          isLive: true, isBackgroundJob: false, isBypass: false)
+    }
+
+    func testCacheExpiryHelpers() {
+        let a = waitingAgent(since: now, turnAt: now, ttl: 300)
+        let expiry = now.addingTimeInterval(300)
+        XCTAssertEqual(a.cacheExpiry(), expiry)
+        XCTAssertFalse(a.isCacheAboutToExpire(now: expiry.addingTimeInterval(-61)))
+        XCTAssertTrue(a.isCacheAboutToExpire(now: expiry.addingTimeInterval(-30)))
+        XCTAssertFalse(a.isCacheAboutToExpire(now: expiry.addingTimeInterval(1)))
+        XCTAssertTrue(a.isEscalated(now: expiry.addingTimeInterval(-30)))
+        XCTAssertNil(waitingAgent(since: now).cacheExpiry())
+    }
+
+    func testHasWaitedLong() {
+        let a = waitingAgent(since: now)
+        XCTAssertFalse(a.hasWaitedLong(now: now.addingTimeInterval(599)))
+        XCTAssertTrue(a.hasWaitedLong(now: now.addingTimeInterval(600)))
+        XCTAssertFalse(waitingAgent(since: now, state: .working).hasWaitedLong(now: now.addingTimeInterval(900)))
+        XCTAssertFalse(waitingAgent(since: now, state: .working).isEscalated(now: now.addingTimeInterval(900)))
+    }
+
+    func testResumeCommandQuotesPath() {
+        let a = agent(first: "2026-09-23T10:00:00.000Z", last: "2026-09-23T11:00:00.000Z")
+        XCTAssertEqual(a.resumeCommand(projectPath: "/Users/x/it's here"),
+                       "cd '/Users/x/it'\\''s here' && claude --resume \(a.id)")
+    }
+
+    func testResumeCommandWithoutPath() {
+        let a = agent(first: "2026-09-23T10:00:00.000Z", last: "2026-09-23T11:00:00.000Z")
+        XCTAssertEqual(a.resumeCommand(projectPath: nil), "claude --resume \(a.id)")
+        XCTAssertEqual(a.resumeCommand(projectPath: ""), "claude --resume \(a.id)")
+    }
 }

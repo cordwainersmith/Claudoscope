@@ -16,19 +16,20 @@ struct RegistryEntry: Decodable, Sendable, Equatable, Identifiable {
     let kind: String?               // "interactive" | "bg"
     let jobId: String?
     let name: String?
+    let nameSource: String?         // "auto" (topic slug) | "derived" (folder + hash) | ...
     let status: String?             // busy | idle | shell | waiting | ...
     let statusUpdatedAt: Double?    // epoch ms
     let updatedAt: Double?          // epoch ms
     let waitingFor: String?
 
     enum CodingKeys: String, CodingKey {
-        case pid, sessionId, cwd, startedAt, procStart, version, kind, jobId, name
+        case pid, sessionId, cwd, startedAt, procStart, version, kind, jobId, name, nameSource
         case status, statusUpdatedAt, updatedAt, waitingFor
     }
 
     init(pid: Int, sessionId: String, cwd: String? = nil, startedAt: Double? = nil,
          procStart: String? = nil, version: String? = nil, kind: String? = nil,
-         jobId: String? = nil, name: String? = nil, status: String? = nil,
+         jobId: String? = nil, name: String? = nil, nameSource: String? = nil, status: String? = nil,
          statusUpdatedAt: Double? = nil, updatedAt: Double? = nil, waitingFor: String? = nil) {
         self.pid = pid
         self.sessionId = sessionId
@@ -39,6 +40,7 @@ struct RegistryEntry: Decodable, Sendable, Equatable, Identifiable {
         self.kind = kind
         self.jobId = jobId
         self.name = name
+        self.nameSource = nameSource
         self.status = status
         self.statusUpdatedAt = statusUpdatedAt
         self.updatedAt = updatedAt
@@ -112,6 +114,13 @@ struct FleetHookEvent: Sendable, Equatable {
     let cwd: String?
 }
 
+/// A registry entry that vanished while Claude Code reported it busy.
+/// Cleared once the transcript moves past `at`.
+struct RegistryExit: Sendable, Equatable {
+    let entry: RegistryEntry
+    let at: Date
+}
+
 /// One card on the Fleet board: a session joined with its live registry entry
 /// (if the process is running) and its derived state.
 struct FleetAgent: Identifiable, Sendable, Equatable {
@@ -125,11 +134,22 @@ struct FleetAgent: Identifiable, Sendable, Equatable {
     let isLive: Bool
     let isBackgroundJob: Bool
     let isBypass: Bool
+    /// Why a `.failed` agent failed, when the board knows more than the
+    /// transcript's error flag (a process that exited mid-turn).
+    var failureReason: String? = nil
 
     /// Terminal tab title needle: the registry cwd folder when live, else the
     /// decoded project folder name.
     var focusNeedle: String {
         registry?.cwdFolderName ?? decodeProjectName(summary.projectId)
+    }
+
+    /// The session name Claude Code shows. "derived" names are the project
+    /// folder plus a hash, which repeats `projectName`, so only other sources
+    /// (an auto topic slug, a user rename) are shown.
+    var displayName: String? {
+        guard let reg = registry, let name = reg.name, !name.isEmpty, reg.nameSource != "derived" else { return nil }
+        return name
     }
 
     var projectName: String {
@@ -153,6 +173,39 @@ struct FleetAgent: Identifiable, Sendable, Equatable {
         return summary.estimatedCost / hours
     }
 
+    /// When the prompt cache written by the latest turn goes cold.
+    func cacheExpiry() -> Date? {
+        guard let turn = summary.latestTurn, let ttl = turn.cacheTTLSeconds,
+              let last = turn.turnTimestamp.flatMap(ISO8601.parse) else { return nil }
+        return last.addingTimeInterval(TimeInterval(ttl))
+    }
+
+    func isCacheAboutToExpire(now: Date, within: TimeInterval = FleetStateEngine.cacheExpiryWarning) -> Bool {
+        guard let expiry = cacheExpiry() else { return false }
+        return expiry > now && expiry <= now.addingTimeInterval(within)
+    }
+
+    func hasWaitedLong(now: Date) -> Bool {
+        state.needsAttention && now.timeIntervalSince(since) >= FleetStateEngine.longWait
+    }
+
+    /// A waiting agent that has waited long or is about to lose its cache.
+    func isEscalated(now: Date) -> Bool {
+        state.needsAttention && (hasWaitedLong(now: now) || isCacheAboutToExpire(now: now))
+    }
+
+    /// Shell line that resumes this session, `cd`-ing into the checkout first
+    /// when the path is known.
+    func resumeCommand(projectPath: String?) -> String {
+        let resume = "claude --resume \(summary.id)"
+        guard let projectPath, !projectPath.isEmpty else { return resume }
+        return "cd \(Self.shellSingleQuoted(projectPath)) && \(resume)"
+    }
+
+    static func shellSingleQuoted(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     /// Share of prompt tokens served from cache.
     var cacheHitRate: Double? {
         let prompt = summary.totalInputTokens + summary.totalCacheReadTokens + summary.totalCacheCreationTokens
@@ -166,4 +219,14 @@ struct FleetAgent: Identifiable, Sendable, Equatable {
 struct RequestedSelection: Equatable, Sendable {
     let projectId: String
     let sessionId: String
+    /// Session tab to open: "chat", "chat:blocked" or "files".
+    var tab: String? = nil
+}
+
+/// A one-shot request to open a tab of a specific session's detail view.
+/// Keyed by session so the previously selected session, which renders for a
+/// moment while the target loads, cannot consume it.
+struct RequestedSessionTab: Equatable, Sendable {
+    let sessionId: String
+    let tab: String
 }

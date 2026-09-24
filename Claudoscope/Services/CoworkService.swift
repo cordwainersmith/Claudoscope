@@ -160,7 +160,9 @@ actor CoworkService {
                 everBypassedPermissions: s.everBypassedPermissions,
                 lastPermissionMode: s.lastPermissionMode,
                 gitBranch: s.gitBranch,
-                latestTurn: s.latestTurn
+                latestTurn: s.latestTurn,
+                blockedActionCount: s.blockedActionCount,
+                changedFileCount: s.changedFileCount
             )
             return (parsed, summary)
         } catch {

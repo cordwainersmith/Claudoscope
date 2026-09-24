@@ -192,7 +192,7 @@ final class CoworkSummaryTests: XCTestCase {
             observability: .empty, isSubagent: false, dailyContributions: []
         )
         XCTAssertEqual(
-            Mirror(reflecting: probe).children.count, 38,
+            Mirror(reflecting: probe).children.count, 40,
             """
             SessionSummary gained or lost a stored property. Forward it in \
             CoworkService.loadSessionData (everything except id, projectId, \

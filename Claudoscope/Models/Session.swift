@@ -131,6 +131,11 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// board's context gauge and "last action" line. Nil for blobs cached
     /// before parserVersion 10 or sessions with no assistant turns.
     var latestTurn: LatestTurn? = nil
+    /// Tool calls the user or a permission rule refused, and distinct files the
+    /// session edited (results carrying a structuredPatch). Nil for blobs cached
+    /// before parserVersion 12.
+    var blockedActionCount: Int? = nil
+    var changedFileCount: Int? = nil
 
     init(
         id: String,
@@ -170,7 +175,9 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         everBypassedPermissions: Bool? = nil,
         lastPermissionMode: String? = nil,
         gitBranch: String? = nil,
-        latestTurn: LatestTurn? = nil
+        latestTurn: LatestTurn? = nil,
+        blockedActionCount: Int? = nil,
+        changedFileCount: Int? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -210,6 +217,8 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.lastPermissionMode = lastPermissionMode
         self.gitBranch = gitBranch
         self.latestTurn = latestTurn
+        self.blockedActionCount = blockedActionCount
+        self.changedFileCount = changedFileCount
     }
 }
 

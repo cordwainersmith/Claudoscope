@@ -78,14 +78,18 @@ final class McpToolHandlerTests: XCTestCase {
     private func makeContext(
         projects: [Project],
         sessionsByProject: [String: [SessionSummary]],
-        canonOptedIn: Set<String> = []
+        canonOptedIn: Set<String> = [],
+        fleetAgents: [FleetAgent] = [],
+        attentionQueue: [FleetAgent] = []
     ) -> McpToolContext {
         let snapshot = McpStoreSnapshot(
             projects: projects,
             sessionsByProject: sessionsByProject,
             pricingTable: PricingTables.table(provider: .anthropic, region: .global),
             canonOptedInProjectIds: canonOptedIn,
-            bundledCanonProtocolVersion: 1
+            bundledCanonProtocolVersion: 1,
+            fleetAgents: fleetAgents,
+            attentionQueue: attentionQueue
         )
         return McpToolContext(
             snapshot: { snapshot },
@@ -332,5 +336,107 @@ final class McpToolHandlerTests: XCTestCase {
         let context = makeContext(projects: [], sessionsByProject: [:])
         let result = await McpToolHandlers.dispatch(name: "drop_tables", arguments: nil, context: context)
         XCTAssertEqual(result.isError, true)
+    }
+
+    // MARK: - Fleet tools
+
+    private func fleetAgent(_ id: String, state: FleetState, since: Date, live: Bool = false,
+                            registry: RegistryEntry? = nil, turn: LatestTurn? = nil,
+                            failureReason: String? = nil) -> FleetAgent {
+        var summary = makeSession(id: id)
+        summary.latestTurn = turn
+        summary.blockedActionCount = 2
+        summary.changedFileCount = 3
+        return FleetAgent(summary: summary, registry: registry, state: state, since: since, isLive: live,
+                          isBackgroundJob: false, isBypass: false, failureReason: failureReason)
+    }
+
+    private func fleetContext(_ agents: [FleetAgent]) -> McpToolContext {
+        makeContext(projects: [], sessionsByProject: [:], fleetAgents: agents,
+                    attentionQueue: FleetStateEngine.attentionQueue(agents))
+    }
+
+    func testListAgentsAttentionFirstAndFiltered() async throws {
+        let now = Date()
+        let agents = [
+            fleetAgent("work", state: .working, since: now.addingTimeInterval(-10)),
+            fleetAgent("wait-new", state: .waitingOnUser(reason: "Plan approval"), since: now.addingTimeInterval(-30)),
+            fleetAgent("wait-old", state: .blockedOnPermission, since: now.addingTimeInterval(-300)),
+        ]
+        let context = fleetContext(agents)
+        let all = try resultJSON(await McpToolHandlers.dispatch(name: "list_agents", arguments: nil, context: context))
+        let ids = (all["agents"] as? [[String: Any]])?.compactMap { $0["session_id"] as? String }
+        XCTAssertEqual(ids, ["wait-old", "wait-new", "work"])
+        XCTAssertEqual(all["attention_count"] as? Int, 2)
+        XCTAssertEqual(all["truncated"] as? Bool, false)
+
+        let waiting = try resultJSON(await McpToolHandlers.dispatch(
+            name: "list_agents", arguments: ["state": "waiting"], context: context))
+        let first = try XCTUnwrap((waiting["agents"] as? [[String: Any]])?.first)
+        XCTAssertEqual(first["session_id"] as? String, "wait-new")
+        XCTAssertEqual(first["reason"] as? String, "Plan approval")
+        XCTAssertGreaterThanOrEqual(first["waited_seconds"] as? Int ?? 0, 30)
+
+        let limited = try resultJSON(await McpToolHandlers.dispatch(
+            name: "list_agents", arguments: ["limit": 1], context: context))
+        XCTAssertEqual(limited["truncated"] as? Bool, true)
+
+        let bad = await McpToolHandlers.dispatch(name: "list_agents", arguments: ["state": "asleep"], context: context)
+        XCTAssertEqual(bad.isError, true)
+    }
+
+    func testGetAgentReturnsProcessAndTurnDetail() async throws {
+        let reg = RegistryEntry(pid: 42, sessionId: "a", cwd: "/Users/x/wt", version: "2.1.280",
+                                kind: "interactive", status: "busy")
+        let turn = LatestTurn(toolName: "Bash", toolTarget: "swift test", lastPrompt: "fix it")
+        let context = fleetContext([fleetAgent("a", state: .working, since: Date(), live: true, registry: reg, turn: turn)])
+        let json = try resultJSON(await McpToolHandlers.dispatch(
+            name: "get_agent", arguments: ["session_id": "a"], context: context))
+        let agent = try XCTUnwrap(json["agent"] as? [String: Any])
+        XCTAssertEqual(agent["pid"] as? Int, 42)
+        XCTAssertEqual(agent["state"] as? String, "working")
+        XCTAssertEqual(json["cwd"] as? String, "/Users/x/wt")
+        XCTAssertEqual(json["version"] as? String, "2.1.280")
+        XCTAssertEqual(json["last_prompt"] as? String, "fix it")
+        XCTAssertEqual(json["last_tool"] as? String, "Bash")
+        XCTAssertEqual(json["blocked_actions"] as? Int, 2)
+        XCTAssertEqual(json["changed_files"] as? Int, 3)
+    }
+
+    func testGetAgentUnknownIdErrors() async {
+        let context = fleetContext([])
+        let missing = await McpToolHandlers.dispatch(name: "get_agent", arguments: ["session_id": "nope"], context: context)
+        XCTAssertEqual(missing.isError, true)
+        let noArg = await McpToolHandlers.dispatch(name: "get_agent", arguments: nil, context: context)
+        XCTAssertEqual(noArg.isError, true)
+    }
+
+    func testAgentPointerKeysAreTheDeclaredSet() async throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let reg = RegistryEntry(pid: 7, sessionId: "a", cwd: "/w", kind: "interactive", name: "topic",
+                                nameSource: "auto", status: "waiting")
+        let turn = LatestTurn(contextTokens: 1000, contextWindowTokens: 200_000,
+                              turnTimestamp: formatter.string(from: Date()), cacheTTLSeconds: 300)
+        var agent = fleetAgent("a", state: .failed, since: Date(), live: true, registry: reg, turn: turn,
+                               failureReason: "Process exited mid-turn")
+        var summary = agent.summary
+        summary.gitBranch = "main"
+        agent = FleetAgent(summary: summary, registry: reg, state: .failed, since: agent.since, isLive: true,
+                           isBackgroundJob: false, isBypass: false, failureReason: agent.failureReason)
+        try FileManager.default.createDirectory(
+            at: claudeDir.appendingPathComponent("projects/\(agent.summary.projectId)"), withIntermediateDirectories: true)
+        FileManager.default.createFile(
+            atPath: claudeDir.appendingPathComponent("projects/\(agent.summary.projectId)/a.jsonl").path, contents: Data())
+        var json = try resultJSON(await McpToolHandlers.dispatch(name: "list_agents", arguments: nil,
+                                                                  context: fleetContext([agent])))
+        let pointer = try XCTUnwrap((json.removeValue(forKey: "agents") as? [[String: Any]])?.first)
+        XCTAssertEqual(Set(pointer.keys), [
+            "session_id", "project", "project_id", "title", "name", "state", "reason", "since",
+            "waited_seconds", "is_live", "pid", "status", "kind", "branch", "model", "cost",
+            "input_tokens", "output_tokens", "context_tokens", "context_window_tokens",
+            "cache_expires_at", "is_bypass", "is_background_job", "transcript_file",
+        ])
+        XCTAssertNil(pointer["env"])
     }
 }

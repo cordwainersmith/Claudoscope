@@ -17,7 +17,7 @@ struct McpServerSectionContent: View {
                 .font(Typography.body)
                 .disabled(busy)
 
-                Text("Lets Claude Code query Claudoscope: usage costs, session search, config lint, plans, and canon. Read-only, served over a local socket only this user can access. Registers the server in Claude Code automatically.")
+                Text("Lets Claude Code query Claudoscope: usage costs, session search, config lint, plans, canon, and the Fleet board's agents. Read-only, served over a local socket only this user can access. Registers the server in Claude Code automatically.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

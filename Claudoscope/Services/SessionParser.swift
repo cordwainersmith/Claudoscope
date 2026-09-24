@@ -68,7 +68,9 @@ actor SessionParser {
     ///    gitBranch (Fleet view).
     /// 10: SessionSummary gained latestTurn (Fleet context gauge, last action).
     /// 11: LatestTurn gained turnTimestamp / cacheTTLSeconds / lastPrompt.
-    static let parserVersion: Int = 11
+    /// 12: blockedActionCount / changedFileCount; bare-string toolUseResult
+    ///     records decode instead of dropping the line.
+    static let parserVersion: Int = 12
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -581,6 +583,8 @@ actor SessionParser {
         // only difference is that we already have the full record set in
         // memory, so the orphan-detection set above can be precomputed.
         var spawnedAgentIds = Set<String>()
+        var blockedActionCount = 0
+        var changedFiles = Set<String>()
         for (idx, raw) in bufferedRecords.enumerated() {
             try Task.checkCancellation()
             if let ts = raw.timestamp {
@@ -931,6 +935,17 @@ actor SessionParser {
                 }
             }
 
+            // A refusal is not a failure, so it stays out of hasError.
+            if raw.type == .user, let result = raw.toolUseResult {
+                if result.isBareString,
+                   ObservabilityAnalyzer.isDenial(resultContent: result.content, isError: true) {
+                    blockedActionCount += 1
+                }
+                if result.hasStructuredPatch, let path = result.filePath, !path.isEmpty {
+                    changedFiles.insert(path)
+                }
+            }
+
             if let childId = raw.toolUseResult?.childAgentId, !childId.isEmpty {
                 spawnedAgentIds.insert(ObservabilityAnalyzer.normalizeAgentId(childId))
             }
@@ -1183,7 +1198,9 @@ actor SessionParser {
             everBypassedPermissions: everBypassed,
             lastPermissionMode: lastPermissionMode,
             gitBranch: gitBranch,
-            latestTurn: latestTurn == LatestTurn() ? nil : latestTurn
+            latestTurn: latestTurn == LatestTurn() ? nil : latestTurn,
+            blockedActionCount: blockedActionCount,
+            changedFileCount: changedFiles.count
         )
     }
 

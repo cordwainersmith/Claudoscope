@@ -17,6 +17,8 @@ enum McpToolHandlers {
             case "get_config": return try await getConfig(arguments, context)
             case "list_plans": return try await listPlans(arguments, context)
             case "get_canon": return try await getCanon(arguments, context)
+            case "list_agents": return try await listAgents(arguments, context)
+            case "get_agent": return try await getAgent(arguments, context)
             default:
                 return errorResult("Unknown tool: \(name)")
             }
