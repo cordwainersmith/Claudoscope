@@ -115,6 +115,26 @@ final class ManagedModelPricingTests: XCTestCase {
         XCTAssertEqual(getModelPricing("claude-sonnet-4-6-20260220", table: t, on: anyDay).input, 2.4, accuracy: 1e-9)
     }
 
+    /// Opus 5 and Opus 5.5 bill against different rows, so an override for one
+    /// must not reprice the other.
+    func testOverrideForOpus55DoesNotRepriceOpus5() {
+        let m = ManagedPricingOverride.parse(managedSettings: settings([
+            "overrides": ["claude-opus-5-5": row(3, 15, 0.15, 3.75)],
+        ]))
+        let t = PricingTables.resolvedTable(provider: .anthropic, region: .global, managed: m)
+        XCTAssertEqual(getModelPricing("claude-opus-5-5[1m]", table: t, on: anyDay).input, 3, accuracy: 1e-9)
+        XCTAssertEqual(getModelPricing("claude-opus-5", table: t, on: anyDay).input, 5, accuracy: 1e-9)
+    }
+
+    func testOverrideForOpus5DoesNotRepriceOpus55() {
+        let m = ManagedPricingOverride.parse(managedSettings: settings([
+            "overrides": ["claude-opus-5": row(4.5, 22.5, 0.45, 5.6)],
+        ]))
+        let t = PricingTables.resolvedTable(provider: .anthropic, region: .global, managed: m)
+        XCTAssertEqual(getModelPricing("claude-opus-5", table: t, on: anyDay).input, 4.5, accuracy: 1e-9)
+        XCTAssertEqual(getModelPricing("claude-opus-5-5", table: t, on: anyDay).input, 4, accuracy: 1e-9)
+    }
+
     func testGatewayAliasAppliesToItselfOnly() {
         let m = ManagedPricingOverride.parse(managedSettings: settings([
             "overrides": ["vendor/fast-sonnet": row(1, 1, 1, 1)],

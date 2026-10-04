@@ -349,6 +349,71 @@ final class PricingFamilyTests: XCTestCase {
         XCTAssertEqual(s.estimatedCost, 0.11025, accuracy: 1e-9)
     }
 
+    // MARK: - Opus 5.5 rate split
+
+    // Opus 5.5 is $4/$20 with $0.20 cache reads against Opus 5's $5/$25/$0.50.
+    // Same family, so the difference lives in the pricing key.
+
+    func testOpus55FamilyStaysOpus() {
+        XCTAssertEqual(getModelFamily("claude-opus-5-5"), "opus")
+        XCTAssertEqual(getModelFamily("claude-opus-5-5[1m]"), "opus")
+    }
+
+    func testOpus55AnthropicPricing() {
+        let p = getModelPricing("claude-opus-5-5", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertFalse(p.isUnknown)
+        XCTAssertEqual(p.input, 4.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 20.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.20, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 5.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 8.0, accuracy: 1e-9)
+        XCTAssertEqual(p.webSearchRequestFee, 0.01, accuracy: 1e-9)
+    }
+
+    func testOpus55VertexGlobalPricing() {
+        let p = getModelPricing("claude-opus-5-5", table: PricingTables.vertexGlobal, on: anyDay)
+        XCTAssertEqual(p.input, 4.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 20.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.20, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 5.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 8.0, accuracy: 1e-9)
+    }
+
+    func testOpus55VertexRegionalPricing() {
+        let p = getModelPricing("claude-opus-5-5[1m]", table: PricingTables.vertexRegional, on: anyDay)
+        XCTAssertEqual(p.input, 4.40, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 22.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.22, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 5.50, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 8.80, accuracy: 1e-9)
+        XCTAssertEqual(p.webSearchRequestFee, 0.011, accuracy: 1e-9)
+    }
+
+    func testOpus5KeepsStandardOpusRate() {
+        let p = getModelPricing("claude-opus-5", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertEqual(p.input, 5.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 25.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.50, accuracy: 1e-9)
+    }
+
+    func testSonnet55ResolvesToSonnet5Rate() {
+        let p = getModelPricing("claude-sonnet-5-5", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertEqual(p.input, 2.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(getModelFamily("claude-sonnet-5-5"), "sonnet")
+    }
+
+    func testOpus55SessionParsesAtOpus55Rate() async throws {
+        let parser = SessionParser()
+        let rec = "{\"type\":\"assistant\",\"uuid\":\"u1\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-10-01T10:00:00.000Z\",\"message\":{\"role\":\"assistant\",\"id\":\"m1\",\"stop_reason\":\"end_turn\",\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":2000,\"cache_read_input_tokens\":1000,\"service_tier\":\"standard\"}}}"
+        let url = try writeTempFile([rec])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let s = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: PricingTables.anthropic)
+        // 1000 * $4 + 2000 * $20 + 1000 * $0.20, per MTok = 0.004 + 0.04 + 0.0002
+        XCTAssertEqual(s.estimatedCost, 0.0442, accuracy: 1e-9)
+    }
+
     // MARK: - Unpriced models
 
     /// An id no table knows must resolve to `isUnknown` so the UI can flag it. The
