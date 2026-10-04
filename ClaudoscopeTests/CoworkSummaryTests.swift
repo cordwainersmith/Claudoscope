@@ -192,7 +192,7 @@ final class CoworkSummaryTests: XCTestCase {
             observability: .empty, isSubagent: false, dailyContributions: []
         )
         XCTAssertEqual(
-            Mirror(reflecting: probe).children.count, 40,
+            Mirror(reflecting: probe).children.count, 41,
             """
             SessionSummary gained or lost a stored property. Forward it in \
             CoworkService.loadSessionData (everything except id, projectId, \
@@ -207,7 +207,7 @@ final class CoworkSummaryTests: XCTestCase {
     /// recently added and therefore most likely to have been missed.
     func testRebuiltSummaryForwardsAttributionFields() async throws {
         let lines = twoDayLines + [
-            #"{"type":"assistant","uuid":"u-attr","session_id":"inner-cli","_audit_timestamp":"2026-06-10T09:00:00.000Z","attributionSkill":"hairline-deck","attributionMcpServer":"srv","attributionMcpTool":"fetch","sessionKind":"bg","message":{"id":"msg_attr","type":"message","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":1000,"output_tokens":2000}}}"#
+            #"{"type":"assistant","uuid":"u-attr","session_id":"inner-cli","_audit_timestamp":"2026-06-10T09:00:00.000Z","attributionSkill":"hairline-deck","attributionMcpServer":"srv","attributionMcpTool":"fetch","attributionPlugin":"claude-blog","sessionKind":"bg","message":{"id":"msg_attr","type":"message","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":1000,"output_tokens":2000}}}"#
         ]
         let session = try makeSession(id: "local_fwd", title: "Fwd", transcriptLines: lines)
         let dataOpt = await service.loadSessionData(for: session, pricingTable: table)
@@ -217,6 +217,7 @@ final class CoworkSummaryTests: XCTestCase {
         XCTAssertEqual(rebuilt.skillBreakdown?.first?.skill, "hairline-deck")
         XCTAssertEqual(rebuilt.mcpBreakdown?.first?.server, "srv")
         XCTAssertEqual(rebuilt.mcpBreakdown?.first?.tool, "fetch")
+        XCTAssertEqual(rebuilt.pluginBreakdown?.first?.plugin, "claude-blog")
         // The per-day arrays survive the rebuild too, which is what
         // date-windowed analytics reads.
         XCTAssertEqual(

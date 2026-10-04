@@ -68,6 +68,24 @@ struct AttributionAnalyticsView: View {
                     )
                     .padding(.horizontal, 24)
 
+                    AttributionTableView(
+                        title: "Cost by Plugin",
+                        keyColumn: "Plugin",
+                        rows: rollup.plugins.map {
+                            AttributionTableRow(
+                                id: $0.id,
+                                label: $0.plugin,
+                                turns: $0.turnCount,
+                                sessions: $0.sessionCount,
+                                cost: $0.estimatedCost
+                            )
+                        },
+                        unattributedCost: rollup.pluginUnattributedCost,
+                        totalCost: rollup.totalCost,
+                        emptyMessage: "No plugin-tagged turns in range."
+                    )
+                    .padding(.horizontal, 24)
+
                     agentsTable
                         .padding(.horizontal, 24)
 
@@ -179,7 +197,7 @@ struct AttributionAnalyticsView: View {
     }
 
     private var footnote: some View {
-        Text("Skill and MCP attribution are measured separately and can overlap: one turn may carry both tags, so the two attributed totals can add up to more than the total cost. Each table's unattributed row is measured against the same total.")
+        Text("Skill, MCP and plugin attribution are measured separately and can overlap: one turn may carry several tags, so the attributed totals can add up to more than the total cost. Each table's unattributed row is measured against the same total.")
             .font(.system(size: 11))
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)

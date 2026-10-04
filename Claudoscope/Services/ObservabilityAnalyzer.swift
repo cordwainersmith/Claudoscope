@@ -352,13 +352,36 @@ struct ObservabilityAnalyzer {
     static let denialMarkers: [String] = [
         "doesn't want to proceed with this tool use",
         "doesn't want to take this action",
-        "denied by your permission settings"
+        "denied by your permission settings",
+        "has been auto-denied",
+        "was denied",
+        "has been denied",
+        "denied by a built-in claude code safety check",
+        "was blocked by"
     ]
 
     static func isDenial(resultContent: String?, isError: Bool) -> Bool {
         guard isError, let content = resultContent else { return false }
         let lower = content.lowercased()
         return denialMarkers.contains { lower.contains($0) }
+    }
+
+    /// The bare-string `toolUseResult` form. Same markers, plus the short
+    /// "User rejected tool use" string that carries none of them.
+    static func isBareDenialResult(_ content: String?) -> Bool {
+        if content?.trimmingCharacters(in: .whitespacesAndNewlines) == "User rejected tool use" { return true }
+        return isDenial(resultContent: content, isError: true)
+    }
+
+    /// Maps the record's `toolDenialKind` to a kind. Nil when the record
+    /// carries none, so callers fall back to text classification.
+    static func blockedKind(fromDenialKind denialKind: String?) -> BlockedActionKind? {
+        switch denialKind {
+        case nil: return nil
+        case "user-rejected": return .userRejected
+        case "permission-rule": return .permissionSetting
+        default: return .other
+        }
     }
 
     /// Best-effort classification. The auto-mode-vs-user distinction is not
@@ -386,13 +409,15 @@ struct ObservabilityAnalyzer {
 
     static func extractBlockedActions(from entries: [ToolCallEntry]) -> [BlockedAction] {
         entries.compactMap { entry in
-            guard isDenial(resultContent: entry.resultContent, isError: entry.isError) else { return nil }
+            guard entry.toolDenialKind != nil
+                || isDenial(resultContent: entry.resultContent, isError: entry.isError) else { return nil }
             let reason = (entry.resultContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return BlockedAction(
                 id: entry.id,
                 toolName: entry.toolName,
                 command: entry.primaryArg,
-                kind: classifyBlockedAction(toolName: entry.toolName, command: entry.primaryArg, reason: reason),
+                kind: blockedKind(fromDenialKind: entry.toolDenialKind)
+                    ?? classifyBlockedAction(toolName: entry.toolName, command: entry.primaryArg, reason: reason),
                 reason: reason,
                 turnIndex: entry.turnIndex,
                 timestamp: entry.timestamp

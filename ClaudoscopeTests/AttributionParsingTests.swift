@@ -250,4 +250,49 @@ final class AttributionParsingTests: XCTestCase {
         XCTAssertEqual(rollup.estimatedCost, perDaySum, accuracy: 1e-9)
         XCTAssertEqual(rollup.turnCount, 2)
     }
+
+    // MARK: - Plugin attribution
+
+    private func withPlugin(_ line: String, _ plugin: String) -> String {
+        var obj = try! JSONSerialization.jsonObject(with: Data(line.utf8)) as! [String: Any]
+        obj["attributionPlugin"] = plugin
+        return String(data: try! JSONSerialization.data(withJSONObject: obj), encoding: .utf8)!
+    }
+
+    func testPluginTaggedRecordIsAttributed() async throws {
+        let url = try writeTempFile([
+            withPlugin(record(uuid: "u1", msgId: "m1"), "claude-seo"),
+            record(uuid: "u2", msgId: "m2"),
+        ])
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let s = try await SessionParser().parseMetadata(url: url, sessionId: "sess-1", pricingTable: table)
+        let row = try XCTUnwrap(s.pluginBreakdown?.first)
+        XCTAssertEqual(s.pluginBreakdown?.count, 1)
+        XCTAssertEqual(row.plugin, "claude-seo")
+        XCTAssertEqual(row.turnCount, 1)
+        XCTAssertEqual(row.estimatedCost, perRecordCost, accuracy: 1e-9)
+        XCTAssertEqual(s.dailyContributions.first?.pluginBreakdown?.first?.estimatedCost ?? 0, perRecordCost, accuracy: 1e-9)
+        XCTAssertEqual(s.estimatedCost, 2 * perRecordCost, accuracy: 1e-9)
+    }
+
+    func testSkillAndPluginTagsOnOneRecordCountInBoth() async throws {
+        let url = try writeTempFile([
+            withPlugin(record(uuid: "u1", msgId: "m1", skill: "claude-seo:seo-audit"), "claude-seo"),
+        ])
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let s = try await SessionParser().parseMetadata(url: url, sessionId: "sess-1", pricingTable: table)
+        XCTAssertEqual(s.skillBreakdown?.first?.estimatedCost ?? 0, perRecordCost, accuracy: 1e-9)
+        XCTAssertEqual(s.pluginBreakdown?.first?.estimatedCost ?? 0, perRecordCost, accuracy: 1e-9)
+        XCTAssertEqual(s.estimatedCost, perRecordCost, accuracy: 1e-9)
+    }
+
+    func testUntaggedSessionHasEmptyPluginBreakdown() async throws {
+        let url = try writeTempFile([record(uuid: "u1", msgId: "m1")])
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+
+        let s = try await SessionParser().parseMetadata(url: url, sessionId: "sess-1", pricingTable: table)
+        XCTAssertEqual(s.pluginBreakdown, [])
+    }
 }

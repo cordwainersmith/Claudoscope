@@ -29,6 +29,18 @@ struct McpCostAggregate: Sendable, Identifiable, Equatable {
     let estimatedCost: Double
 }
 
+/// Cross-session spend for one plugin. The tag is the bare manifest name
+/// ("claude-seo"), so it joins `PluginInfo.name`.
+struct PluginCostAggregate: Sendable, Identifiable, Equatable {
+    var id: String { plugin }
+    let plugin: String
+    let sessionCount: Int
+    let turnCount: Int
+    let estimatedCost: Double
+    let inputTokens: Int
+    let outputTokens: Int
+}
+
 /// Cross-session spend for one subagent type. Folded from whole subagent
 /// sessions rather than per-record, because `attributionAgent` is a scalar.
 struct AgentCostAggregate: Sendable, Identifiable, Equatable {
@@ -54,25 +66,30 @@ struct AttributionRollup: Sendable, Equatable {
     let skills: [SkillCostAggregate]
     let mcps: [McpCostAggregate]
     let agents: [AgentCostAggregate]
+    /// A third independent partial partition, with its own remainder.
+    var plugins: [PluginCostAggregate] = []
     /// Total billed cost of the windowed sessions, the denominator both
     /// remainders are measured against.
     let totalCost: Double
 
     var skillAttributedCost: Double { skills.reduce(0) { $0 + $1.estimatedCost } }
     var mcpAttributedCost: Double { mcps.reduce(0) { $0 + $1.estimatedCost } }
+    var pluginAttributedCost: Double { plugins.reduce(0) { $0 + $1.estimatedCost } }
 
     /// Clamped at zero to absorb floating-point drift. Never render attributed
     /// rows without showing these.
     var skillUnattributedCost: Double { max(0, totalCost - skillAttributedCost) }
     var mcpUnattributedCost: Double { max(0, totalCost - mcpAttributedCost) }
+    var pluginUnattributedCost: Double { max(0, totalCost - pluginAttributedCost) }
 
     var skillCoverage: Double { totalCost > 0 ? skillAttributedCost / totalCost : 0 }
     var mcpCoverage: Double { totalCost > 0 ? mcpAttributedCost / totalCost : 0 }
+    var pluginCoverage: Double { totalCost > 0 ? pluginAttributedCost / totalCost : 0 }
 
     /// True when no session in the window carries any attribution at all, which
     /// means the transcripts predate Claude Code 2.1.24x rather than that
     /// nothing was spent. The UI must say so instead of showing empty tables.
-    var isEmpty: Bool { skills.isEmpty && mcps.isEmpty && agents.isEmpty }
+    var isEmpty: Bool { skills.isEmpty && mcps.isEmpty && agents.isEmpty && plugins.isEmpty }
 
     static let empty = AttributionRollup(skills: [], mcps: [], agents: [], totalCost: 0)
 }
@@ -116,6 +133,7 @@ enum AttributionEngine {
         var skillAcc: [String: Acc] = [:]
         var mcpAcc: [String: (server: String, tool: String, acc: Acc)] = [:]
         var agentAcc: [String: Acc] = [:]
+        var pluginAcc: [String: Acc] = [:]
         var totalCost = 0.0
 
         for session in sessions {
@@ -144,6 +162,15 @@ enum AttributionEngine {
                     entry.acc.input += row.inputTokens
                     entry.acc.output += row.outputTokens
                     mcpAcc[row.id] = entry
+                }
+                for row in day.pluginBreakdown ?? [] {
+                    var a = pluginAcc[row.plugin] ?? Acc()
+                    a.sessions.insert(session.id)
+                    a.turns += row.turnCount
+                    a.cost += row.estimatedCost
+                    a.input += row.inputTokens
+                    a.output += row.outputTokens
+                    pluginAcc[row.plugin] = a
                 }
             }
 
@@ -199,8 +226,19 @@ enum AttributionEngine {
             )
         }.sorted { costDescending($0.estimatedCost, $1.estimatedCost, $0.id, $1.id) }
 
+        let pluginRows = pluginAcc.map { key, a in
+            PluginCostAggregate(
+                plugin: key,
+                sessionCount: a.sessions.count,
+                turnCount: a.turns,
+                estimatedCost: a.cost,
+                inputTokens: a.input,
+                outputTokens: a.output
+            )
+        }.sorted { costDescending($0.estimatedCost, $1.estimatedCost, $0.id, $1.id) }
+
         return AttributionRollup(
-            skills: skillRows, mcps: mcpRows, agents: agentRows, totalCost: totalCost
+            skills: skillRows, mcps: mcpRows, agents: agentRows, plugins: pluginRows, totalCost: totalCost
         )
     }
 

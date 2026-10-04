@@ -117,6 +117,8 @@ struct PluginsMainPanelView: View {
     let plugins: [PluginInfo]
     let lintResults: [LintResult]
     @Binding var selectedPluginId: String?
+    /// Lifetime spend per plugin, joined on the bare manifest name.
+    var attribution: [PluginCostAggregate] = []
 
     private var selectedPlugin: PluginInfo? {
         guard let id = selectedPluginId else { return nil }
@@ -125,7 +127,11 @@ struct PluginsMainPanelView: View {
 
     var body: some View {
         if let plugin = selectedPlugin {
-            PluginDetail(plugin: plugin, findings: findings(for: plugin))
+            PluginDetail(
+                plugin: plugin,
+                findings: findings(for: plugin),
+                spend: attribution.first { $0.plugin == plugin.name }
+            )
         } else if plugins.isEmpty {
             EmptyStateView(
                 icon: "puzzlepiece.extension",
@@ -161,6 +167,7 @@ struct PluginsMainPanelView: View {
 private struct PluginDetail: View {
     let plugin: PluginInfo
     let findings: [LintResult]
+    var spend: PluginCostAggregate? = nil
     @State private var selectedComponent: PluginComponentEntry?
 
     var body: some View {
@@ -227,6 +234,9 @@ private struct PluginDetail: View {
             infoRow("Marketplace", value: plugin.marketplace)
             infoRow("Full name", value: plugin.fullName)
             infoRow("Status", value: plugin.enabled ? "Enabled" : "Disabled")
+            if let spend {
+                infoRow("Spend", value: "\(formatCost(spend.estimatedCost)) · \(spend.turnCount) turns · \(spend.sessionCount) sessions")
+            }
 
             if let installations = plugin.installations, !installations.isEmpty {
                 Divider().padding(.vertical, 2)

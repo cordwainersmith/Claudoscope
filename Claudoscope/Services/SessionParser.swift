@@ -45,6 +45,7 @@ private struct DayAcc {
     /// sums to `estimatedCost`.
     var skill: [String: AttrAcc] = [:]
     var mcp: [McpKey: AttrAcc] = [:]
+    var plugin: [String: AttrAcc] = [:]
 }
 
 /// Stream-parses Claude Code JSONL session files.
@@ -70,7 +71,9 @@ actor SessionParser {
     /// 11: LatestTurn gained turnTimestamp / cacheTTLSeconds / lastPrompt.
     /// 12: blockedActionCount / changedFileCount; bare-string toolUseResult
     ///     records decode instead of dropping the line.
-    static let parserVersion: Int = 12
+    /// 13: denial markers + toolDenialKind in blocked counts, attributionPlugin
+    ///     cost partition.
+    static let parserVersion: Int = 13
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -347,7 +350,8 @@ actor SessionParser {
                 toolResultMap[toolUseId] = ToolResultEntry(
                     content: record.toolUseResult?.content ?? "",
                     isError: record.toolUseResult?.isError ?? false,
-                    timestamp: record.timestamp
+                    timestamp: record.timestamp,
+                    toolDenialKind: record.toolDenialKind
                 )
             }
 
@@ -365,7 +369,8 @@ actor SessionParser {
                         toolResultMap[toolUseId] = ToolResultEntry(
                             content: resultText,
                             isError: block.isError ?? false,
-                            timestamp: record.timestamp
+                            timestamp: record.timestamp,
+                            toolDenialKind: record.toolDenialKind
                         )
                     }
                 }
@@ -566,6 +571,7 @@ actor SessionParser {
         // them instead of leaking the previous skill's tag onto a later fee.
         var lastBilledSkill: String?
         var lastBilledMcp: McpKey?
+        var lastBilledPlugin: String?
         var localSeenSearchUUIDs = Set<String>()
 
         let isoFormatter = ISO8601DateFormatter()
@@ -823,6 +829,18 @@ actor SessionParser {
                     } else {
                         lastBilledMcp = nil
                     }
+                    if let plugin = raw.attributionPlugin, !plugin.isEmpty {
+                        var a = day.plugin[plugin] ?? AttrAcc()
+                        a.inputTokens += msgInput
+                        a.outputTokens += msgOutput
+                        a.cacheReadTokens += msgCacheRead
+                        a.estimatedCost += msgCost
+                        a.turnCount += 1
+                        day.plugin[plugin] = a
+                        lastBilledPlugin = plugin
+                    } else {
+                        lastBilledPlugin = nil
+                    }
                     dayAccs[dayKey] = day
 
                     // Observability: compute turn duration
@@ -937,8 +955,8 @@ actor SessionParser {
 
             // A refusal is not a failure, so it stays out of hasError.
             if raw.type == .user, let result = raw.toolUseResult {
-                if result.isBareString,
-                   ObservabilityAnalyzer.isDenial(resultContent: result.content, isError: true) {
+                if raw.toolDenialKind != nil
+                    || (result.isBareString && ObservabilityAnalyzer.isBareDenialResult(result.content)) {
                     blockedActionCount += 1
                 }
                 if result.hasStructuredPatch, let path = result.filePath, !path.isEmpty {
@@ -980,6 +998,11 @@ actor SessionParser {
                         a.estimatedCost += fee
                         day.mcp[key] = a
                     }
+                    if let plugin = lastBilledPlugin {
+                        var a = day.plugin[plugin] ?? AttrAcc()
+                        a.estimatedCost += fee
+                        day.plugin[plugin] = a
+                    }
                     dayAccs[dayKey] = day
                 }
             }
@@ -1009,6 +1032,7 @@ actor SessionParser {
         // per-day arrays so the two levels cannot disagree.
         var skillAcc: [String: AttrAcc] = [:]
         var mcpAcc: [McpKey: AttrAcc] = [:]
+        var pluginAcc: [String: AttrAcc] = [:]
 
         let dailyContributions: [DailyContribution] = dayAccs.keys.sorted().map { dayKey in
             let acc = dayAccs[dayKey]!
@@ -1074,6 +1098,24 @@ actor SessionParser {
                         turnCount: a.turnCount
                     )
                 }
+            let plugins = acc.plugin.keys.sorted().map { key -> PluginAttribution in
+                let a = acc.plugin[key]!
+                var roll = pluginAcc[key] ?? AttrAcc()
+                roll.inputTokens += a.inputTokens
+                roll.outputTokens += a.outputTokens
+                roll.cacheReadTokens += a.cacheReadTokens
+                roll.estimatedCost += a.estimatedCost
+                roll.turnCount += a.turnCount
+                pluginAcc[key] = roll
+                return PluginAttribution(
+                    plugin: key,
+                    inputTokens: a.inputTokens,
+                    outputTokens: a.outputTokens,
+                    cacheReadTokens: a.cacheReadTokens,
+                    estimatedCost: a.estimatedCost,
+                    turnCount: a.turnCount
+                )
+            }
             return DailyContribution(
                 date: dayKey,
                 inputTokens: acc.inputTokens,
@@ -1085,7 +1127,8 @@ actor SessionParser {
                 estimatedCost: acc.estimatedCost,
                 modelBreakdown: models,
                 skillBreakdown: skills,
-                mcpBreakdown: mcps
+                mcpBreakdown: mcps,
+                pluginBreakdown: plugins
             )
         }
 
@@ -1115,6 +1158,17 @@ actor SessionParser {
             McpAttribution(
                 server: key.server,
                 tool: key.tool,
+                inputTokens: a.inputTokens,
+                outputTokens: a.outputTokens,
+                cacheReadTokens: a.cacheReadTokens,
+                estimatedCost: a.estimatedCost,
+                turnCount: a.turnCount
+            )
+        }.sorted { $0.estimatedCost > $1.estimatedCost }
+
+        let pluginBreakdown = pluginAcc.map { key, a in
+            PluginAttribution(
+                plugin: key,
                 inputTokens: a.inputTokens,
                 outputTokens: a.outputTokens,
                 cacheReadTokens: a.cacheReadTokens,
@@ -1195,6 +1249,7 @@ actor SessionParser {
             sessionKind: sessionKind,
             skillBreakdown: skillBreakdown,
             mcpBreakdown: mcpBreakdown,
+            pluginBreakdown: pluginBreakdown,
             everBypassedPermissions: everBypassed,
             lastPermissionMode: lastPermissionMode,
             gitBranch: gitBranch,

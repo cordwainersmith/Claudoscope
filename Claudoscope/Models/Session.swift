@@ -28,6 +28,7 @@ struct ToolResultEntry: Sendable {
     let content: String
     let isError: Bool
     let timestamp: String?
+    var toolDenialKind: String? = nil
 }
 
 // MARK: - Session Metadata
@@ -119,6 +120,8 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// "no attribution data in this blob"; [] means "parsed, nothing tagged".
     var skillBreakdown: [SkillAttribution]? = nil
     var mcpBreakdown: [McpAttribution]? = nil
+    /// Nil for blobs cached before parserVersion 13.
+    var pluginBreakdown: [PluginAttribution]? = nil
     /// Permission mode provenance for the Fleet view. `everBypassedPermissions`
     /// is true if any record in the file ran under bypassPermissions (the mark
     /// sticks for the session's whole life); `lastPermissionMode` is the most
@@ -172,6 +175,7 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         sessionKind: String? = nil,
         skillBreakdown: [SkillAttribution]? = nil,
         mcpBreakdown: [McpAttribution]? = nil,
+        pluginBreakdown: [PluginAttribution]? = nil,
         everBypassedPermissions: Bool? = nil,
         lastPermissionMode: String? = nil,
         gitBranch: String? = nil,
@@ -213,6 +217,7 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.sessionKind = sessionKind
         self.skillBreakdown = skillBreakdown
         self.mcpBreakdown = mcpBreakdown
+        self.pluginBreakdown = pluginBreakdown
         self.everBypassedPermissions = everBypassedPermissions
         self.lastPermissionMode = lastPermissionMode
         self.gitBranch = gitBranch
@@ -303,6 +308,23 @@ struct McpAttribution: Sendable, Codable, Equatable, Identifiable {
     let turnCount: Int
 }
 
+/// Cost billed on records Claude Code tagged with `attributionPlugin`.
+///
+/// A PARTIAL partition, exactly like `SkillAttribution`: most billed records
+/// carry no plugin tag, so `sum(estimatedCost)` is <= the enclosing total and
+/// the remainder is unattributed. Never render these rows without showing that
+/// remainder, and never normalize them to 100%. Independent of the skill and
+/// MCP partitions: one record can carry a plugin tag and a skill tag.
+struct PluginAttribution: Sendable, Codable, Equatable, Identifiable {
+    var id: String { plugin }
+    let plugin: String
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let estimatedCost: Double
+    let turnCount: Int
+}
+
 /// One calendar day's worth of billed activity for a session. `date` is the
 /// LOCAL day (YYYY-MM-DD) the messages landed on, fixed at parse time.
 struct DailyContribution: Sendable, Codable, Equatable {
@@ -320,4 +342,5 @@ struct DailyContribution: Sendable, Codable, Equatable {
     /// a non-optional would break decoding of every pre-v8 blob.
     var skillBreakdown: [SkillAttribution]? = nil
     var mcpBreakdown: [McpAttribution]? = nil
+    var pluginBreakdown: [PluginAttribution]? = nil
 }

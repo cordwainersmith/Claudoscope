@@ -230,4 +230,43 @@ final class AttributionEngineTests: XCTestCase {
         let r = AttributionEngine.aggregate(sessions: [s])
         XCTAssertEqual(r.skills.map(\.skill), ["aaa", "bbb", "ccc"])
     }
+
+    // MARK: - Plugins
+
+    func testPluginRollupHasItsOwnRemainder() {
+        var d1 = day("2026-09-10", cost: 10, skills: [("seo-audit", 7)])
+        d1.pluginBreakdown = [
+            PluginAttribution(plugin: "claude-seo", inputTokens: 100, outputTokens: 200,
+                              cacheReadTokens: 0, estimatedCost: 6, turnCount: 2),
+        ]
+        var d2 = day("2026-09-11", cost: 5)
+        d2.pluginBreakdown = [
+            PluginAttribution(plugin: "claude-seo", inputTokens: 100, outputTokens: 200,
+                              cacheReadTokens: 0, estimatedCost: 1, turnCount: 1),
+            PluginAttribution(plugin: "humanizer", inputTokens: 100, outputTokens: 200,
+                              cacheReadTokens: 0, estimatedCost: 2, turnCount: 1),
+        ]
+        let r = AttributionEngine.aggregate(sessions: [session("s1", days: [d1, d2])])
+
+        XCTAssertEqual(r.plugins.map(\.plugin), ["claude-seo", "humanizer"])
+        XCTAssertEqual(r.plugins.first?.estimatedCost ?? 0, 7, accuracy: 1e-9)
+        XCTAssertEqual(r.plugins.first?.turnCount, 3)
+        XCTAssertEqual(r.plugins.first?.sessionCount, 1)
+        XCTAssertEqual(r.pluginAttributedCost, 9, accuracy: 1e-9)
+        XCTAssertEqual(r.pluginUnattributedCost, 6, accuracy: 1e-9)
+        // Independent of skills: both partitions are measured against the same total.
+        XCTAssertEqual(r.skillUnattributedCost, 8, accuracy: 1e-9)
+        XCTAssertFalse(r.isEmpty)
+    }
+
+    func testPluginOnlyCorpusIsNotEmpty() {
+        var d = day("2026-09-10", cost: 4)
+        d.pluginBreakdown = [
+            PluginAttribution(plugin: "claude-blog", inputTokens: 1, outputTokens: 1,
+                              cacheReadTokens: 0, estimatedCost: 1, turnCount: 1),
+        ]
+        let r = AttributionEngine.aggregate(sessions: [session("s1", days: [d])])
+        XCTAssertFalse(r.isEmpty)
+        XCTAssertEqual(r.pluginCoverage, 0.25, accuracy: 1e-9)
+    }
 }

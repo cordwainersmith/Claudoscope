@@ -159,7 +159,7 @@ final class SessionSummaryCodableTests: XCTestCase {
             )]
         )
         var json = try XCTUnwrap(String(data: JSONEncoder().encode(summary), encoding: .utf8))
-        for key in ["attributionAgent", "sessionKind", "skillBreakdown", "mcpBreakdown"] {
+        for key in ["attributionAgent", "sessionKind", "skillBreakdown", "mcpBreakdown", "pluginBreakdown"] {
             json = json.replacingOccurrences(of: "\"\(key)\":null,", with: "")
                 .replacingOccurrences(of: ",\"\(key)\":null", with: "")
         }
@@ -171,7 +171,10 @@ final class SessionSummaryCodableTests: XCTestCase {
         XCTAssertNil(decoded.sessionKind)
         XCTAssertNil(decoded.skillBreakdown)
         XCTAssertNil(decoded.mcpBreakdown)
+        XCTAssertNil(decoded.pluginBreakdown)
+        XCTAssertFalse(json.contains("pluginBreakdown"), "fixture must not still carry the key")
         XCTAssertNil(decoded.dailyContributions.first?.skillBreakdown)
+        XCTAssertNil(decoded.dailyContributions.first?.pluginBreakdown)
         XCTAssertEqual(decoded, summary)
     }
 

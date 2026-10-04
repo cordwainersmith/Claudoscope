@@ -113,6 +113,14 @@ struct ParsedRecordRaw: Decodable, Sendable {
     let attributionSkill: String?
     let attributionMcpServer: String?
     let attributionMcpTool: String?
+    /// The plugin a billed record is attributed to. A third independent tag:
+    /// it can co-occur with a skill or MCP tag on the same record.
+    let attributionPlugin: String?
+
+    /// On a user tool-result record: why the tool call was refused
+    /// ("user-rejected", "permission-rule", ...). Rare; the denial text in the
+    /// result stays the primary signal.
+    let toolDenialKind: String?
 
     // "bg" for a background session. Single-valued per session.
     let sessionKind: String?
@@ -171,6 +179,8 @@ struct ParsedRecordRaw: Decodable, Sendable {
         attributionSkill = try container.decodeIfPresent(String.self, forKey: .attributionSkill)
         attributionMcpServer = try container.decodeIfPresent(String.self, forKey: .attributionMcpServer)
         attributionMcpTool = try container.decodeIfPresent(String.self, forKey: .attributionMcpTool)
+        attributionPlugin = try container.decodeIfPresent(String.self, forKey: .attributionPlugin)
+        toolDenialKind = try container.decodeIfPresent(String.self, forKey: .toolDenialKind)
         sessionKind = try container.decodeIfPresent(String.self, forKey: .sessionKind)
         permissionMode = try container.decodeIfPresent(String.self, forKey: .permissionMode)
         gitBranch = try container.decodeIfPresent(String.self, forKey: .gitBranch)
@@ -196,6 +206,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case aiTitle, lastPrompt, worktreeSession, prNumber, prUrl
         case hookCount, hookInfos, hookErrors, preventedContinuation, attachment
         case attributionAgent, attributionSkill, attributionMcpServer, attributionMcpTool
+        case attributionPlugin, toolDenialKind
         case sessionKind
         case permissionMode, gitBranch
     }

@@ -146,7 +146,8 @@ struct MainPanelView: View {
                 PluginsMainPanelView(
                     plugins: store.plugins,
                     lintResults: store.lintResults,
-                    selectedPluginId: $selectedPluginId
+                    selectedPluginId: $selectedPluginId,
+                    attribution: store.attributionRollup.plugins
                 )
             case .mcps:
                 McpsMainPanelView(
