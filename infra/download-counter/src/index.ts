@@ -10,6 +10,9 @@ const GITHUB_BASE = "https://github.com/cordwainersmith/Claudoscope/releases/dow
 const RELEASE_EXISTS_CACHE_PREFIX = "release:exists:";
 const RELEASE_EXISTS_TTL_SECONDS = 60 * 60 * 24 * 7;
 const RELEASE_MISSING_TTL_SECONDS = 120;
+const LATEST_RELEASE_URL = "https://github.com/cordwainersmith/Claudoscope/releases/latest";
+const LATEST_VERSION_CACHE_KEY = "release:latest";
+const LATEST_VERSION_TTL_SECONDS = 300;
 
 function classifyUserAgent(ua: string): string {
   const lower = ua.toLowerCase();
@@ -57,6 +60,23 @@ async function checkReleaseAvailability(redirectUrl: string): Promise<ReleaseAva
     return "unknown";
   } catch {
     return "unknown";
+  }
+}
+
+// GitHub answers /releases/latest with a redirect to /releases/tag/vX.Y.Z, which
+// avoids the unauthenticated API rate limit shared across Cloudflare egress IPs.
+async function resolveLatestVersion(kv: KVNamespace): Promise<string | null> {
+  const cached = await kv.get(LATEST_VERSION_CACHE_KEY);
+  if (cached && VERSION_PATTERN.test(cached)) return cached;
+
+  try {
+    const response = await fetch(LATEST_RELEASE_URL, { method: "HEAD", redirect: "manual" });
+    const tag = response.headers.get("Location")?.split("/").pop() ?? "";
+    if (!VERSION_PATTERN.test(tag)) return null;
+    await kv.put(LATEST_VERSION_CACHE_KEY, tag, { expirationTtl: LATEST_VERSION_TTL_SECONDS });
+    return tag;
+  } catch {
+    return null;
   }
 }
 
@@ -109,13 +129,26 @@ export default {
       });
     }
 
-    // GET /:version/Claudoscope.dmg - download redirect
+    // GET /:version/Claudoscope.dmg - download redirect (version may be "latest")
     const match = url.pathname.match(/^\/([^/]+)\/Claudoscope\.dmg$/);
     if (!match) {
       return new Response("Not Found", { status: 404 });
     }
 
-    const version = match[1];
+    let version = match[1];
+    if (version === "latest") {
+      const latest = await resolveLatestVersion(env.DOWNLOAD_COUNTS);
+      if (!latest) {
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: `${LATEST_RELEASE_URL}/download/Claudoscope.dmg`,
+            "Cache-Control": "no-store",
+          },
+        });
+      }
+      version = latest;
+    }
     if (!VERSION_PATTERN.test(version)) {
       return new Response("Not Found", { status: 404 });
     }

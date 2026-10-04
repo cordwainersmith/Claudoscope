@@ -55,6 +55,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:8787/stats
 ## Endpoints
 
 - `GET /:version/Claudoscope.dmg` - Counts the download and redirects to GitHub Releases
+- `GET /latest/Claudoscope.dmg` - Same, for the newest release (used by the website's download buttons). The version is resolved from GitHub's `/releases/latest` redirect and cached in KV for 5 minutes
 - `GET /stats` - Returns download counts (requires `Authorization: Bearer <token>` header)
 
 ## How counting works
