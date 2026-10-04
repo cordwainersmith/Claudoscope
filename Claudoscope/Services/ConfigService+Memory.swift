@@ -14,13 +14,21 @@ extension ConfigService {
             url: claudeDir.appendingPathComponent("CLAUDE.md")
         ))
 
-        // 2. Project CLAUDE.md
+        // 2. Project CLAUDE.md, or AGENTS.md when the repo has no CLAUDE.md
+        // (CC 2.1.28x). The /config "Project instructions" toggle may change
+        // this; it is not modelled here.
         if let projectId, let decodedPath = decodeProjectPath(projectId) {
+            let root = URL(fileURLWithPath: decodedPath)
+            let claudeMd = root.appendingPathComponent("CLAUDE.md")
+            let agentsMd = root.appendingPathComponent("AGENTS.md")
+            let useAgentsMd = !fm.fileExists(atPath: claudeMd.path)
+                && !fm.fileExists(atPath: root.appendingPathComponent(".claude/CLAUDE.md").path)
+                && fm.fileExists(atPath: agentsMd.path)
             files.append(makeMemoryFile(
                 id: "project",
-                label: "CLAUDE.md",
+                label: useAgentsMd ? "AGENTS.md" : "CLAUDE.md",
                 sublabel: "repo",
-                url: URL(fileURLWithPath: decodedPath).appendingPathComponent("CLAUDE.md")
+                url: useAgentsMd ? agentsMd : claudeMd
             ))
         }
 
@@ -124,7 +132,10 @@ extension ConfigService {
 
         // Attribution
         let attribution: AttributionConfig?
-        if let attrDict = settings["attribution"] as? [String: Any] {
+        if settings["attribution"] as? Bool == false {
+            // CC 2.1.281: the boolean form hides all commit and PR attribution.
+            attribution = AttributionConfig(commitTemplate: nil, prTemplate: nil, hasDeprecatedCoAuthoredBy: false, omitSessionUrl: false, disabled: true)
+        } else if let attrDict = settings["attribution"] as? [String: Any] {
             let commit = attrDict["commitMessage"] as? String
             let pr = attrDict["pullRequestDescription"] as? String
             let deprecated = settings["includeCoAuthoredBy"] != nil
@@ -162,6 +173,10 @@ extension ConfigService {
         let spellcheck = settings["spellcheck"] as? Bool
         let emojiCompletionEnabled = settings["emojiCompletionEnabled"] as? Bool
         let defaultModel = (settings["env"] as? [String: Any])?["ANTHROPIC_DEFAULT_MODEL"] as? String
+        // Managed settings win; user settings are shown too so CFG026 has context.
+        let managed = readJSON(at: managedSettingsURL) ?? [:]
+        let deniedModels = (managed["deniedModels"] ?? settings["deniedModels"]) as? [String]
+        let availableModelsMatch = (managed["availableModelsMatch"] ?? settings["availableModelsMatch"]) as? String
         let maxEffortLevel = settings["maxEffortLevel"] as? String
         let bashOutputMaxChars = settings["bashOutputMaxChars"] as? Int
         let taskOutputMaxChars = settings["taskOutputMaxChars"] as? Int
@@ -276,7 +291,9 @@ extension ConfigService {
             taskOutputMaxChars: taskOutputMaxChars,
             promptCacheTtl: promptCacheTtl,
             subagentPromptCacheTtl: subagentPromptCacheTtl,
-            blockReadsOutsideWorkingDirectories: blockReadsOutsideWorkingDirectories
+            blockReadsOutsideWorkingDirectories: blockReadsOutsideWorkingDirectories,
+            deniedModels: deniedModels,
+            availableModelsMatch: availableModelsMatch
         )
     }
 

@@ -93,6 +93,21 @@ extension ConfigLinterService {
                     ))
                 }
 
+                // HOOK005: agent hooks are not supported on PermissionRequest (CC 2.1.280).
+                if event == "PermissionRequest" {
+                    let agentHooks = rule.hooks.filter { $0.type == "agent" }.count
+                    if agentHooks > 0 {
+                        results.append(LintResult(
+                            severity: .error,
+                            checkId: .HOOK005,
+                            filePath: path,
+                            message: "PermissionRequest rule with matcher \"\(matcher)\" in \(path) has \(agentHooks) agent-type hook\(agentHooks == 1 ? "" : "s"). Claude Code does not run agent hooks on PermissionRequest.",
+                            fix: "Use a command or prompt hook for PermissionRequest, or move the agent hook to another event.",
+                            displayPath: path
+                        ))
+                    }
+                }
+
                 guard takesToolMatcher else { continue }
 
                 // HOOK001: mcp__ matcher with no tool segment matches no real tool.

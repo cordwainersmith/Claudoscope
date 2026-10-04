@@ -59,7 +59,9 @@ actor ConfigLinterService {
         // MCP server inventory. Resolved before the skill pass because SKL011
         // and HOOK003 both join against it.
         let configService = ConfigService(claudeDir: globalClaudeDir, managedSettingsURL: managedSettingsURL)
-        let mcpServerNames = Set(await configService.loadMcpServers(projectPath: projectRoot).map { $0.name })
+        let mcpServers = await configService.loadMcpServers(projectPath: projectRoot)
+        let mcpServerNames = Set(mcpServers.map { $0.name })
+        results.append(contentsOf: lintMcpServerEntries(mcpServers))
 
         // Discover and lint skills
         var allSkillDescriptions: [String] = []

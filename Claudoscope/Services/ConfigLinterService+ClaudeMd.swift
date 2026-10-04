@@ -29,6 +29,15 @@ extension ConfigLinterService {
             files.append(dotClaudeMd)
         }
 
+        // AGENTS.md stands in for a missing project CLAUDE.md (root only). The
+        // /config "Project instructions" toggle may change this; not modelled.
+        if !fm.fileExists(atPath: rootClaudeMd.path), !fm.fileExists(atPath: dotClaudeMd.path) {
+            let agentsMd = rootURL.appendingPathComponent("AGENTS.md")
+            if fm.fileExists(atPath: agentsMd.path) {
+                files.append(agentsMd)
+            }
+        }
+
         // Recursively find subdirectory CLAUDE.md files (depth limit 3, skip common dirs)
         files.append(contentsOf: findClaudeMdRecursive(in: rootURL, currentDepth: 0, maxDepth: 3, exclude: [rootClaudeMd.path, dotClaudeMd.path]))
 

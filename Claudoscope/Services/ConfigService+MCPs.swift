@@ -105,7 +105,8 @@ extension ConfigService {
             url: url,
             env: serverDict["env"] as? [String: String] ?? [:],
             level: level,
-            authStatus: authStatus
+            authStatus: authStatus,
+            type: serverDict["type"] as? String
         )
     }
 }

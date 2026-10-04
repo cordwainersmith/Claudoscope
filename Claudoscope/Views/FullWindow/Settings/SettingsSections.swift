@@ -126,8 +126,11 @@ extension SettingsMainPanelView {
         }()
         let availableModels = dict["availableModels"] as? [String] ?? []
         let enforceModels = dict["enforceAvailableModels"] as? Bool ?? false
+        let deniedModels = store.extendedConfig?.deniedModels ?? []
+        let availableModelsMatch = store.extendedConfig?.availableModelsMatch
         settingsSection(id: "model", icon: "cpu", title: "Model") {
-            if model != nil || smallModel != nil || fallbackModel != nil || !availableModels.isEmpty {
+            if model != nil || smallModel != nil || fallbackModel != nil || !availableModels.isEmpty
+                || !deniedModels.isEmpty || availableModelsMatch != nil {
                 VStack(spacing: 0) {
                     if let model = model {
                         SettingsKeyValueRow(key: "model", value: model, mono: true)
@@ -147,6 +150,14 @@ extension SettingsMainPanelView {
                             value: availableModels.joined(separator: ", "),
                             mono: true
                         )
+                    }
+                    if let availableModelsMatch {
+                        if model != nil || smallModel != nil || fallbackModel != nil || !availableModels.isEmpty { Divider().padding(.horizontal, 12) }
+                        SettingsKeyValueRow(key: "availableModelsMatch", value: availableModelsMatch, mono: true)
+                    }
+                    if !deniedModels.isEmpty {
+                        if model != nil || smallModel != nil || fallbackModel != nil || !availableModels.isEmpty || availableModelsMatch != nil { Divider().padding(.horizontal, 12) }
+                        SettingsKeyValueRow(key: "deniedModels", value: deniedModels.joined(separator: ", "), mono: true)
                     }
                 }
             } else {
@@ -642,6 +653,17 @@ extension SettingsMainPanelView {
         settingsSection(id: "attribution", icon: "signature", title: "Attribution") {
             if hasAnything {
                 VStack(alignment: .leading, spacing: 8) {
+                    if attr?.disabled == true {
+                        HStack(spacing: 6) {
+                            Image(systemName: "eye.slash")
+                                .font(.system(size: 11))
+                            Text("All commit and PR attribution hidden")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                    }
+
                     if let commit = attr?.commitTemplate {
                         attributionRow(label: "Commit Template", value: commit)
                     }

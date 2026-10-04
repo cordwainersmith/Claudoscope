@@ -59,6 +59,7 @@ struct McpServerEntry: Identifiable, Sendable {
     let env: [String: String]
     let level: String?      // "managed", "global", "project", "local"
     var authStatus: McpAuthStatus = .notApplicable
+    var type: String? = nil  // "stdio", "http", "sse", "sdk"
 }
 
 // MARK: - Command Models
@@ -173,6 +174,7 @@ struct AttributionConfig: Sendable {
     let prTemplate: String?
     let hasDeprecatedCoAuthoredBy: Bool
     var omitSessionUrl: Bool = false              // attribution.sessionUrl == false (CC 2.1.183)
+    var disabled: Bool = false                    // "attribution": false (CC 2.1.281)
 }
 
 /// One drillable component a plugin contributes (a skill, agent, command, or
@@ -284,6 +286,8 @@ struct ExtendedConfig: Sendable {
     var promptCacheTtl: String? = nil         // CC 2.1.251, display only: the
     var subagentPromptCacheTtl: String? = nil // per-record ephemeral_5m/1h split already prices cache correctly
     var blockReadsOutsideWorkingDirectories: Bool? = nil  // permissions.* (CC 2.1.252)
+    var deniedModels: [String]? = nil         // managed (CC 2.1.283)
+    var availableModelsMatch: String? = nil   // managed (CC 2.1.283)
 }
 
 // MARK: - Theme Models

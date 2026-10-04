@@ -14,6 +14,11 @@ func settingsKeyDisplayName(_ key: String) -> String {
     case "cleanupPeriodDays": return "Cleanup Period (Days)"
     case "includeCoAuthoredBy": return "Include Co-Authored-By"
     case "attributionStyle": return "Attribution Style"
+    case "maxProseWidth": return "Max Prose Width"
+    case "syncClaudeAiSkills": return "Sync Claude.ai Skills"
+    case "syncClaudeAiPlugins": return "Sync Claude.ai Plugins"
+    case "availableModelsMatch": return "Available Models Match"
+    case "deniedModels": return "Denied Models"
     case "sandbox": return "Sandbox"
     default: return key
     }

@@ -51,6 +51,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case HOOK002  // comma-separated matcher silently never fires (<CC 2.1.191)
     case HOOK003  // matcher references unknown/removed MCP server
     case HOOK004  // matcher set on an event that ignores matchers
+    case HOOK005  // agent-type hook on PermissionRequest, not supported (CC 2.1.280)
 
     // Cross-cutting
     case XCT001  // total token estimate
@@ -88,6 +89,11 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG019  // managedMcpServers entry defines a stdio command (CC 2.1.243)
     case CFG020  // permissions.allow Bash rule with a wildcard before its final segment
     case CFG021  // bashOutputMaxChars/taskOutputMaxChars outside the clamp range
+    case CFG022  // boolean "attribution": false, skipped by older CLIs (CC 2.1.281)
+    case CFG023  // OTEL export env in project scope, ignored (CC 2.1.282)
+    case CFG024  // MCP server named anthropic-skills, reserved (CC 2.1.282)
+    case CFG025  // MCP server of type "sdk", skipped (CC 2.1.274)
+    case CFG026  // managed-only model setting in user settings (CC 2.1.283/2.1.285)
 
     // Hardening baseline checks
     case HRD001  // sandbox.enabled missing or false

@@ -315,6 +315,26 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Output character cap out of range",
         hint: "bashOutputMaxChars or taskOutputMaxChars is outside 4000-128000. Claude Code silently clamps the value, so the configured number is not the one in effect. Set it inside the range or remove the key."
     ),
+    .CFG022: RuleMetadata(
+        displayName: "Boolean attribution setting",
+        hint: "\"attribution\": false hides all commit and PR attribution since Claude Code 2.1.281, but older CLIs skip a settings file that holds the boolean form. In a file other people or older installs read, use the object form, e.g. {\"commit\": \"\", \"pr\": \"\"}."
+    ),
+    .CFG023: RuleMetadata(
+        displayName: "Telemetry export set in project scope",
+        hint: "Since Claude Code 2.1.282, OpenTelemetry export settings in project or local settings env are ignored (2.1.283 shows a startup notice), so a repo cannot send your session data to its own collector. Configure telemetry in ~/.claude/settings.json or managed settings."
+    ),
+    .CFG024: RuleMetadata(
+        displayName: "Reserved MCP server name",
+        hint: "anthropic-skills is a reserved MCP server name since Claude Code 2.1.282. A server configured under that name has its skills and prompts left out. Rename the server."
+    ),
+    .CFG025: RuleMetadata(
+        displayName: "SDK MCP server in config",
+        hint: "MCP entries with type \"sdk\" exist only inside an Agent SDK process. Claude Code skips them when they appear in a config file (2.1.274), so the server never starts. Remove the entry or define a stdio/http server."
+    ),
+    .CFG026: RuleMetadata(
+        displayName: "Managed-only model setting in user settings",
+        hint: "deniedModels, availableModelsMatch and allowedProviders are documented as managed settings (2.1.283, 2.1.285). Set in ~/.claude/settings.json they may have no effect. Deploy them through managed settings to enforce them."
+    ),
     .HRD012: RuleMetadata(
         displayName: "autoMode missing hard_deny baseline",
         hint: "settings.json has an autoMode block but no hard_deny baseline. hard_deny rules are the non-bypassable stops for unattended runs; without them the agent can take destructive actions autonomously during long or batch jobs. Add a hard_deny baseline."
@@ -370,6 +390,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .HOOK004: RuleMetadata(
         displayName: "Matcher ignored on this event",
         hint: "This hook event does not support matchers; the matcher is silently ignored and the hook always fires. Remove the matcher field to make the configuration explicit."
+    ),
+    .HOOK005: RuleMetadata(
+        displayName: "Agent hook on PermissionRequest",
+        hint: "Since Claude Code 2.1.280, agent-type hooks are not run on the PermissionRequest event, so this hook never makes a decision. Use a command or prompt hook there instead."
     ),
     .PLG001: RuleMetadata(
         displayName: "Unsatisfied plugin dependency",

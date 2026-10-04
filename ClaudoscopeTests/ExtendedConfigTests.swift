@@ -333,4 +333,52 @@ final class ExtendedConfigTests: XCTestCase {
         let installs = await service.loadPluginInstallations()
         XCTAssertTrue(installs.isEmpty)
     }
+
+    // MARK: - attribution: false (CC 2.1.281)
+
+    func testBooleanAttributionFalseMarksDisabled() async throws {
+        try writeSettings(["attribution": false])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.attribution?.disabled, true)
+        XCTAssertNil(ext.attribution?.commitTemplate)
+    }
+
+    func testObjectAttributionIsNotDisabled() async throws {
+        try writeSettings(["attribution": ["commitMessage": "x"]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertEqual(ext.attribution?.disabled, false)
+    }
+
+    // MARK: - deniedModels / availableModelsMatch (CC 2.1.283)
+
+    private func serviceWithManaged(_ managed: [String: Any]?) throws -> ConfigService {
+        let url = tempRoot.appendingPathComponent("managed-settings.json")
+        if let managed {
+            try JSONSerialization.data(withJSONObject: managed).write(to: url)
+        }
+        return ConfigService(claudeDir: claudeDir, managedSettingsURL: url)
+    }
+
+    func testModelPolicyReadFromManagedSettings() async throws {
+        try writeSettings([:])
+        let svc = try serviceWithManaged(["deniedModels": ["claude-opus-4-1"], "availableModelsMatch": "^claude-"])
+        let ext = await svc.loadExtendedConfig()
+        XCTAssertEqual(ext.deniedModels, ["claude-opus-4-1"])
+        XCTAssertEqual(ext.availableModelsMatch, "^claude-")
+    }
+
+    func testManagedModelPolicyWinsOverUserSettings() async throws {
+        try writeSettings(["deniedModels": ["user-model"]])
+        let svc = try serviceWithManaged(["deniedModels": ["managed-model"]])
+        let ext = await svc.loadExtendedConfig()
+        XCTAssertEqual(ext.deniedModels, ["managed-model"])
+    }
+
+    func testModelPolicyNilWhenUnset() async throws {
+        try writeSettings([:])
+        let svc = try serviceWithManaged(nil)
+        let ext = await svc.loadExtendedConfig()
+        XCTAssertNil(ext.deniedModels)
+        XCTAssertNil(ext.availableModelsMatch)
+    }
 }

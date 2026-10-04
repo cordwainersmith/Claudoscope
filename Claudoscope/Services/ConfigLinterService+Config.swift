@@ -251,6 +251,19 @@ extension ConfigLinterService {
         }
 
         results += lintBashAllowRules(json: json, filePath: settingsPath, displayPath: "settings.json")
+        results += lintBooleanAttribution(json: json, filePath: settingsPath, displayPath: "settings.json")
+
+        // CFG026: model policy keys documented as managed settings (CC 2.1.283/2.1.285)
+        for key in ["deniedModels", "availableModelsMatch", "allowedProviders"] where json[key] != nil {
+            results.append(LintResult(
+                severity: .info,
+                checkId: .CFG026,
+                filePath: settingsPath,
+                message: "\(key) is set in user settings. Claude Code documents it as a managed setting, so it may not be enforced from here.",
+                fix: "Deploy \(key) through managed settings, or remove it from ~/.claude/settings.json.",
+                displayPath: "settings.json"
+            ))
+        }
 
         results += lintManagedMcpServers()
         results += lintProjectScopedSettings(projectRoot: projectRoot)
@@ -278,6 +291,67 @@ extension ConfigLinterService {
                 displayPath: displayPath
             )
         }
+    }
+
+    /// CFG022: `"attribution": false` (CC 2.1.281). Older CLIs skip a settings
+    /// file holding the boolean, so shared files should use the object form.
+    private func lintBooleanAttribution(json: [String: Any], filePath: String, displayPath: String) -> [LintResult] {
+        guard json["attribution"] as? Bool == false else { return [] }
+        return [LintResult(
+            severity: .warning,
+            checkId: .CFG022,
+            filePath: filePath,
+            message: "\(displayPath) sets \"attribution\": false. Claude Code older than 2.1.281 skips a settings file holding the boolean form.",
+            fix: "Use the object form {\"commit\": \"\", \"pr\": \"\"}, which every version reads.",
+            displayPath: displayPath
+        )]
+    }
+
+    /// Env keys that turn on or route OpenTelemetry export. Claude Code ignores
+    /// them in project and local settings since 2.1.282.
+    static func isProjectIgnoredTelemetryKey(_ key: String, value: Any) -> Bool {
+        if key == "CLAUDE_CODE_ENABLE_TELEMETRY" {
+            let text = (value as? String)?.lowercased() ?? (value as? NSNumber)?.stringValue ?? ""
+            return text == "1" || text == "true"
+        }
+        if ["OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER", "OTEL_TRACES_EXPORTER"].contains(key) {
+            return true
+        }
+        if key.hasPrefix("OTEL_EXPORTER_OTLP_"), key.hasSuffix("ENDPOINT") {
+            return true
+        }
+        return key.hasPrefix("OTEL_LOG_")
+    }
+
+    /// CFG024 / CFG025 over the merged MCP inventory.
+    func lintMcpServerEntries(_ servers: [McpServerEntry]) -> [LintResult] {
+        var results: [LintResult] = []
+        for server in servers {
+            let location = "MCP: \(server.name)"
+            // CFG024: reserved name (CC 2.1.282). claude-ai was un-reserved in 2.1.283.
+            if server.name == "anthropic-skills" {
+                results.append(LintResult(
+                    severity: .info,
+                    checkId: .CFG024,
+                    filePath: location,
+                    message: "MCP server \"anthropic-skills\" (\(server.level ?? "unknown") scope) uses a name Claude Code reserves; its skills and prompts are not listed.",
+                    fix: "Rename the server.",
+                    displayPath: location
+                ))
+            }
+            // CFG025: SDK servers are skipped outside the Agent SDK (CC 2.1.274).
+            if server.type?.lowercased() == "sdk" {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .CFG025,
+                    filePath: location,
+                    message: "MCP server \"\(server.name)\" (\(server.level ?? "unknown") scope) has type \"sdk\". Claude Code skips SDK servers in config files, so it never starts.",
+                    fix: "Remove the entry, or define \"\(server.name)\" as a stdio or http server.",
+                    displayPath: location
+                ))
+            }
+        }
+        return results
     }
 
     /// CFG019: managed-scope MCP servers must be http or sse. Claude Code
@@ -349,6 +423,24 @@ extension ConfigLinterService {
             let displayPath = ".claude/\(name)"
 
             results += lintBashAllowRules(json: json, filePath: url.path, displayPath: displayPath)
+            if name == "settings.json" {
+                results += lintBooleanAttribution(json: json, filePath: url.path, displayPath: displayPath)
+            }
+
+            // CFG023: telemetry export env ignored outside user/managed scope (CC 2.1.282)
+            if let env = json["env"] as? [String: Any] {
+                let keys = env.keys.sorted().filter { Self.isProjectIgnoredTelemetryKey($0, value: env[$0]!) }
+                if !keys.isEmpty {
+                    results.append(LintResult(
+                        severity: .warning,
+                        checkId: .CFG023,
+                        filePath: url.path,
+                        message: "\(displayPath) env sets \(keys.joined(separator: ", ")). Claude Code 2.1.282+ ignores telemetry export settings from project scope.",
+                        fix: "Move telemetry settings to ~/.claude/settings.json or managed settings, or remove them.",
+                        displayPath: displayPath
+                    ))
+                }
+            }
 
             // CFG016: sandbox binary overrides ignored outside user scope (CC 2.1.232)
             if let sandbox = json["sandbox"] as? [String: Any] {

@@ -139,4 +139,30 @@ final class HookMatcherLintTests: XCTestCase {
         ], mcp: ["memory"])
         XCTAssertTrue(r.isEmpty, "Expected no hook findings, got \(ids(r))")
     }
+
+    // MARK: - HOOK005: agent hook on PermissionRequest (CC 2.1.280)
+
+    private func hookGroup(_ event: String, type: String) -> HookEventGroup {
+        HookEventGroup(event: event, rules: [HookRule(
+            id: UUID().uuidString,
+            matcher: "Bash",
+            hooks: [HookCommand(type: type, command: "", timeout: nil)],
+            source: .user
+        )])
+    }
+
+    func testHOOK005FiresForAgentHookOnPermissionRequest() async {
+        let r = await lint([hookGroup("PermissionRequest", type: "agent")])
+        XCTAssertTrue(ids(r).contains(.HOOK005))
+    }
+
+    func testHOOK005DoesNotFireForCommandHookOnPermissionRequest() async {
+        let r = await lint([hookGroup("PermissionRequest", type: "command")])
+        XCTAssertFalse(ids(r).contains(.HOOK005))
+    }
+
+    func testHOOK005DoesNotFireForAgentHookOnOtherEvents() async {
+        let r = await lint([hookGroup("PreToolUse", type: "agent")])
+        XCTAssertFalse(ids(r).contains(.HOOK005))
+    }
 }

@@ -407,4 +407,99 @@ final class SettingsKeysLintTests: XCTestCase {
         let r = await runHardening()
         XCTAssertFalse(has(r, .HRD014))
     }
+
+    // MARK: - CFG022: boolean attribution (CC 2.1.281)
+
+    func testCFG022FiresForBooleanAttributionInUserSettings() async throws {
+        try writeSettings(["attribution": false])
+        let r = await runConfig()
+        XCTAssertTrue(has(r, .CFG022))
+    }
+
+    func testCFG022FiresForBooleanAttributionInProjectSettings() async throws {
+        let r = try await runConfigWithProject(["attribution": false])
+        XCTAssertEqual(r.filter { $0.checkId == .CFG022 }.map(\.displayPath), [".claude/settings.json"])
+    }
+
+    func testCFG022DoesNotFireForObjectForm() async throws {
+        try writeSettings(["attribution": ["commit": "", "pr": ""]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG022))
+    }
+
+    // MARK: - CFG023: telemetry export in project scope (CC 2.1.282)
+
+    func testCFG023FiresForProjectTelemetryEnable() async throws {
+        let r = try await runConfigWithProject(["env": ["CLAUDE_CODE_ENABLE_TELEMETRY": "1"]])
+        XCTAssertTrue(has(r, .CFG023))
+    }
+
+    func testCFG023FiresForExportersEndpointsAndContentCapture() async throws {
+        for key in ["OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER", "OTEL_TRACES_EXPORTER",
+                    "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "OTEL_LOG_USER_PROMPTS"] {
+            let r = try await runConfigWithProject(["env": [key: "otlp"]], fileName: "settings.local.json")
+            XCTAssertTrue(has(r, .CFG023), key)
+        }
+    }
+
+    func testCFG023DoesNotFireForTelemetryOffOrOtherOtelVars() async throws {
+        let r = try await runConfigWithProject(["env": [
+            "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+            "OTEL_METRIC_EXPORT_INTERVAL": "60000",
+            "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+        ]])
+        XCTAssertFalse(has(r, .CFG023))
+    }
+
+    func testCFG023DoesNotFireInUserSettings() async throws {
+        try writeSettings(["env": ["CLAUDE_CODE_ENABLE_TELEMETRY": "1", "OTEL_METRICS_EXPORTER": "otlp"]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG023))
+    }
+
+    // MARK: - CFG024 / CFG025: MCP entries
+
+    private func mcp(_ name: String, type: String? = nil) -> McpServerEntry {
+        McpServerEntry(name: name, command: "node", args: [], url: nil, env: [:], level: "global", type: type)
+    }
+
+    private func lintMcp(_ servers: [McpServerEntry]) async -> [LintResult] {
+        await ConfigLinterService(managedSettingsURL: managedURL).lintMcpServerEntries(servers)
+    }
+
+    func testCFG024FiresForReservedAnthropicSkillsName() async {
+        let r = await lintMcp([mcp("anthropic-skills")])
+        XCTAssertTrue(has(r, .CFG024))
+    }
+
+    func testCFG024DoesNotFireForClaudeAi() async {
+        let r = await lintMcp([mcp("claude-ai"), mcp("github")])
+        XCTAssertFalse(has(r, .CFG024))
+    }
+
+    func testCFG025FiresForSdkType() async {
+        let r = await lintMcp([mcp("inproc", type: "sdk")])
+        XCTAssertTrue(has(r, .CFG025))
+    }
+
+    func testCFG025DoesNotFireForStdioOrHttp() async {
+        let r = await lintMcp([mcp("a", type: "stdio"), mcp("b", type: "http"), mcp("c")])
+        XCTAssertFalse(has(r, .CFG025))
+    }
+
+    // MARK: - CFG026: managed-only model settings in user scope
+
+    func testCFG026FiresPerManagedOnlyKey() async throws {
+        try writeSettings(["deniedModels": ["claude-opus-4-1"], "availableModelsMatch": "opus", "allowedProviders": ["anthropic"]])
+        let r = await runConfig()
+        let findings = r.filter { $0.checkId == .CFG026 }
+        XCTAssertEqual(findings.count, 3)
+        XCTAssertEqual(Set(findings.map(\.id)).count, 3)
+    }
+
+    func testCFG026DoesNotFireWithoutThoseKeys() async throws {
+        try writeSettings(["availableModels": ["opus"]])
+        let r = await runConfig()
+        XCTAssertFalse(has(r, .CFG026))
+    }
 }
