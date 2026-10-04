@@ -163,6 +163,82 @@ final class HookLoaderTests: XCTestCase {
         XCTAssertEqual(commandsFor(groups, event: "PostToolUse"), ["echo canonical-wins"])
     }
 
+    func testWrappedPluginHooksFileYieldsEvents() async throws {
+        let versionDir = claudeDir
+            .appendingPathComponent("plugins/cache/test-marketplace/wrapped-plugin/0.0.1")
+
+        try writeJSON([
+            "description": "wrapped",
+            "hooks": [
+                "PreToolUse": [makeRule(matcher: "Bash", command: "echo wrapped")]
+            ]
+        ], to: versionDir.appendingPathComponent("hooks/hooks.json"))
+
+        let groups = await service.loadHooks(projectPaths: [])
+        XCTAssertEqual(groups.map(\.event), ["PreToolUse"])
+        XCTAssertEqual(sourceLabels(groups, event: "PreToolUse"), ["plugin: wrapped-plugin"])
+        XCTAssertEqual(commandsFor(groups, event: "PreToolUse"), ["echo wrapped"])
+    }
+
+    func testHybridModHooksFileYieldsClassicEventsOnly() async throws {
+        // The code-modernization shape: classic hooks wrapper plus mod modules.
+        let versionDir = claudeDir
+            .appendingPathComponent("plugins/cache/test-marketplace/hybrid-mod/0.0.1")
+
+        try writeJSON([
+            "modules": ["./register.ts"],
+            "hooks": [
+                "SessionStart": [makeRule(matcher: "", command: "echo classic")]
+            ]
+        ], to: versionDir.appendingPathComponent("hooks/hooks.json"))
+
+        let groups = await service.loadHooks(projectPaths: [])
+        XCTAssertEqual(groups.map(\.event), ["SessionStart"])
+        XCTAssertEqual(commandsFor(groups, event: "SessionStart"), ["echo classic"])
+    }
+
+    func testModulesOnlyFileYieldsNoHooksAndNoFallthrough() async throws {
+        let versionDir = claudeDir
+            .appendingPathComponent("plugins/cache/test-marketplace/pure-mod/0.0.1")
+
+        try writeJSON([
+            "modules": ["./register.ts"]
+        ], to: versionDir.appendingPathComponent("hooks/hooks.json"))
+
+        // A manifest hooks field must not be picked up: layout (a) already matched.
+        try writeJSON([
+            "name": "pure-mod",
+            "hooks": [
+                "Stop": [makeRule(matcher: "", command: "echo manifest")]
+            ]
+        ], to: versionDir.appendingPathComponent(".claude-plugin/plugin.json"))
+
+        let groups = await service.loadHooks(projectPaths: [])
+        XCTAssertTrue(groups.isEmpty)
+    }
+
+    func testHookArgsJoinedIntoCommand() async throws {
+        let versionDir = claudeDir
+            .appendingPathComponent("plugins/cache/test-marketplace/args-plugin/0.0.1")
+
+        try writeJSON([
+            "hooks": [
+                "PostToolUse": [[
+                    "matcher": "Write",
+                    "hooks": [[
+                        "type": "command",
+                        "command": "node",
+                        "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/check.js", "--strict"]
+                    ]]
+                ]]
+            ]
+        ], to: versionDir.appendingPathComponent("hooks/hooks.json"))
+
+        let groups = await service.loadHooks(projectPaths: [])
+        XCTAssertEqual(commandsFor(groups, event: "PostToolUse"),
+                       ["node ${CLAUDE_PLUGIN_ROOT}/hooks/check.js --strict"])
+    }
+
     // MARK: - Mtime-based version selection (guards against the lex-sort bug)
 
     func testVersionSelectionPicksMostRecentlyModified() async throws {

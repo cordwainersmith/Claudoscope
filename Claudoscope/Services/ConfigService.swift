@@ -115,9 +115,13 @@ actor ConfigService {
                 guard let hooksArray = ruleDict["hooks"] as? [[String: Any]] else { continue }
 
                 let commands: [HookCommand] = hooksArray.map { hookDict in
-                    HookCommand(
+                    var command = hookDict["command"] as? String ?? ""
+                    if let args = hookDict["args"] as? [String], !args.isEmpty {
+                        command = ([command] + args).joined(separator: " ")
+                    }
+                    return HookCommand(
                         type: hookDict["type"] as? String,
-                        command: hookDict["command"] as? String ?? "",
+                        command: command,
                         timeout: hookDict["timeout"] as? Int,
                         terminalSequence: hookDict["terminalSequence"] as? String
                     )

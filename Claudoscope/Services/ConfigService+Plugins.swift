@@ -18,12 +18,16 @@ extension ConfigService {
         var out: [(String, [String: Any])] = []
 
         for (plugin, versionDir) in latestPluginVersionDirs() {
-            // (a) hooks/hooks.json — the file itself IS the hooks dict.
+            // (a) hooks/hooks.json. A modules-only mod file still claims this
+            // layout, so it must not fall through to the manifest probes.
             let canonicalURL = versionDir
                 .appendingPathComponent("hooks")
                 .appendingPathComponent("hooks.json")
             if let dict = readJSON(at: canonicalURL) {
-                out.append((plugin, dict))
+                let events = pluginHooksEventMap(fromHooksFile: dict)
+                if !events.isEmpty {
+                    out.append((plugin, events))
+                }
                 continue
             }
 
@@ -46,6 +50,19 @@ extension ConfigService {
         }
 
         return out
+    }
+
+    /// The event map inside a plugin hooks file. Real files wrap their events in
+    /// `{"hooks": {...}}`; older ones put events at the top level, next to
+    /// optional `description` and (for mods) `modules` keys that are not events.
+    func pluginHooksEventMap(fromHooksFile dict: [String: Any]) -> [String: Any] {
+        if let wrapped = dict["hooks"] as? [String: Any] {
+            return wrapped
+        }
+        var events = dict
+        events.removeValue(forKey: "modules")
+        events.removeValue(forKey: "description")
+        return events
     }
 
     // MARK: - Plugin inventory
@@ -247,13 +264,13 @@ extension ConfigService {
             return inline
         }
         if let pathStr = raw as? String {
-            return readJSON(at: pluginRoot.appendingPathComponent(pathStr))
+            return readJSON(at: pluginRoot.appendingPathComponent(pathStr)).map(pluginHooksEventMap(fromHooksFile:))
         }
         if let paths = raw as? [String] {
             var merged: [String: Any] = [:]
             for path in paths {
-                guard let dict = readJSON(at: pluginRoot.appendingPathComponent(path)) else { continue }
-                for (event, rules) in dict {
+                guard let file = readJSON(at: pluginRoot.appendingPathComponent(path)) else { continue }
+                for (event, rules) in pluginHooksEventMap(fromHooksFile: file) {
                     if var existing = merged[event] as? [Any], let new = rules as? [Any] {
                         existing.append(contentsOf: new)
                         merged[event] = existing
