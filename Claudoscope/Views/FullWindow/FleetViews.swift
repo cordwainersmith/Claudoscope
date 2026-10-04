@@ -682,7 +682,7 @@ private struct InFlightTile: View {
                     HStack(spacing: 10) {
                         AgentMeta(agent: agent, showsProject: false)
                         Spacer(minLength: 4)
-                        Text(formatCost(agent.summary.estimatedCost))
+                        Text(formatCost(agent.totalCost))
                             .font(Tower.mono(12, .semibold))
                             .foregroundStyle(Tower.text)
                             .contentTransition(.numericText())
@@ -703,7 +703,7 @@ private struct InFlightTile: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: hovering)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: agent.summary.estimatedCost)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.3), value: agent.totalCost)
         .onChange(of: agent.summary.lastTimestamp) { _, _ in
             guard !reduceMotion, agent.isLive else { return }
             var jump = Transaction()
@@ -766,7 +766,7 @@ private struct LandedRow: View {
                     .font(Tower.ui(11))
                     .foregroundStyle(Tower.faint)
                     .frame(width: 110, alignment: .trailing)
-                Text(formatCost(agent.summary.estimatedCost))
+                Text(formatCost(agent.totalCost))
                     .font(Tower.mono(11))
                     .foregroundStyle(Tower.dim)
                     .frame(width: 70, alignment: .trailing)
@@ -927,7 +927,9 @@ private struct FleetInspector: View {
                         row("mode", summary.lastPermissionMode)
                         row("last", formatRelativeTime(summary.lastTimestamp))
                         row("tokens", formatTokens(summary.totalInputTokens + summary.totalOutputTokens))
-                        row("cost", formatCost(summary.estimatedCost))
+                        row("cost", agent.subagentCost > 0
+                            ? "\(formatCost(agent.totalCost)) (\(formatCost(agent.subagentCost)) in \(agent.subagents.count) subagent\(agent.subagents.count == 1 ? "" : "s"))"
+                            : formatCost(summary.estimatedCost))
                         row("burn", agent.burnRatePerHour(now: Date()).map { "\(formatCost($0))/hr avg" })
                         row("cache", agent.cacheHitRate.map { "\(Int(($0 * 100).rounded()))% of prompt tokens" })
                         row("compact", summary.compactionCount > 0 ? "\(summary.compactionCount)" : nil)
@@ -1210,7 +1212,7 @@ private struct StatChips: View {
 
     private func items(now: Date) -> [Item] {
         var items: [Item] = []
-        if let budget, budget > 0 { items.append(.budget(used: agent.summary.estimatedCost, budget: budget)) }
+        if let budget, budget > 0 { items.append(.budget(used: agent.totalCost, budget: budget)) }
         let errors = agent.summary.observability.errorClassifications.count
         if errors > 0 { items.append(.errors(errors)) }
         if let blocked = agent.summary.blockedActionCount, blocked > 0 { items.append(.blocked(blocked)) }
@@ -1301,7 +1303,7 @@ private struct TelemetryStrip: View {
             let hourly = FleetStateEngine.hourlyConcurrency(agents, now: now)
             HStack(alignment: .bottom, spacing: 28) {
                 metric("TODAY", formatCost(FleetStateEngine.spendOnDay(agents, now: now)),
-                       help: "Spend by the sessions on this board on today's date")
+                       help: "Spend by the sessions on this board on today's date, their subagents included")
                 metric("LIVE BURN", "\(formatCost(burn))/hr",
                        help: "Sum of the live sessions' average spend rates")
                 metric("WAITED ON YOU · TODAY",

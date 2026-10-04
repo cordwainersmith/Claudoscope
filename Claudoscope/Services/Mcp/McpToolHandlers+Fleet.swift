@@ -78,7 +78,7 @@ extension McpToolHandlers {
             kind: agent.registry?.kind,
             branch: agent.branchLabel,
             model: summary.primaryModel.map { getModelFamily($0) },
-            cost: round4(summary.estimatedCost),
+            cost: round4(agent.totalCost),
             inputTokens: summary.totalInputTokens,
             outputTokens: summary.totalOutputTokens,
             contextTokens: summary.latestTurn?.contextTokens,

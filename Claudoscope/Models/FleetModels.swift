@@ -137,6 +137,19 @@ struct FleetAgent: Identifiable, Sendable, Equatable {
     /// Why a `.failed` agent failed, when the board knows more than the
     /// transcript's error flag (a process that exited mid-turn).
     var failureReason: String? = nil
+    /// Every subagent this session spawned, nested ones included. Their spend
+    /// is the agent's spend, so cost figures fold them in.
+    var subagents: [SessionSummary] = []
+
+    var subagentCost: Double { subagents.reduce(0) { $0 + $1.estimatedCost } }
+    var totalCost: Double { summary.estimatedCost + subagentCost }
+
+    /// Billed cost on one LOCAL day ("YYYY-MM-DD"), subagents included.
+    func cost(onDay key: String) -> Double {
+        ([summary] + subagents).reduce(0) { total, s in
+            total + s.dailyContributions.filter { $0.date == key }.reduce(0) { $0 + $1.estimatedCost }
+        }
+    }
 
     /// Terminal tab title needle: the registry cwd folder when live, else the
     /// decoded project folder name.
@@ -169,8 +182,8 @@ struct FleetAgent: Identifiable, Sendable, Equatable {
     func burnRatePerHour(now: Date) -> Double? {
         let end = isLive ? now : (ISO8601.parse(summary.lastTimestamp) ?? now)
         let hours = end.timeIntervalSince(startedAt) / 3600
-        guard hours >= 5.0 / 60, summary.estimatedCost > 0 else { return nil }
-        return summary.estimatedCost / hours
+        guard hours >= 5.0 / 60, totalCost > 0 else { return nil }
+        return totalCost / hours
     }
 
     /// When the prompt cache written by the latest turn goes cold.

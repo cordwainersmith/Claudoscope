@@ -110,6 +110,10 @@ enum FleetStateEngine {
         recentWindow: TimeInterval
     ) -> [FleetAgent] {
         let registryBySession = registryBySession(registry)
+        var subagentsById: [String: SessionSummary] = [:]
+        for s in sessions where s.isSubagent {
+            if let aid = s.agentId { subagentsById[aid] = s }
+        }
 
         var agents: [FleetAgent] = []
         for summary in sessions where !summary.isSubagent {
@@ -131,7 +135,8 @@ enum FleetStateEngine {
                 isLive: isLive,
                 isBackgroundJob: (entry?.isBackground ?? false) || summary.sessionKind == "bg",
                 isBypass: summary.everBypassedPermissions == true,
-                failureReason: derived.failureReason
+                failureReason: derived.failureReason,
+                subagents: descendants(of: summary, in: subagentsById)
             ))
         }
         return agents.sorted {
@@ -218,9 +223,21 @@ enum FleetStateEngine {
     /// Cost the board's sessions incurred on the local calendar day of `now`.
     static func spendOnDay(_ agents: [FleetAgent], now: Date) -> Double {
         let key = ISO8601.localDayKey(for: now)
-        return agents.reduce(0) { total, agent in
-            total + agent.summary.dailyContributions.filter { $0.date == key }.reduce(0) { $0 + $1.estimatedCost }
+        return agents.reduce(0) { $0 + $1.cost(onDay: key) }
+    }
+
+    /// Subagents reachable from a session through spawnedAgentIds, the same
+    /// edges the subagent tree uses. Visited-set guarded against cycles.
+    static func descendants(of session: SessionSummary, in subagentsById: [String: SessionSummary]) -> [SessionSummary] {
+        var found: [SessionSummary] = []
+        var visited = Set<String>()
+        var queue = session.spawnedAgentIds
+        while let id = queue.popLast() {
+            guard visited.insert(id).inserted, let sub = subagentsById[id] else { continue }
+            found.append(sub)
+            queue.append(contentsOf: sub.spawnedAgentIds)
         }
+        return found
     }
 
     private static func nonEmpty(_ s: String) -> String? {

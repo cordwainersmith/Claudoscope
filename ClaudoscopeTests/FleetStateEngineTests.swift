@@ -95,6 +95,57 @@ final class FleetStateEngineTests: XCTestCase {
         XCTAssertFalse(FleetStateEngine.hookEventIsStale(h, lastTimestamp: "2026-09-23T11:00:00.000Z", registry: r))
     }
 
+    // MARK: subagent cost folding
+
+    private func costed(_ s: SessionSummary, agentId: String? = nil, spawned: [String] = [],
+                        days: [(String, Double)]) -> SessionSummary {
+        SessionSummary(
+            id: s.id, projectId: s.projectId, slug: nil, title: s.title,
+            firstTimestamp: s.firstTimestamp, lastTimestamp: s.lastTimestamp, messageCount: 1, primaryModel: nil,
+            totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
+            totalCacheCreationTokens: 0, totalCacheCreation5mTokens: 0,
+            totalCacheCreation1hTokens: 0, compactionCount: 0,
+            estimatedCost: days.reduce(0) { $0 + $1.1 },
+            hasError: false, modelBreakdown: [], toolCallCount: 0,
+            observability: .empty, isSubagent: s.isSubagent,
+            dailyContributions: days.map {
+                DailyContribution(date: $0.0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0,
+                                  cacheCreationTokens: 0, cacheCreation5mTokens: 0, cacheCreation1hTokens: 0,
+                                  estimatedCost: $0.1, modelBreakdown: [])
+            },
+            agentId: agentId,
+            spawnedAgentIds: spawned
+        )
+    }
+
+    func testSubagentCostFoldsIntoParentIncludingNested() {
+        let today = ISO8601.localDayKey(for: now)
+        let parent = costed(summary(id: "p"), spawned: ["a1"], days: [(today, 10)])
+        let child = costed(summary(id: "agent-a1", isSubagent: true), agentId: "a1", spawned: ["a2"],
+                           days: [(today, 4), ("2026-09-01", 1)])
+        let grandchild = costed(summary(id: "agent-a2", isSubagent: true), agentId: "a2", days: [(today, 2)])
+        let stranger = costed(summary(id: "agent-zz", isSubagent: true), agentId: "zz", days: [(today, 50)])
+
+        let agents = FleetStateEngine.buildAgents(
+            sessions: [parent, child, grandchild, stranger], registry: [], hookEvents: [:],
+            now: now, activeThreshold: threshold, recentWindow: window)
+        let agent = try! XCTUnwrap(agents.first)
+        XCTAssertEqual(agents.count, 1)
+        XCTAssertEqual(Set(agent.subagents.map(\.id)), ["agent-a1", "agent-a2"])
+        XCTAssertEqual(agent.subagentCost, 7, accuracy: 1e-9)
+        XCTAssertEqual(agent.totalCost, 17, accuracy: 1e-9)
+        XCTAssertEqual(agent.cost(onDay: today), 16, accuracy: 1e-9)
+        XCTAssertEqual(FleetStateEngine.spendOnDay(agents, now: now), 16, accuracy: 1e-9)
+    }
+
+    func testSpawnCycleDoesNotLoop() {
+        let a = costed(summary(id: "agent-a", isSubagent: true), agentId: "a", spawned: ["b"], days: [])
+        let b = costed(summary(id: "agent-b", isSubagent: true), agentId: "b", spawned: ["a"], days: [])
+        let parent = costed(summary(id: "p"), spawned: ["a"], days: [])
+        let found = FleetStateEngine.descendants(of: parent, in: ["a": a, "b": b])
+        XCTAssertEqual(Set(found.map(\.id)), ["agent-a", "agent-b"])
+    }
+
     // MARK: buildAgents
 
     func testBuildAgentsWindowSubagentsAndFlags() {
