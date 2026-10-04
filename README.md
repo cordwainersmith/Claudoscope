@@ -58,6 +58,7 @@ Full version history is in [CHANGELOG.md](CHANGELOG.md).
 - [Menu Bar Widget](#menu-bar-widget)
 - [Notifications and Cost Alerts](#notifications-and-cost-alerts)
 - [Dashboard Window](#dashboard-window)
+  - [Fleet](#fleet)
   - [Analytics](#analytics)
   - [Sessions](#sessions)
   - [Tools](#tools)
@@ -199,6 +200,20 @@ Both are opt-in and off by default.
 A three-column layout: a narrow icon rail on the left for navigation, a sidebar in the middle for lists and filtering, and a main content panel on the right.
 
 A global project and date lens sits above the sidebar filter and scopes the Sessions, Tools, Timeline, and Plans rails at once, persisting as you move between them.
+
+### Fleet
+
+![Fleet View](screenshots/fleet-view.webp)
+
+One board for every Claude Code session running now or in the last 24 hours, across all projects. Liveness comes from Claude Code's session registry (`~/.claude/sessions/`), so a session counts as live while its process is alive, not only while its transcript grows.
+
+- **Needs you**: agents waiting on a permission, plan, or your reply, oldest first, with a ticking wait timer, the reason, and Open and Jump buttons. Waits over ten minutes, or whose prompt cache is about to expire, turn red.
+- **Working, Parked, Landed**: live agents as cards showing time in state, last prompt, last tool call, a context gauge, spend per hour (subagents included), cache hit rate, prompt-cache time left, and refused-call and changed-file chips. Sessions run with skipped permissions carry a red Bypass tag.
+- **Telemetry strip**: today's spend, live burn rate, response time, cold-cache restarts, and a 24-hour activity chart.
+- **Inspector**: process details, Focus terminal, Open session, a per-agent dollar budget, and a copyable resume command for exited sessions.
+- **Jump shortcut**: an optional system-wide Control+Option+Command+J focuses the terminal of the agent that has waited longest (Settings > Fleet).
+
+The board is read-only: Claudoscope never launches, stops, or answers a session.
 
 ### Analytics
 

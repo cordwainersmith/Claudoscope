@@ -1,9 +1,9 @@
 # Changelog
 
 ## [1.3.0]
-Adds a Fleet view: one board for every Claude Code session that is running now or ran in the last 24 hours, across all projects, with an attention queue for the ones waiting on you. Built on the session registry Claude Code writes at `~/.claude/sessions/`, which Claudoscope had never read, so liveness comes from the process itself rather than from how recently a transcript grew.
+Adds a Fleet view: one board for every Claude Code session that is running now or ran in the last 24 hours, across all projects, with an attention queue for the ones waiting on you. Built on the session registry Claude Code writes at `~/.claude/sessions/`, which Claudoscope had never read, so liveness comes from the process itself rather than from how recently a transcript grew. Also catches Claudoscope up with Claude Code 2.1.271 through 2.1.289, including a billing correction for Opus 5.5.
 
-Requires a one-time full reparse on first launch (parser version 12), after which launches hydrate from cache as before.
+Requires a one-time full reparse on first launch (parser version 13), after which launches hydrate from cache as before.
 
 ### New Features
 - **Fleet rail.** A full-width board instead of the usual list and detail columns. A headline says how many agents need you, with live, working, waiting and skipped-permission counters beside it. Below that, a "Needs you" lane lists waiting agents oldest first with a ticking wait timer, the reason, and Open and Jump buttons (Command+Return jumps to the oldest). Working and Parked lanes show live agents as cards, and a dimmed Landed list covers everything else from the last 24 hours. Clicking any card slides in an inspector with the agent and process details, Focus terminal and Open session. State precedence is hook event, then Claude Code's own registry status, then transcript recency, so a card's state always traces to a concrete record. A filter field and a skipped-permissions toggle narrow the board.
@@ -24,14 +24,30 @@ Requires a one-time full reparse on first launch (parser version 12), after whic
 - **Group by project.** A toggle in the Fleet header groups cards and landed rows under project headings. The choice is remembered.
 - **Per-agent budgets.** Set a dollar budget for a session in the Fleet inspector. When cost alerts are on, crossing it (and each doubling after) posts a notification whose tap selects the session and focuses its terminal, even if the general per-session rule is off. A budget chip on the card turns amber at 80% and red at 100%.
 - **Fleet tools for the MCP server.** Two new read-only tools, `list_agents` and `get_agent`, return the Fleet board's agents, states, wait reasons and times, process details, cost and context, with agents that need you first.
+- **Cost by plugin.** Claude Code now tags billed turns with the plugin that drove them. Analytics > Attribution gains a Cost by Plugin table, and each plugin's detail shows its lifetime spend. Like skill and MCP attribution, it is a partial partition with its own unattributed remainder.
+- **Claude Mods in the Plugins rail.** Plugins that ship TypeScript mods (2.1.287) carry a mod badge, and their detail lists the events each mod registers, flagging the ones that can change behavior (tool calls, prompt submission and composition, session appends). Found by reading the source; nothing is executed.
+- **AGENTS.md as project memory.** A project with no CLAUDE.md has its root AGENTS.md shown in the Memory rail and linted.
+- **More of settings.json surfaced.** `"attribution": false` (2.1.281) is shown as all attribution hidden, and `deniedModels` and `availableModelsMatch` are displayed, managed values winning over user ones.
 
 ### Fixed
+- **Opus 5.5 priced at its own rate.** `claude-opus-5-5` was billed as Opus 5 ($5/$25, cache reads $0.50), overstating its cost by a quarter. It now bills at $4/$20 with $0.20 cache reads, with cache writes and the Vertex rows derived from those. A managed pricing override for one of Opus 5 or Opus 5.5 no longer reprices the other.
+- **Plugin hooks are visible.** Plugin `hooks/hooks.json` files that wrap their events in a `hooks` key, which is how real plugins ship them, were read as empty, so those hooks were missing from the Hooks rail, HOOK lint, and the MCP server's `get_config`. Hooks defined as a command plus arguments now show as the full command line and are matched in the Hooks Runtime tab.
+- **More refused tool calls are counted.** Only three denial phrasings were recognized, so auto-denials, safety-check blocks, output-redirection blocks and bare rejections were missing from blocked-action counts and Chat's blocked-actions section. All current forms are now recognized.
+- **Fleet cost includes subagents.** The board's spend, burn rate, card costs, budgets and the fleet MCP tools counted only the main transcript, so a session that delegated heavily looked far cheaper than the menu bar said. Subagent spend, nested ones included, is now folded into each agent, and the inspector shows how much came from subagents.
 - **Quiet agents no longer stick at Working.** A session with no live process (Cowork, or a CLI process whose registry file is gone) stayed in the popover card and the Working lane after its transcript went quiet, because the board was only re-derived while a CLI process was live. The board now keeps re-deriving until such agents age out.
 - **Refused tool calls are parsed again.** Transcript lines where Claude Code records a refused or invalid tool call as a plain string were dropped whole by the parser, so Chat's blocked-actions section never showed real refusals. Subagent results with block content were dropped the same way, which lost the link from a session to the subagents it spawned. Both now parse.
 - **A second copy of Claudoscope can no longer leave stale data in the cache.** If an older build was still running when a newer one started, the older one could write session summaries in its own format into the newer build's cache, and the newer build trusted them on its next launch. Each cached summary now records the parser version that wrote it, and anything from another version is discarded and reparsed.
 
 ### Changed
 - **Hook events feed fleet state even when notification delivery is off.** The Notification and Stop hook spool is read for board state before the notification service drains it. The hooks are still installed only when Notifications are enabled; the Fleet view says so and links to that setting.
+
+### Security
+- **New CFG022.** A boolean `attribution` in user or project settings.json. Claude Code versions before 2.1.281 skip a settings file containing it, so everything else in that file silently stops applying.
+- **New CFG023.** OpenTelemetry export, endpoint or content-capture variables set in project or project-local settings, which Claude Code ignores since 2.1.282.
+- **New CFG024.** An MCP server named `anthropic-skills`, a name reserved since 2.1.282.
+- **New CFG025.** An MCP entry of type `sdk`, which Claude Code skips (2.1.274).
+- **New CFG026.** `deniedModels`, `availableModelsMatch` or `allowedProviders` in user settings, where they are documented as managed-only.
+- **New HOOK005.** An agent-type hook on `PermissionRequest` (2.1.280).
 
 ## [1.2.0]
 Catches Claudoscope up with Claude Code 2.1.238 through 2.1.270. Claude Code now stamps transcripts with which skill, MCP tool, or subagent drove each billed turn, which turns three configuration rails into spend surfaces: the Skills, MCPs, and Agents rails can finally answer what a thing costs, not just whether it is installed. Alongside that, two cost corrections you could not have spotted from inside the app: organizations on contracted rates were shown list price, and the pricing provider silently reset to Anthropic on every launch.
