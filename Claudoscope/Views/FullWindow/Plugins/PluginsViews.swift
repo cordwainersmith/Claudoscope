@@ -68,6 +68,15 @@ private struct PluginRow: View {
                             .foregroundStyle(isSelected ? AnyShapeStyle(.white) : AnyShapeStyle(Color.okabeOrange))
                             .help("Installed more than once at different versions or commits. Which copy runs depends on where the session was started. Open the plugin for detail.")
                     }
+                    if plugin.isMod {
+                        Text("mod")
+                            .font(.system(size: 9, weight: .medium))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(isSelected ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(.quaternary))
+                            .clipShape(Capsule())
+                            .foregroundStyle(isSelected ? .white : .secondary)
+                    }
                 }
 
                 HStack(spacing: 4) {
@@ -163,6 +172,9 @@ private struct PluginDetail: View {
                     findingsCard
                 }
                 componentsCard
+                if plugin.isMod {
+                    hookEventsCard
+                }
                 dependenciesCard
             }
             .padding(16)
@@ -191,6 +203,14 @@ private struct PluginDetail: View {
                     .foregroundStyle(.green)
             } else {
                 Text("disabled")
+                    .font(.system(size: 10, weight: .medium))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+            if plugin.isMod {
+                Text("Mod")
                     .font(.system(size: 10, weight: .medium))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -406,6 +426,54 @@ private struct PluginDetail: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Mod events that let module code change what Claude Code does, as
+    /// opposed to only observing or rendering.
+    private static let behaviorChangingModEvents: Set<String> = [
+        "tool.call", "prompt.submit", "prompt.compose", "session.append",
+    ]
+
+    private var hookEventsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Mod events")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+            let events = plugin.modHookEvents ?? []
+            if events.isEmpty {
+                Text("No event registrations found in the module sources.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(events, id: \.self) { event in
+                    HStack(spacing: 8) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 5))
+                            .foregroundStyle(.tertiary)
+                        Text(event)
+                            .font(Typography.code)
+                        if Self.behaviorChangingModEvents.contains(event) {
+                            Text("can change behavior")
+                                .font(.system(size: 9, weight: .medium))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Color.okabeOrange.opacity(0.18))
+                                .clipShape(Capsule())
+                                .foregroundStyle(Color.okabeOrange)
+                        }
+                        Spacer()
+                    }
+                }
+            }
+            if let modules = plugin.modModules, !modules.isEmpty {
+                Text("Modules: " + modules.joined(separator: ", "))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(12)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var dependenciesCard: some View {

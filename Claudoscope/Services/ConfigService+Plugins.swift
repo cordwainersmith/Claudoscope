@@ -111,6 +111,7 @@ extension ConfigService {
             let dependencies = parseStringList(manifest?["dependencies"])
             let components = pluginComponents(manifest: manifest, versionDir: versionDir)
             let componentsByKind = pluginComponentEntries(versionDir: versionDir)
+            let modInfo = pluginModInfo(versionDir: versionDir)
 
             plugins.append(PluginInfo(
                 fullName: fullName,
@@ -120,7 +121,9 @@ extension ConfigService {
                 components: components,
                 dependencies: dependencies,
                 componentsByKind: componentsByKind,
-                installations: installations[fullName]
+                installations: installations[fullName],
+                modModules: modInfo?.modules,
+                modHookEvents: modInfo?.events
             ))
         }
 
@@ -185,13 +188,55 @@ extension ConfigService {
             let count = directoryEntryCount(versionDir.appendingPathComponent(dir))
             if count > 0 { components.append("\(dir) (\(count))") }
         }
-        if fm.fileExists(atPath: versionDir.appendingPathComponent("hooks").appendingPathComponent("hooks.json").path) {
+        let hooksURL = versionDir.appendingPathComponent("hooks").appendingPathComponent("hooks.json")
+        if let hooksFile = readJSON(at: hooksURL) {
+            if !pluginHooksEventMap(fromHooksFile: hooksFile).isEmpty {
+                components.append("hooks")
+            }
+            if !((hooksFile["modules"] as? [String]) ?? []).isEmpty {
+                components.append("mod")
+            }
+        } else if fm.fileExists(atPath: hooksURL.path) {
             components.append("hooks")
         }
         if fm.fileExists(atPath: versionDir.appendingPathComponent(".mcp.json").path) {
             components.append("mcp")
         }
         return components
+    }
+
+    /// A Claude Mod's module list and the events it registers for, or nil for a
+    /// plugin that is not a mod. Events come from a static scan of the module
+    /// sources for `on("event.name"` calls, tests excluded; nothing is executed.
+    func pluginModInfo(versionDir: URL) -> (modules: [String], events: [String])? {
+        let hooksDir = versionDir.appendingPathComponent("hooks")
+        guard let hooksFile = readJSON(at: hooksDir.appendingPathComponent("hooks.json")),
+              let modules = hooksFile["modules"] as? [String], !modules.isEmpty
+        else { return nil }
+
+        guard let regex = try? NSRegularExpression(pattern: #"\bon\(\s*['"]([a-z]+(?:\.[a-z]+)*)['"]"#) else {
+            return (modules, [])
+        }
+        var events = Set<String>()
+        let enumerator = fm.enumerator(at: hooksDir, includingPropertiesForKeys: [.isDirectoryKey])
+        while let url = enumerator?.nextObject() as? URL {
+            if url.lastPathComponent == "tests" || url.lastPathComponent == "node_modules" {
+                enumerator?.skipDescendants()
+                continue
+            }
+            let name = url.lastPathComponent
+            guard ["ts", "tsx"].contains(url.pathExtension),
+                  !name.hasSuffix(".test.ts"), !name.hasSuffix(".test.tsx"),
+                  let source = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
+            let range = NSRange(source.startIndex..., in: source)
+            for match in regex.matches(in: source, range: range) {
+                if let r = Range(match.range(at: 1), in: source) {
+                    events.insert(String(source[r]))
+                }
+            }
+        }
+        return (modules, events.sorted())
     }
 
     private func directoryEntryCount(_ url: URL) -> Int {

@@ -195,6 +195,12 @@ struct PluginInfo: Identifiable, Sendable {
     /// Every scope this plugin is installed at, from installed_plugins.json.
     /// Nil when the file is missing or does not list this plugin.
     var installations: [PluginInstallation]? = nil
+    /// Module paths from a Claude Mod's hooks.json `modules` array (CC 2.1.287).
+    var modModules: [String]? = nil
+    /// Mod event names found by scanning the module sources for `on("...")`.
+    var modHookEvents: [String]? = nil
+
+    var isMod: Bool { !(modModules ?? []).isEmpty }
 
     /// True when the plugin is installed at more than one scope AND those
     /// installs are not the same code. Which one a session loads depends on
