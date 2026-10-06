@@ -1145,9 +1145,16 @@ final class SessionStore {
         let current = FleetStateEngine.registryBySession(entries)
         let now = Date()
         for (sessionId, entry) in lastRegistryBySession where current[sessionId] == nil {
-            if entry.status == "busy" || entry.status == "shell" {
+            // A Stop hook after the last busy report means the turn ended cleanly.
+            let finishedTurn = fleetHookEvents[sessionId].map {
+                $0.kind == .yourTurn && $0.receivedAt >= (entry.statusDate ?? .distantPast)
+            } ?? false
+            if (entry.status == "busy" || entry.status == "shell") && !finishedTurn {
                 registryExits[sessionId] = RegistryExit(entry: entry, at: now)
             }
+            // The process is gone, so nobody is left to answer a pending hook
+            // event; keeping it pinned the card in the queue for a day.
+            fleetHookEvents[sessionId] = nil
             closeWait(sessionId: sessionId)
         }
         for (sessionId, entry) in current {
