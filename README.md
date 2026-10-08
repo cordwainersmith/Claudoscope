@@ -21,12 +21,12 @@
 </p>
 
 <p align="center">
-  <strong>🎉 Claudoscope 1.3 is here</strong>
+  <strong>🎉 Claudoscope 1.4 is here</strong>
 </p>
 
 <p align="center">
-  A new Fleet view shows every running agent on one board, with an attention queue for the ones waiting on you.<br />
-  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v1.3.0">See what's new</a>
+  The session viewer release: a Trace tab with Replay plays a session back on a time axis, a minimap shows its shape, bookmarks pin the turns worth keeping, and Resume drops you back into it in your terminal.<br />
+  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v1.4.0">See what's new</a>
   &nbsp;·&nbsp;
   <a href="CHANGELOG.md">Full changelog</a>
 </p>
