@@ -11,6 +11,9 @@ Requires a one-time full reparse on first launch (parser version 14).
 - **Menu bar live-session badge (optional).** Settings, Appearance gains "Show live session count in the menu bar", off by default. When on, a rounded badge next to the icon counts running sessions: blue normally, amber when any of them is waiting on you, red once a wait escalates. The 1.3.0 waiting count showed as a bare digit because MenuBarExtra never drew its capsule; the label is now rendered as one image so it draws as designed. The monochrome setting shows a plain bold digit instead.
 - **Haiku 5.5 pricing.** `claude-haiku-5-5` bills at $0.10/$0.50 per million tokens with $0.01 cache reads. It is the first current model with a prompt-length tier: a request over 100K tokens (input plus cached prefix) bills at $0.50/$2.50 for that message, and the estimator now decides this per message from the actual request size. Before this it was priced as Haiku 4.5, ten times too high on the common tier.
 
+### Changed
+- **No more red dot for bypass sessions.** The menu bar icon no longer turns its dot red while a session runs with skipped permissions; the Fleet card still carries the Bypass tag. The red dot now means an unseen cost alert only.
+
 ### Fixed
 - **Sonnet 5.5 cache reads halved.** `claude-sonnet-5-5` matched the Sonnet 5 rate row by substring and billed $0.20 per million cached tokens; its own rate is $0.10. Input, output and cache-write rates were already right.
 - **Mythos 5.1 cache reads.** `claude-mythos-5-1` billed Mythos 5's $1.00 cache reads; its own rate is $0.25, the same split Fable 5.1 made against Fable 5.

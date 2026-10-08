@@ -127,8 +127,7 @@ struct ClaudoscopeApp: App {
                 monochrome: store.monochromeMenuBarIcon,
                 liveCount: store.showMenuBarSessionCount ? store.menuBarLiveCount : 0,
                 waitingCount: store.fleetWaitingCount,
-                waitingEscalated: store.fleetAttentionEscalated,
-                hasFleetWarning: store.fleetHasWarning
+                waitingEscalated: store.fleetAttentionEscalated
             )
         }
         .menuBarExtraStyle(.window)
@@ -219,14 +218,12 @@ struct MenuBarIcon: View {
     var waitingCount: Int = 0
     /// A wait went long or a waiting agent's cache is about to expire; red badge.
     var waitingEscalated: Bool = false
-    /// A live agent ran with skipped permissions; red dot when no cost alert.
-    var hasFleetWarning: Bool = false
 
     var body: some View {
         let key = MenuBarLabelKey(
             hasUpdate: hasUpdate, hasCostAlert: hasCostAlert, monochrome: monochrome,
             liveCount: liveCount, waitingCount: waitingCount,
-            waitingEscalated: waitingEscalated, hasFleetWarning: hasFleetWarning
+            waitingEscalated: waitingEscalated
         )
         if let image = MenuBarLabelRenderer.image(for: key) {
             Image(nsImage: image)
@@ -244,7 +241,6 @@ struct MenuBarLabelKey: Hashable {
     let liveCount: Int
     let waitingCount: Int
     let waitingEscalated: Bool
-    let hasFleetWarning: Bool
 }
 
 @MainActor
@@ -282,7 +278,7 @@ struct MenuBarLabelContent: View {
             ZStack(alignment: .topTrailing) {
                 Image(nsImage: base)
                     .renderingMode(.original)
-                if key.hasCostAlert || key.hasFleetWarning {
+                if key.hasCostAlert {
                     Circle()
                         .fill(key.monochrome ? Color.black : Color.red)
                         .frame(width: 6, height: 6)

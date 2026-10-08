@@ -98,7 +98,6 @@ final class SessionStore {
     @ObservationIgnored private var waitStatsTask: Task<Void, Never>?
     static let fleetWaitRetention: TimeInterval = 30 * 24 * 3600
     /// True while any live agent ran with skipped permissions.
-    var fleetHasWarning: Bool { fleetAgents.contains { $0.isBypass && $0.isLive } }
     /// One-shot session selection requested from outside the dashboard
     /// (popover, hotkey, notification tap). Consumed next to `requestedRail`.
     var requestedSelection: RequestedSelection?
