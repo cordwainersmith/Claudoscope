@@ -10,16 +10,56 @@ struct ChatView: View {
     var onOpenFilesTab: (() -> Void)? = nil
     /// Opens with the blocked-actions disclosure expanded (Fleet chip).
     var expandBlockedActions: Bool = false
+    @Environment(SessionStore.self) private var store
     @State private var isNearTop = true
     @State private var isNearBottom = false
     @State private var searchText = ""
     @State private var currentMatchIndex = 0
     @State private var blockedActionsExpanded = false
+    /// Built once per session in init (never in body): the blocked-action list
+    /// and the minimap events both need a pass over every record.
+    @State private var blockedActions: [BlockedAction] = []
+    @State private var minimapEvents: [MinimapEvent] = []
 
     @AppStorage("showThinking") private var showThinking = true
     @AppStorage("showToolCalls") private var showToolCalls = true
+    @AppStorage("showMinimap") private var showMinimap = true
+
+    init(
+        session: ParsedSession,
+        scrollTargetUuid: Binding<String?>,
+        onOpenFilesTab: (() -> Void)? = nil,
+        expandBlockedActions: Bool = false
+    ) {
+        self.session = session
+        self._scrollTargetUuid = scrollTargetUuid
+        self.onOpenFilesTab = onOpenFilesTab
+        self.expandBlockedActions = expandBlockedActions
+        let blocked = ObservabilityAnalyzer.extractBlockedActions(from: extractToolCalls(from: session))
+        self._blockedActions = State(initialValue: blocked)
+        self._minimapEvents = State(initialValue: SessionMinimap.events(
+            for: session,
+            blockedToolUseIds: Set(blocked.map(\.id))
+        ))
+    }
 
     private var filtersActive: Bool { !showThinking || !showToolCalls }
+
+    /// Bookmarks are keyed by the parent session id, so subagent transcripts
+    /// (which share it) and Cowork sessions are left out.
+    private var bookmarksEnabled: Bool { !session.isSubagent }
+
+    private var bookmarkedForSession: Set<String> {
+        bookmarksEnabled ? (store.bookmarkedUuids[session.id] ?? []) : []
+    }
+
+    private func rebuildMinimapEvents() {
+        minimapEvents = SessionMinimap.events(
+            for: session,
+            blockedToolUseIds: Set(blockedActions.map(\.id)),
+            bookmarkedUuids: bookmarkedForSession
+        )
+    }
 
     private var turnDurations: [Int: TurnDuration] {
         let durations = ObservabilityAnalyzer.computeTurnDurations(records: session.records)
@@ -137,6 +177,12 @@ struct ChatView: View {
                         .background(Color.orange.opacity(0.08))
                     }
                     searchBar(proxy: proxy)
+                    if showMinimap {
+                        SessionMinimapView(events: minimapEvents, recordCount: session.records.count) { index in
+                            jump(toRecordIndex: index, proxy: proxy)
+                        }
+                        Divider()
+                    }
                     chatScrollView
                 }
                 scrollButtons(proxy: proxy)
@@ -152,8 +198,10 @@ struct ChatView: View {
             .onAppear {
                 consumeScrollTarget(proxy: proxy)
                 if expandBlockedActions { blockedActionsExpanded = true }
+                if !bookmarkedForSession.isEmpty { rebuildMinimapEvents() }
             }
             .onChange(of: scrollTargetUuid) { _, _ in consumeScrollTarget(proxy: proxy) }
+            .onChange(of: bookmarkedForSession) { _, _ in rebuildMinimapEvents() }
         }
     }
 
@@ -166,6 +214,15 @@ struct ChatView: View {
             scrollTargetUuid = nil
             return
         }
+        jump(toRecordIndex: index, proxy: proxy)
+        Task { @MainActor in scrollTargetUuid = nil }
+    }
+
+    /// Scroll to a record by parse-order index, un-hiding tool calls first if
+    /// the Focus filters would leave its row unrendered. The scroll runs on the
+    /// next runloop so the anchor exists after the filter flip.
+    private func jump(toRecordIndex index: Int, proxy: ScrollViewProxy) {
+        guard session.records.indices.contains(index) else { return }
         if !isRecordVisible(session.records[index]) {
             showToolCalls = true
         }
@@ -173,7 +230,6 @@ struct ChatView: View {
             withAnimation {
                 proxy.scrollTo("record-\(index)", anchor: .center)
             }
-            scrollTargetUuid = nil
         }
     }
 
@@ -184,6 +240,7 @@ struct ChatView: View {
             matchCount: matchingIndices.count,
             showThinking: $showThinking,
             showToolCalls: $showToolCalls,
+            showMinimap: $showMinimap,
             onNavigate: { direction in
                 guard !matchingIndices.isEmpty else { return }
                 if direction == .next {
@@ -202,7 +259,6 @@ struct ChatView: View {
     private var chatScrollView: some View {
         let fileChanges = FileHistoryService.summarize(records: session.records)
         let checkpoints = FileHistoryService.checkpointMessageIds(records: session.records)
-        let blockedActions = ObservabilityAnalyzer.extractBlockedActions(from: extractToolCalls(from: session))
         // Keep original offsets so `record-\(index)` ids, turnDurations, parallelToolCounts,
         // and search scrollTo stay aligned. Always drop records that render nothing
         // (empty streaming fragments, blank tool_result/user rows); when a Focus filter
@@ -326,29 +382,33 @@ struct ChatView: View {
     private func recordView(for record: ParsedRecordRaw, index: Int, checkpoints: Set<String>) -> some View {
         switch record.type {
         case .user:
-            UserMessageBubble(record: record)
+            bookmarkable(record) {
+                UserMessageBubble(record: record)
+            }
 
         case .assistant:
             let isCheckpoint = record.uuid.map { checkpoints.contains($0) } ?? false
-            VStack(alignment: .leading, spacing: 4) {
-                if isCheckpoint {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 10))
-                        Text("Checkpoint")
-                            .font(.system(size: 10, weight: .medium))
+            bookmarkable(record) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if isCheckpoint {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.system(size: 10))
+                            Text("Checkpoint")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
                     }
-                    .foregroundStyle(.secondary)
+                    AssistantMessageView(
+                        record: record,
+                        toolResultMap: session.toolResultMap,
+                        searchText: searchText,
+                        turnDuration: turnDurations[index],
+                        parallelToolCount: parallelToolCounts[index] ?? 0,
+                        showThinking: showThinking,
+                        showToolCalls: showToolCalls
+                    )
                 }
-                AssistantMessageView(
-                    record: record,
-                    toolResultMap: session.toolResultMap,
-                    searchText: searchText,
-                    turnDuration: turnDurations[index],
-                    parallelToolCount: parallelToolCounts[index] ?? 0,
-                    showThinking: showThinking,
-                    showToolCalls: showToolCalls
-                )
             }
 
         case .system:
@@ -364,6 +424,31 @@ struct ChatView: View {
 
         default:
             EmptyView()
+        }
+    }
+
+    /// Adds the bookmark affordances to a user or assistant row. Records with
+    /// no uuid have nothing stable to key on and render bare.
+    @ViewBuilder
+    private func bookmarkable<Content: View>(_ record: ParsedRecordRaw, @ViewBuilder content: @escaping () -> Content) -> some View {
+        if bookmarksEnabled, let uuid = record.uuid {
+            let existing = store.bookmark(for: session.id, uuid: uuid)
+            BookmarkableRow(
+                isBookmarked: existing != nil,
+                note: existing?.note,
+                onToggle: {
+                    Task { await store.toggleBookmark(session: session, record: record) }
+                },
+                onSaveNote: { note in
+                    // Looked up at save time: "Add Note..." on an unbookmarked
+                    // row inserts first, so the id does not exist at render time.
+                    guard let id = store.bookmark(for: session.id, uuid: uuid)?.id else { return }
+                    Task { await store.updateBookmarkNote(id: id, note: note) }
+                },
+                content: content
+            )
+        } else {
+            content()
         }
     }
 
@@ -450,6 +535,7 @@ struct ChatSearchBar: View {
     let matchCount: Int
     @Binding var showThinking: Bool
     @Binding var showToolCalls: Bool
+    @Binding var showMinimap: Bool
     let onNavigate: (SearchDirection) -> Void
 
     private var filtersActive: Bool { !showThinking || !showToolCalls }
@@ -518,6 +604,8 @@ struct ChatSearchBar: View {
                 Divider()
                 Toggle("Thinking", isOn: $showThinking)
                 Toggle("Tool & MCP calls", isOn: $showToolCalls)
+                Divider()
+                Toggle("Minimap", isOn: $showMinimap)
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: filtersActive

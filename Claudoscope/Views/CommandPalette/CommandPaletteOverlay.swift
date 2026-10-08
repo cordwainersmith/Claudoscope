@@ -106,6 +106,7 @@ struct CommandPaletteOverlay: View {
     @Binding var selectedProjectId: String?
     @Binding var selectedSessionId: String?
     let coworkVisible: Bool
+    @Environment(SessionStore.self) private var store
 
     @State private var query: String = ""
     @State private var selectedIndex: Int = 0
@@ -133,7 +134,27 @@ struct CommandPaletteOverlay: View {
         }
 
         items.append(contentsOf: utilityCommands)
+        items.append(contentsOf: bookmarkCommands)
         return items
+    }
+
+    /// One item per bookmark, newest first, capped so fuzzy scoring stays cheap.
+    private var bookmarkCommands: [CommandItem] {
+        store.bookmarks.prefix(50).compactMap { bookmark in
+            guard let id = bookmark.id else { return nil }
+            return CommandItem(
+                id: "bookmark-\(id)",
+                title: bookmark.excerpt.isEmpty ? "Bookmarked turn" : bookmark.excerpt,
+                subtitle: bookmark.sessionTitle,
+                icon: "bookmark",
+                keywords: [bookmark.note, bookmark.sessionTitle, "bookmark"],
+                shortcut: nil,
+                action: {
+                    store.openBookmark(bookmark)
+                    isPresented = false
+                }
+            )
+        }
     }
 
     private var utilityCommands: [CommandItem] {

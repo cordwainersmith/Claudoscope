@@ -138,7 +138,8 @@ enum TerminalFocuser {
     }
 
     /// Run an AppleScript via osascript, killed after 5s so a wedged terminal
-    /// never hangs us. Returns the trimmed stdout ("ok"/"nomatch") or nil.
+    /// never hangs us. Returns the trimmed stdout ("ok"/"nomatch"), or nil when
+    /// osascript could not run or exited non-zero (script error, no dictionary).
     private static func runOSA(_ source: String) -> String? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -155,7 +156,71 @@ enum TerminalFocuser {
         DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: watchdog)
         proc.waitUntilExit()
         watchdog.cancel()
+        guard proc.terminationStatus == 0 else { return nil }
         let data = out.fileHandleForReading.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+// MARK: - Run a command in a new terminal window
+
+extension TerminalFocuser {
+
+    /// Opens a new window in the highest-priority RUNNING terminal from the
+    /// candidates list, cd's to `workingDirectory`, and runs `command`. Falls
+    /// back to Terminal.app (always installed) when none is running. Never
+    /// reuses an existing tab. Background queue + 5s watchdog via `runOSA`;
+    /// a terminal whose dictionary lacks the needed verbs (Ghostty before 1.3)
+    /// fails the script and the next candidate is tried.
+    static func run(command: String, workingDirectory: String) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let running = runningBundleIds()
+            var order = candidates.map(\.bundleId).filter { running.contains($0) }
+            if !order.contains("com.apple.Terminal") { order.append("com.apple.Terminal") }
+            for bundleId in order {
+                guard let script = runScript(bundleId: bundleId, command: command, workingDirectory: workingDirectory) else { continue }
+                if runOSA(script) != nil { return }
+            }
+        }
+    }
+
+    /// Pure script builder, internal for tests. Nil for an unknown bundle id.
+    static func runScript(bundleId: String, command: String, workingDirectory: String) -> String? {
+        let shellLine = "cd \(shellQuote(workingDirectory)) && \(command)"
+        switch bundleId {
+        case "com.mitchellh.ghostty":
+            return """
+            tell application "Ghostty"
+            \tset cfg to new surface configuration
+            \tset initial working directory of cfg to "\(escape(workingDirectory))"
+            \tset win to new window with configuration cfg
+            \tdelay 0.3
+            \tinput text "\(escape(command))\\n" to focused terminal of selected tab of win
+            \tactivate
+            end tell
+            """
+        case "com.googlecode.iterm2":
+            return """
+            tell application "iTerm2"
+            \tset w to (create window with default profile)
+            \ttell current session of w to write text "\(escape(shellLine))"
+            \tactivate
+            end tell
+            """
+        case "com.apple.Terminal":
+            return """
+            tell application "Terminal"
+            \tdo script "\(escape(shellLine))"
+            \tactivate
+            end tell
+            """
+        default:
+            return nil
+        }
+    }
+
+    /// POSIX single-quote shell quoting: ' becomes '\''
+    static func shellQuote(_ s: String) -> String {
+        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

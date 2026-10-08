@@ -290,6 +290,18 @@ final class SessionStore {
     /// recovery failed twice), in which case every scan degrades to the
     /// full-parse behavior this cache replaced.
     @ObservationIgnored private var summaryStore: SessionSummaryStore?
+    /// User data (bookmarks, notes) in its own `user.sqlite`; nil when it could
+    /// not be opened, in which case bookmarking is unavailable this launch.
+    /// Opened lazily by `loadBookmarks()` (SessionStore+Bookmarks).
+    @ObservationIgnored var bookmarkStore: BookmarkStore?
+    /// Every bookmark, newest first, plus the lookups the chat rows and
+    /// sidebar read per row. All three change together in `applyBookmarks`.
+    var bookmarks: [Bookmark] = []
+    var bookmarkedUuids: [String: Set<String>] = [:]
+    var bookmarkCountsBySession: [String: Int] = [:]
+    /// One-shot "scroll this session's chat to this record", set when a
+    /// bookmark is opened from the sidebar or the command palette.
+    var requestedScrollTarget: RequestedScrollTarget?
     /// The in-flight scan/reconcile pipeline. Rescans cancel-and-AWAIT it
     /// before recomputing global keys so a straggler batch upsert can never
     /// land after a global-key wipe and resurrect stale-priced rows.
@@ -697,6 +709,9 @@ final class SessionStore {
     private func runScanPipeline(hydrateFirst: Bool) async {
         if summaryStore == nil {
             summaryStore = SessionSummaryStore.open(at: SessionSummaryStore.defaultURL())
+        }
+        if bookmarkStore == nil {
+            await loadBookmarks()
         }
 
         scanSessionsProcessed = 0

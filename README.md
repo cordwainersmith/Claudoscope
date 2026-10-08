@@ -21,12 +21,12 @@
 </p>
 
 <p align="center">
-  <strong>🎉 Claudoscope 1.0 is here</strong>
+  <strong>🎉 Claudoscope 1.3 is here</strong>
 </p>
 
 <p align="center">
-  Sessions now persist between launches, with cost alerts, notifications, and per-file diffs.<br />
-  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v1.0.0">See what's new</a>
+  A new Fleet view shows every running agent on one board, with an attention queue for the ones waiting on you.<br />
+  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v1.3.0">See what's new</a>
   &nbsp;·&nbsp;
   <a href="CHANGELOG.md">Full changelog</a>
 </p>

@@ -219,6 +219,7 @@ private struct SessionDetailTabView: View {
     @State private var chatScrollTargetUuid: String?
     /// Set by a Fleet blocked-actions chip; passed to the next ChatView.
     @State private var expandBlocked = false
+    @State private var resumeError: String?
 
     enum SessionTab: String, CaseIterable {
         case chat = "Chat"
@@ -264,6 +265,13 @@ private struct SessionDetailTabView: View {
                 }
 
                 Spacer()
+
+                if let resumeError {
+                    Text(resumeError)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                resumeButton
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
@@ -295,12 +303,70 @@ private struct SessionDetailTabView: View {
                     .id(session.id)
             }
         }
-        .onAppear { consumeRequestedTab() }
+        .onAppear { consumeRequestedTab(); consumeRequestedScroll() }
         .onChange(of: store.requestedSessionTab) { _, _ in consumeRequestedTab() }
+        .onChange(of: store.requestedScrollTarget) { _, _ in consumeRequestedScroll() }
         .onChange(of: session.id) { _, _ in
             expandBlocked = false
+            resumeError = nil
             consumeRequestedTab()
+            consumeRequestedScroll()
         }
+    }
+
+    /// Bookmark navigation: hand the record uuid to ChatView, which maps it
+    /// to a row anchor and scrolls.
+    private func consumeRequestedScroll() {
+        guard let requested = store.requestedScrollTarget, requested.sessionId == session.id else { return }
+        store.requestedScrollTarget = nil
+        chatScrollTargetUuid = requested.uuid
+        selectedTab = .chat
+    }
+
+    // MARK: - Resume / focus terminal
+
+    /// The registry entry of a live Claude Code process on this session.
+    /// Resuming a live session from a second terminal is what Claude Code
+    /// refuses, so a live session gets "Focus terminal" instead.
+    private var liveRegistryEntry: RegistryEntry? {
+        store.registryEntries.first { $0.sessionId == session.id }
+    }
+
+    @ViewBuilder
+    private var resumeButton: some View {
+        if let live = liveRegistryEntry {
+            Button {
+                TerminalFocuser.focus(matchingTitle: live.cwdFolderName ?? decodeProjectName(session.projectId))
+            } label: {
+                Label("Focus terminal", systemImage: "terminal")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("This session is running. Bring its terminal to the front.")
+        } else {
+            Button {
+                Task { await resumeInTerminal() }
+            } label: {
+                Label("Resume", systemImage: "terminal")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(session.isSubagent || !SessionResumer.isValidSessionId(session.id))
+            .help("Open a terminal in this project and run claude --resume")
+        }
+    }
+
+    private func resumeInTerminal() async {
+        var dir = SessionResumer.workingDirectory(from: session)
+        if dir == nil {
+            dir = await store.resolveProjectPath(session.projectId)
+        }
+        guard let dir, FileManager.default.fileExists(atPath: dir) else {
+            resumeError = "Project folder not found on disk"
+            return
+        }
+        resumeError = nil
+        TerminalFocuser.run(command: SessionResumer.command(forSessionId: session.id), workingDirectory: dir)
     }
 
     private func consumeRequestedTab() {

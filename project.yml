@@ -45,7 +45,7 @@ targets:
         CFBundleName: Claudoscope
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
-        NSAppleEventsUsageDescription: "Claudoscope focuses your terminal window when you click a session notification."
+        NSAppleEventsUsageDescription: "Claudoscope focuses or opens your terminal to jump to a session or resume it."
     dependencies:
       - package: swift-collections
         product: OrderedCollections

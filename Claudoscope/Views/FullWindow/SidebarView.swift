@@ -66,6 +66,10 @@ struct SidebarView: View {
                         sessionsByProject: store.filteredSessionsByProject,
                         filterText: filterText,
                         globalFilterActive: store.globalFilterActive,
+                        bookmarks: store.bookmarks,
+                        bookmarkCounts: store.bookmarkCountsBySession,
+                        knownSessionIds: Set(store.sessionsByProject.values.joined().map(\.id)),
+                        onOpenBookmark: { store.openBookmark($0) },
                         selectedSessionId: $selectedSessionId,
                         selectedProjectId: $selectedProjectId
                     )
@@ -358,6 +362,10 @@ private struct SessionsSidebarContent: View {
     let sessionsByProject: [String: [SessionSummary]]
     let filterText: String
     let globalFilterActive: Bool
+    let bookmarks: [Bookmark]
+    let bookmarkCounts: [String: Int]
+    let knownSessionIds: Set<String>
+    let onOpenBookmark: (Bookmark) -> Void
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
 
@@ -371,15 +379,33 @@ private struct SessionsSidebarContent: View {
         }
     }
 
+    /// The sidebar filter field applies to bookmarks too (title, excerpt, note).
+    private var filteredBookmarks: [Bookmark] {
+        if filterText.isEmpty { return bookmarks }
+        return bookmarks.filter {
+            $0.sessionTitle.localizedCaseInsensitiveContains(filterText)
+                || $0.excerpt.localizedCaseInsensitiveContains(filterText)
+                || $0.note.localizedCaseInsensitiveContains(filterText)
+        }
+    }
+
     var body: some View {
-        if globalFilterActive && filteredProjects.isEmpty {
+        if globalFilterActive && filteredProjects.isEmpty && filteredBookmarks.isEmpty {
             GlobalFilterEmptyRow()
         } else {
             LazyVStack(alignment: .leading, spacing: 0) {
+                if !filteredBookmarks.isEmpty {
+                    BookmarksSidebarSection(
+                        bookmarks: filteredBookmarks,
+                        knownSessionIds: knownSessionIds,
+                        onOpen: onOpenBookmark
+                    )
+                }
                 ForEach(filteredProjects) { project in
                     ProjectGroup(
                         project: project,
                         sessions: filteredSessions(for: project),
+                        bookmarkCounts: bookmarkCounts,
                         selectedSessionId: $selectedSessionId,
                         selectedProjectId: $selectedProjectId
                     )
@@ -405,6 +431,7 @@ private struct SessionsSidebarContent: View {
 private struct ProjectGroup: View {
     let project: Project
     let sessions: [SessionSummary]
+    let bookmarkCounts: [String: Int]
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
     @State private var isExpanded = true
@@ -448,6 +475,7 @@ private struct ProjectGroup: View {
                 ForEach(sessions) { session in
                     SessionRow(
                         session: session,
+                        bookmarkCount: bookmarkCounts[session.id] ?? 0,
                         isSelected: selectedSessionId == session.id
                     ) {
                         selectedSessionId = session.id
@@ -461,6 +489,7 @@ private struct ProjectGroup: View {
 
 private struct SessionRow: View {
     let session: SessionSummary
+    var bookmarkCount: Int = 0
     let isSelected: Bool
     let onSelect: () -> Void
     @State private var isHovered = false
@@ -511,6 +540,13 @@ private struct SessionRow: View {
                             .font(.system(size: 9))
                             .foregroundStyle(.cyan)
                             .help(session.prUrl ?? "Pull request #\(prNumber)")
+                    }
+
+                    if bookmarkCount > 0 {
+                        Image(systemName: "bookmark.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.okabeOrange)
+                            .help("\(bookmarkCount) bookmarked turn\(bookmarkCount == 1 ? "" : "s")")
                     }
 
                     if let model = session.primaryModel {
