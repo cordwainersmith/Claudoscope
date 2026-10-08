@@ -205,6 +205,10 @@ private struct UpdateTriggerView: View {
 
 /// Menu bar label: the app icon, alert dots, and one pip per live session so
 /// "how many, and does any need me" reads without a number.
+///
+/// MenuBarExtra renders only Text and Image in its label; shapes are dropped
+/// silently (the old count's capsule never drew). So the whole label is
+/// composed with ImageRenderer into one NSImage and shown as an Image.
 struct MenuBarIcon: View {
     var hasUpdate: Bool = false
     var hasCostAlert: Bool = false
@@ -216,52 +220,92 @@ struct MenuBarIcon: View {
     /// A live agent ran with skipped permissions; red dot when no cost alert.
     var hasFleetWarning: Bool = false
 
-    private static let maxPips = 5
-
     var body: some View {
-        let resourceName = monochrome ? "menu-bar-icon-mono" : "menu-bar-icon"
-        if let url = Bundle.main.url(forResource: resourceName, withExtension: "png"),
-           let nsImage = NSImage(contentsOf: url) {
-            nsImage.isTemplate = monochrome
-            return AnyView(
-                HStack(spacing: 4) {
-                    ZStack(alignment: .topTrailing) {
-                        Image(nsImage: nsImage)
-                            .renderingMode(monochrome ? .template : .original)
-                        if hasCostAlert || hasFleetWarning {
-                            Circle()
-                                .fill(.red)
-                                .frame(width: 6, height: 6)
-                                .offset(x: 2, y: -2)
-                        } else if hasUpdate {
-                            Circle()
-                                .fill(.orange)
-                                .frame(width: 6, height: 6)
-                                .offset(x: 2, y: -2)
-                        }
-                    }
-                    if !pips.isEmpty {
-                        pipCluster
-                    }
-                }
-            )
+        let key = MenuBarLabelKey(
+            hasUpdate: hasUpdate, hasCostAlert: hasCostAlert, monochrome: monochrome,
+            pips: pips, waitingEscalated: waitingEscalated, hasFleetWarning: hasFleetWarning
+        )
+        if let image = MenuBarLabelRenderer.image(for: key) {
+            Image(nsImage: image)
+                .renderingMode(monochrome ? .template : .original)
         } else {
-            return AnyView(Image(systemName: "chevron.left.forwardslash.chevron.right"))
+            Image(systemName: "chevron.left.forwardslash.chevron.right")
         }
     }
+}
 
-    private var pipCluster: some View {
-        HStack(spacing: 2.5) {
-            ForEach(Array(pips.prefix(Self.maxPips).enumerated()), id: \.offset) { _, pip in
-                pipView(pip)
+struct MenuBarLabelKey: Hashable {
+    let hasUpdate: Bool
+    let hasCostAlert: Bool
+    let monochrome: Bool
+    let pips: [MenuBarPip]
+    let waitingEscalated: Bool
+    let hasFleetWarning: Bool
+}
+
+@MainActor
+enum MenuBarLabelRenderer {
+    private static var cache: [MenuBarLabelKey: NSImage] = [:]
+
+    static func image(for key: MenuBarLabelKey) -> NSImage? {
+        if let cached = cache[key] { return cached }
+        let resourceName = key.monochrome ? "menu-bar-icon-mono" : "menu-bar-icon"
+        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "png"),
+              let base = NSImage(contentsOf: url) else { return nil }
+        let renderer = ImageRenderer(content: MenuBarLabelContent(key: key, base: base))
+        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2
+        guard let image = renderer.nsImage else { return nil }
+        image.isTemplate = key.monochrome
+        if cache.count > 64 { cache.removeAll() }
+        cache[key] = image
+        return image
+    }
+}
+
+/// The label as drawn: icon with alert dot, then the pip cluster.
+struct MenuBarLabelContent: View {
+    let key: MenuBarLabelKey
+    let base: NSImage
+
+    private static let maxPips = 5
+
+    /// Template images must be drawn in solid black so the system tints them.
+    /// The color label has no appearance to adapt to, so its text is a mid
+    /// gray that reads on both a light and a dark menu bar.
+    private var ink: Color { key.monochrome ? .black : Color(red: 0.56, green: 0.56, blue: 0.58) }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ZStack(alignment: .topTrailing) {
+                Image(nsImage: base)
+                    .renderingMode(.original)
+                if key.hasCostAlert || key.hasFleetWarning {
+                    Circle()
+                        .fill(key.monochrome ? Color.black : Color.red)
+                        .frame(width: 6, height: 6)
+                        .offset(x: 2, y: -2)
+                } else if key.hasUpdate {
+                    Circle()
+                        .fill(key.monochrome ? Color.black : Color.orange)
+                        .frame(width: 6, height: 6)
+                        .offset(x: 2, y: -2)
+                }
             }
-            if pips.count > Self.maxPips {
-                Text("+\(pips.count - Self.maxPips)")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.primary)
+            if !key.pips.isEmpty {
+                HStack(spacing: 2.5) {
+                    ForEach(Array(key.pips.prefix(Self.maxPips).enumerated()), id: \.offset) { _, pip in
+                        pipView(pip)
+                    }
+                    if key.pips.count > Self.maxPips {
+                        Text("+\(key.pips.count - Self.maxPips)")
+                            .font(.system(size: 9, weight: .semibold, design: .rounded))
+                            .foregroundStyle(ink)
+                    }
+                }
+                .padding(.trailing, 1)
             }
         }
-        .padding(.trailing, 1)
+        .padding(.trailing, 2)
     }
 
     @ViewBuilder
@@ -269,18 +313,18 @@ struct MenuBarIcon: View {
         switch pip {
         case .waiting:
             Rectangle()
-                .fill(monochrome ? Color.primary : (waitingEscalated ? Color.okabeVermillion : Color.okabeOrange))
+                .fill(key.monochrome ? Color.black : (key.waitingEscalated ? Color.okabeVermillion : Color.okabeOrange))
                 .frame(width: 5, height: 5)
                 .rotationEffect(.degrees(45))
                 .frame(width: 7, height: 7)
         case .working:
             Circle()
-                .fill(monochrome ? Color.primary : Color.okabeBlue)
+                .fill(key.monochrome ? Color.black : Color.okabeBlue)
                 .frame(width: 5, height: 5)
                 .frame(width: 7, height: 7)
         case .idle:
             Circle()
-                .strokeBorder(monochrome ? Color.primary.opacity(0.6) : Color.okabeGray, lineWidth: 1)
+                .strokeBorder(key.monochrome ? Color.black.opacity(0.6) : Color.okabeGray, lineWidth: 1)
                 .frame(width: 5, height: 5)
                 .frame(width: 7, height: 7)
         }
@@ -289,7 +333,7 @@ struct MenuBarIcon: View {
 
 /// What one live session looks like in the menu bar. Order is the Fleet
 /// attention order: anything waiting on the user first, then working, then idle.
-enum MenuBarPip: Equatable {
+enum MenuBarPip: Hashable {
     case waiting, working, idle
 
     static func pips(for agents: [FleetAgent]) -> [MenuBarPip] {
