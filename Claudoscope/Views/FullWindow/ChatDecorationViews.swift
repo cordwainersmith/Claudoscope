@@ -67,7 +67,7 @@ struct ClaudeAvatarView: View {
     var size: CGFloat = 20
 
     var body: some View {
-        if let image = loadAvatar() {
+        if let image = Self.avatar {
             Image(nsImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -81,13 +81,12 @@ struct ClaudeAvatarView: View {
         }
     }
 
-    private func loadAvatar() -> NSImage? {
-        guard let url = Bundle.main.url(forResource: "claude-avatar", withExtension: "png"),
-              let image = NSImage(contentsOf: url) else {
-            return nil
-        }
-        return image
-    }
+    /// Loaded once: decoding the PNG per body re-render showed up in every
+    /// chat render pass.
+    private static let avatar: NSImage? = {
+        guard let url = Bundle.main.url(forResource: "claude-avatar", withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }()
 }
 
 // MARK: - Continuation Banner

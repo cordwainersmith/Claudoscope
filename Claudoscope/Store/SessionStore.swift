@@ -472,7 +472,13 @@ final class SessionStore {
                 active.append(session)
             }
             if age.map({ $0 >= Self.activeThreshold }) ?? true {
-                recent.append(session)
+                // Keep only the three newest; sorting the whole corpus for
+                // three rows was the single largest cost of this pass.
+                if recent.count < 3 || session.lastTimestamp > recent[2].lastTimestamp {
+                    recent.append(session)
+                    recent.sort { $0.lastTimestamp > $1.lastTimestamp }
+                    if recent.count > 3 { recent.removeLast() }
+                }
             }
         }
 
@@ -481,7 +487,7 @@ final class SessionStore {
         todayTokens = totals.tokens
         todayCost = totals.cost
         activeSessions = active
-        recentSessions = Array(recent.sorted { $0.lastTimestamp > $1.lastTimestamp }.prefix(3))
+        recentSessions = recent
     }
 
     /// Pure fold of one calendar day's billed tokens/cost across a pre-merged
