@@ -378,6 +378,7 @@ private struct SessionsSidebarContent: View {
     let onOpenBookmark: (Bookmark) -> Void
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
+    @State private var collapsedProjectIds: Set<String> = []
 
     var filteredProjects: [Project] {
         if filterText.isEmpty { return projects }
@@ -412,14 +413,33 @@ private struct SessionsSidebarContent: View {
                     )
                 }
                 ForEach(filteredProjects) { project in
-                    ProjectGroup(
-                        project: project,
-                        sessions: filteredSessions(for: project),
-                        now: now,
-                        bookmarkCounts: bookmarkCounts,
-                        selectedSessionId: $selectedSessionId,
-                        selectedProjectId: $selectedProjectId
-                    )
+                    let sessions = filteredSessions(for: project)
+                    let isExpanded = !collapsedProjectIds.contains(project.id)
+                    Section {
+                        if isExpanded {
+                            ForEach(sessions) { session in
+                                SessionRow(
+                                    session: session,
+                                    now: now,
+                                    bookmarkCount: bookmarkCounts[session.id] ?? 0,
+                                    isSelected: selectedSessionId == session.id
+                                ) {
+                                    selectedSessionId = session.id
+                                    selectedProjectId = project.id
+                                }
+                            }
+                        }
+                    } header: {
+                        ProjectSectionHeader(project: project, count: sessions.count, isExpanded: isExpanded) {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                if isExpanded {
+                                    collapsedProjectIds.insert(project.id)
+                                } else {
+                                    collapsedProjectIds.remove(project.id)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -434,67 +454,6 @@ private struct SessionsSidebarContent: View {
         let sessions = visibleSessions(for: project)
         if filterText.isEmpty { return sessions }
         return sessions.filter { $0.title.localizedCaseInsensitiveContains(filterText) }
-    }
-}
-
-private struct ProjectGroup: View {
-    let project: Project
-    let sessions: [SessionRowModel]
-    let now: Date
-    let bookmarkCounts: [String: Int]
-    @Binding var selectedSessionId: String?
-    @Binding var selectedProjectId: String?
-    @State private var isExpanded = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Project header
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 12)
-
-                    Text(project.name)
-                        .font(Typography.bodyMedium)
-                        .lineLimit(1)
-                        .help(project.name)
-
-                    Spacer()
-
-                    Text("\(sessions.count)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.15))
-                        .clipShape(Capsule())
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                ForEach(sessions) { session in
-                    SessionRow(
-                        session: session,
-                        now: now,
-                        bookmarkCount: bookmarkCounts[session.id] ?? 0,
-                        isSelected: selectedSessionId == session.id
-                    ) {
-                        selectedSessionId = session.id
-                        selectedProjectId = project.id
-                    }
-                }
-            }
-        }
     }
 }
 

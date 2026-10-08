@@ -10,6 +10,7 @@ struct ToolsSidebarContent: View {
     let globalFilterActive: Bool
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
+    @State private var collapsedProjectIds: Set<String> = []
 
     var filteredProjects: [Project] {
         if filterText.isEmpty { return projects }
@@ -27,13 +28,32 @@ struct ToolsSidebarContent: View {
         } else {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(filteredProjects) { project in
-                    ToolsProjectGroup(
-                        project: project,
-                        sessions: filteredSessions(for: project),
-                        now: now,
-                        selectedSessionId: $selectedSessionId,
-                        selectedProjectId: $selectedProjectId
-                    )
+                    let sessions = filteredSessions(for: project)
+                    let isExpanded = !collapsedProjectIds.contains(project.id)
+                    Section {
+                        if isExpanded {
+                            ForEach(sessions) { session in
+                                ToolsSessionRow(
+                                    session: session,
+                                    now: now,
+                                    isSelected: selectedSessionId == session.id
+                                ) {
+                                    selectedSessionId = session.id
+                                    selectedProjectId = project.id
+                                }
+                            }
+                        }
+                    } header: {
+                        ProjectSectionHeader(project: project, count: sessions.count, isExpanded: isExpanded) {
+                            withAnimation(.easeInOut(duration: Motion.quick)) {
+                                if isExpanded {
+                                    collapsedProjectIds.insert(project.id)
+                                } else {
+                                    collapsedProjectIds.remove(project.id)
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .padding(.vertical, 4)
@@ -48,63 +68,6 @@ struct ToolsSidebarContent: View {
         let sessions = visibleSessions(for: project)
         if filterText.isEmpty { return sessions }
         return sessions.filter { $0.title.localizedCaseInsensitiveContains(filterText) }
-    }
-}
-
-private struct ToolsProjectGroup: View {
-    let project: Project
-    let sessions: [SessionRowModel]
-    let now: Date
-    @Binding var selectedSessionId: String?
-    @Binding var selectedProjectId: String?
-    @State private var isExpanded = true
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: Motion.quick)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .frame(width: 12)
-
-                    Text(project.name)
-                        .font(Typography.bodyMedium)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Text("\(sessions.count)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Color.secondary.opacity(0.15))
-                        .clipShape(Capsule())
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                ForEach(sessions) { session in
-                    ToolsSessionRow(
-                        session: session,
-                        now: now,
-                        isSelected: selectedSessionId == session.id
-                    ) {
-                        selectedSessionId = session.id
-                        selectedProjectId = project.id
-                    }
-                }
-            }
-        }
     }
 }
 
