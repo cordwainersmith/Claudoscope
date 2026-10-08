@@ -944,7 +944,7 @@ private struct FleetInspector: View {
                             }
                             row("tool", turn.toolName)
                             row("target", turn.toolTarget)
-                            row("at", turn.toolTimestamp.map(formatRelativeTime))
+                            row("at", turn.toolTimestamp.map { formatRelativeTime($0) })
                             if agent.isLive, turn.cacheTTLSeconds != nil {
                                 HStack(spacing: 12) {
                                     Text("cache")

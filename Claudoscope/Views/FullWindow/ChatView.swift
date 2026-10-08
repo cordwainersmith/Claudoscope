@@ -20,6 +20,11 @@ struct ChatView: View {
     /// and the minimap events both need a pass over every record.
     @State private var blockedActions: [BlockedAction] = []
     @State private var minimapEvents: [MinimapEvent] = []
+    /// Also built once in init: as computed properties these were re-derived
+    /// from every record for every assistant row, so a chat render cost
+    /// rows times records.
+    @State private var turnDurations: [Int: TurnDuration] = [:]
+    @State private var parallelToolCounts: [Int: Int] = [:]
 
     @AppStorage("showThinking") private var showThinking = true
     @AppStorage("showToolCalls") private var showToolCalls = true
@@ -41,6 +46,8 @@ struct ChatView: View {
             for: session,
             blockedToolUseIds: Set(blocked.map(\.id))
         ))
+        self._turnDurations = State(initialValue: Self.turnDurationsByRecord(session.records))
+        self._parallelToolCounts = State(initialValue: Self.parallelToolCountsByRecord(session.records))
     }
 
     private var filtersActive: Bool { !showThinking || !showToolCalls }
@@ -61,13 +68,13 @@ struct ChatView: View {
         )
     }
 
-    private var turnDurations: [Int: TurnDuration] {
-        let durations = ObservabilityAnalyzer.computeTurnDurations(records: session.records)
+    private static func turnDurationsByRecord(_ records: [ParsedRecordRaw]) -> [Int: TurnDuration] {
+        let durations = ObservabilityAnalyzer.computeTurnDurations(records: records)
         var dict: [Int: TurnDuration] = [:]
         // Build a map from record index to turn index
         var turnIndex = 0
         var recordToTurn: [Int: Int] = [:]
-        for (i, record) in session.records.enumerated() {
+        for (i, record) in records.enumerated() {
             if record.type == .assistant && record.message?.stopReason != nil {
                 recordToTurn[i] = turnIndex
                 turnIndex += 1
@@ -81,9 +88,9 @@ struct ChatView: View {
         return dict
     }
 
-    private var parallelToolCounts: [Int: Int] {
+    private static func parallelToolCountsByRecord(_ records: [ParsedRecordRaw]) -> [Int: Int] {
         var dict: [Int: Int] = [:]
-        for (i, record) in session.records.enumerated() {
+        for (i, record) in records.enumerated() {
             if record.type == .assistant, case .blocks(let blocks) = record.message?.content {
                 let count = blocks.filter { $0.type == "tool_use" }.count
                 if count > 1 {

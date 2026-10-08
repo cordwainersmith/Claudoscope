@@ -28,8 +28,12 @@ enum AppAppearance: String, CaseIterable {
 /// Owns the file watcher and Combine pipeline for reactive updates.
 @MainActor @Observable
 final class SessionStore {
-    var projects: [Project] = []
-    var sessionsByProject: [String: [SessionSummary]] = [:]
+    var projects: [Project] = [] {
+        didSet { sessionIndexCache = nil }
+    }
+    var sessionsByProject: [String: [SessionSummary]] = [:] {
+        didSet { sessionIndexCache = nil }
+    }
     var hasActiveSession: Bool = false
     var analyticsData: AnalyticsData = .empty
     var dataCoverage: DataCoverage?
@@ -319,9 +323,19 @@ final class SessionStore {
     private let coworkWatcher = CoworkFileWatcher(supportDir: CoworkService.defaultSupportDir)
     private var cancellables = Set<AnyCancellable>()
 
-    /// All sessions flattened with their project
+    /// All sessions flattened with their project. Built once per change to
+    /// `projects`/`sessionsByProject`: the analytics, fleet and popover paths
+    /// each read it several times per transcript append, and rebuilding it
+    /// copied every summary on every read.
+    @ObservationIgnored private var sessionIndexCache: [(session: SessionSummary, project: Project)]?
+
     var allSessionsWithProjects: [(session: SessionSummary, project: Project)] {
-        var result: [(SessionSummary, Project)] = []
+        // Read both inputs through their accessors even on a cache hit so
+        // observing views still register the dependency.
+        let projects = self.projects
+        let sessionsByProject = self.sessionsByProject
+        if let cached = sessionIndexCache { return cached }
+        var result: [(session: SessionSummary, project: Project)] = []
         for project in projects {
             if let sessions = sessionsByProject[project.id] {
                 for session in sessions {
@@ -329,6 +343,7 @@ final class SessionStore {
                 }
             }
         }
+        sessionIndexCache = result
         return result
     }
 
@@ -406,15 +421,11 @@ final class SessionStore {
         }
     }
 
-    /// Today's sessions (CLI + Cowork; Cowork rows carry isCowork = true)
-    var todaySessions: [SessionSummary] {
-        let startOfToday = Calendar.current.startOfDay(for: Date())
-        return (allSessionsWithProjects.map(\.session) + coworkSummaries)
-            .filter { session in
-                guard let date = ISO8601.parse(session.lastTimestamp) else { return false }
-                return date >= startOfToday
-            }
-    }
+    /// Today's sessions (CLI + Cowork; Cowork rows carry isCowork = true).
+    /// Stored, like `recentSessions`/`activeSessions`/today's totals, and
+    /// refreshed by `rebuildFleet()`: as computed properties the popover body
+    /// walked and date-parsed the whole corpus six times per store change.
+    private(set) var todaySessions: [SessionSummary] = []
 
     /// A session counts as "active" if its last activity was within this many
     /// seconds. Shared by the Active Sessions card (< threshold), the menu bar
@@ -426,19 +437,7 @@ final class SessionStore {
     /// out — their UUID titles would push real top-level sessions out of the
     /// popover's list. Currently-active sessions are excluded too: they already
     /// show in the Active Sessions card, so Recent complements it, never mirrors it.
-    var recentSessions: [SessionSummary] {
-        let now = Date()
-        return Array(
-            (allSessionsWithProjects.map(\.session) + coworkSummaries)
-                .filter { !$0.isSubagent }
-                .filter { session in
-                    guard let date = ISO8601.parse(session.lastTimestamp) else { return true }
-                    return now.timeIntervalSince(date) >= Self.activeThreshold
-                }
-                .sorted { $0.lastTimestamp > $1.lastTimestamp }
-                .prefix(3)
-        )
-    }
+    private(set) var recentSessions: [SessionSummary] = []
 
     /// LOCAL calendar day (YYYY-MM-DD) of now, matching the day keys the parser
     /// stamps on each `DailyContribution`.
@@ -452,12 +451,37 @@ final class SessionStore {
     /// Today's stats. Only the cost/tokens billed *today* are counted, not the whole
     /// lifetime of a session that merely happens to be active today: a `/resume` of an
     /// older session must not pull its earlier-day spend into today's total.
-    var todayTokens: Int {
-        Self.dayTotals(sessions: todaySessions, dayKey: Self.localDayFormatter.string(from: Date())).tokens
-    }
+    private(set) var todayTokens: Int = 0
 
-    var todayCost: Double {
-        Self.dayTotals(sessions: todaySessions, dayKey: Self.localDayFormatter.string(from: Date())).cost
+    private(set) var todayCost: Double = 0
+
+    private func refreshSessionLists(now: Date) {
+        let all = allSessionsWithProjects.map(\.session) + coworkSummaries
+        let startOfToday = Calendar.current.startOfDay(for: now)
+        let liveIds = Set(registryEntries.map(\.sessionId))
+
+        var today: [SessionSummary] = []
+        var active: [SessionSummary] = []
+        var recent: [SessionSummary] = []
+        for session in all {
+            let date = ISO8601.parse(session.lastTimestamp)
+            if let date, date >= startOfToday { today.append(session) }
+            guard !session.isSubagent else { continue }
+            let age = date.map { now.timeIntervalSince($0) }
+            if liveIds.contains(session.id) || (age.map { $0 < Self.activeThreshold } ?? false) {
+                active.append(session)
+            }
+            if age.map({ $0 >= Self.activeThreshold }) ?? true {
+                recent.append(session)
+            }
+        }
+
+        let totals = Self.dayTotals(sessions: today, dayKey: Self.localDayFormatter.string(from: now))
+        todaySessions = today
+        todayTokens = totals.tokens
+        todayCost = totals.cost
+        activeSessions = active
+        recentSessions = Array(recent.sorted { $0.lastTimestamp > $1.lastTimestamp }.prefix(3))
     }
 
     /// Pure fold of one calendar day's billed tokens/cost across a pre-merged
@@ -692,6 +716,7 @@ final class SessionStore {
         // Recompute so the breakdown stays in sync when sessions land or change.
         let firstCoworkMerge = !coworkMergedIntoCostLedger
         coworkMergedIntoCostLedger = true
+        rebuildFleet()
         recomputeAnalytics(rebaselineCostLedger: rebaselineCostLedger || firstCoworkMerge)
     }
 
@@ -919,8 +944,7 @@ final class SessionStore {
                    let last = ISO8601.parse(summary.lastTimestamp), last > exit.at {
                     registryExits[summary.id] = nil
                 }
-                self.rebuildFleet()
-                self.recomputeAnalytics()
+                self.scheduleDerivedRefresh()
                 // A brand-new transcript can close a coverage gap (a previously
                 // missing history session now has a file); recompute on create
                 // only — plain updates don't change the known-id set.
@@ -969,8 +993,7 @@ final class SessionStore {
             fleetHookEvents[sessionId] = nil
             registryExits[sessionId] = nil
             closeWait(sessionId: sessionId)
-            self.rebuildFleet()
-            self.recomputeAnalytics()
+            self.scheduleDerivedRefresh()
             // The known-id set shrank; the coverage badge must reflect it.
             await self.recomputeDataCoverage()
 
@@ -989,6 +1012,24 @@ final class SessionStore {
 
         case .mustRescan:
             rescanAllSessions()
+        }
+    }
+
+    @ObservationIgnored private var derivedRefreshTask: Task<Void, Never>?
+    static let derivedRefreshDelay: Duration = .seconds(1)
+
+    /// A streaming session appends several times a second, and the fleet and
+    /// analytics rebuilds are each linear in the whole corpus. The summary is
+    /// applied immediately; these derived views follow at most once per
+    /// second, shared across every session that is writing.
+    private func scheduleDerivedRefresh() {
+        guard derivedRefreshTask == nil else { return }
+        derivedRefreshTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.derivedRefreshDelay)
+            guard let self, !Task.isCancelled else { return }
+            self.derivedRefreshTask = nil
+            self.rebuildFleet()
+            self.recomputeAnalytics()
         }
     }
 
@@ -1084,16 +1125,7 @@ final class SessionStore {
     /// Sessions considered active right now: any with a live registry entry,
     /// plus any whose transcript moved within `activeThreshold`. Non-subagent,
     /// CLI and Cowork. Shared by the popover card, the menu bar and the board.
-    var activeSessions: [SessionSummary] {
-        let now = Date()
-        let liveIds = Set(registryEntries.map(\.sessionId))
-        return (allSessionsWithProjects.map(\.session) + coworkSummaries).filter { session in
-            guard !session.isSubagent else { return false }
-            if liveIds.contains(session.id) { return true }
-            guard let date = ISO8601.parse(session.lastTimestamp) else { return false }
-            return now.timeIntervalSince(date) < Self.activeThreshold
-        }
-    }
+    private(set) var activeSessions: [SessionSummary] = []
 
     /// The checkout path encoded in a `~/.claude/projects/<id>` directory name.
     func resolveProjectPath(_ projectId: String) async -> String? {
@@ -1109,18 +1141,19 @@ final class SessionStore {
     }
 
     private func rebuildFleet() {
+        let now = Date()
+        refreshSessionLists(now: now)
         let sessions = allSessionsWithProjects.map(\.session) + coworkSummaries
         fleetAgents = FleetStateEngine.buildAgents(
             sessions: sessions,
             registry: registryEntries,
             hookEvents: fleetHookEvents,
             exits: registryExits,
-            now: Date(),
+            now: now,
             activeThreshold: Self.activeThreshold,
             recentWindow: Self.fleetRecentWindow
         )
         attentionQueue = FleetStateEngine.attentionQueue(fleetAgents)
-        let now = Date()
         let escalated = attentionQueue.contains { $0.isEscalated(now: now) }
         if escalated != fleetAttentionEscalated { fleetAttentionEscalated = escalated }
         checkActiveSession()

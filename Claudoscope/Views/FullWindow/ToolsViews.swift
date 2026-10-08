@@ -4,7 +4,8 @@ import SwiftUI
 
 struct ToolsSidebarContent: View {
     let projects: [Project]
-    let sessionsByProject: [String: [SessionSummary]]
+    let rowsByProject: [String: [SessionRowModel]]
+    let now: Date
     let filterText: String
     let globalFilterActive: Bool
     @Binding var selectedSessionId: String?
@@ -29,6 +30,7 @@ struct ToolsSidebarContent: View {
                     ToolsProjectGroup(
                         project: project,
                         sessions: filteredSessions(for: project),
+                        now: now,
                         selectedSessionId: $selectedSessionId,
                         selectedProjectId: $selectedProjectId
                     )
@@ -38,12 +40,11 @@ struct ToolsSidebarContent: View {
         }
     }
 
-    // Subagents are hidden — see SidebarView for rationale.
-    private func visibleSessions(for project: Project) -> [SessionSummary] {
-        (sessionsByProject[project.id] ?? []).filter { !$0.isSubagent }
+    private func visibleSessions(for project: Project) -> [SessionRowModel] {
+        rowsByProject[project.id] ?? []
     }
 
-    private func filteredSessions(for project: Project) -> [SessionSummary] {
+    private func filteredSessions(for project: Project) -> [SessionRowModel] {
         let sessions = visibleSessions(for: project)
         if filterText.isEmpty { return sessions }
         return sessions.filter { $0.title.localizedCaseInsensitiveContains(filterText) }
@@ -52,7 +53,8 @@ struct ToolsSidebarContent: View {
 
 private struct ToolsProjectGroup: View {
     let project: Project
-    let sessions: [SessionSummary]
+    let sessions: [SessionRowModel]
+    let now: Date
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
     @State private var isExpanded = true
@@ -94,6 +96,7 @@ private struct ToolsProjectGroup: View {
                 ForEach(sessions) { session in
                     ToolsSessionRow(
                         session: session,
+                        now: now,
                         isSelected: selectedSessionId == session.id
                     ) {
                         selectedSessionId = session.id
@@ -106,7 +109,8 @@ private struct ToolsProjectGroup: View {
 }
 
 private struct ToolsSessionRow: View {
-    let session: SessionSummary
+    let session: SessionRowModel
+    let now: Date
     let isSelected: Bool
     let onSelect: () -> Void
     @State private var isHovered = false
@@ -120,7 +124,7 @@ private struct ToolsSessionRow: View {
                         .lineLimit(1)
                         .foregroundStyle(isSelected ? .white : .primary)
 
-                    Text(formatRelativeTime(session.lastTimestamp))
+                    Text(session.lastDate.map { formatRelativeTime($0, now: now) } ?? "")
                         .font(.system(size: 11))
                         .foregroundStyle(isSelected ? .white.opacity(0.7) : .secondary)
                 }

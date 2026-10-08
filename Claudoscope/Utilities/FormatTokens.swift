@@ -22,24 +22,13 @@ func formatCost(_ cost: Double) -> String {
     return "$0.00"
 }
 
-func formatRelativeTime(_ timestamp: String) -> String {
-    let isoFormatter = ISO8601DateFormatter()
-    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-    guard let date = isoFormatter.date(from: timestamp) else {
-        // Try without fractional seconds
-        isoFormatter.formatOptions = [.withInternetDateTime]
-        guard let date = isoFormatter.date(from: timestamp) else {
-            return ""
-        }
-        return relativeString(from: date)
-    }
-
-    return relativeString(from: date)
+func formatRelativeTime(_ timestamp: String, now: Date = Date()) -> String {
+    guard let date = ISO8601.parse(timestamp) else { return "" }
+    return formatRelativeTime(date, now: now)
 }
 
-private func relativeString(from date: Date) -> String {
-    let interval = Date().timeIntervalSince(date)
+func formatRelativeTime(_ date: Date, now: Date = Date()) -> String {
+    let interval = now.timeIntervalSince(date)
 
     if interval < 60 { return "just now" }
     if interval < 3600 {

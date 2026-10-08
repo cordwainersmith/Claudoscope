@@ -60,28 +60,37 @@ struct SidebarView: View {
             // Content based on rail
             ScrollView {
                 switch rail {
+                // The minute clock drives the rows' relative times: rows only
+                // re-render when their own model changes, so without it a
+                // quiet session's "3m ago" would never tick.
                 case .sessions:
-                    SessionsSidebarContent(
-                        projects: store.filteredProjects,
-                        sessionsByProject: store.filteredSessionsByProject,
-                        filterText: filterText,
-                        globalFilterActive: store.globalFilterActive,
-                        bookmarks: store.bookmarks,
-                        bookmarkCounts: store.bookmarkCountsBySession,
-                        knownSessionIds: Set(store.sessionsByProject.values.joined().map(\.id)),
-                        onOpenBookmark: { store.openBookmark($0) },
-                        selectedSessionId: $selectedSessionId,
-                        selectedProjectId: $selectedProjectId
-                    )
+                    TimelineView(.everyMinute) { context in
+                        SessionsSidebarContent(
+                            projects: store.filteredProjects,
+                            rowsByProject: store.filteredSessionsByProject.mapValues(SessionRowModel.rows),
+                            now: context.date,
+                            filterText: filterText,
+                            globalFilterActive: store.globalFilterActive,
+                            bookmarks: store.bookmarks,
+                            bookmarkCounts: store.bookmarkCountsBySession,
+                            knownSessionIds: Set(store.sessionsByProject.values.joined().map(\.id)),
+                            onOpenBookmark: { store.openBookmark($0) },
+                            selectedSessionId: $selectedSessionId,
+                            selectedProjectId: $selectedProjectId
+                        )
+                    }
                 case .tools:
-                    ToolsSidebarContent(
-                        projects: store.filteredProjects,
-                        sessionsByProject: store.filteredSessionsByProject,
-                        filterText: filterText,
-                        globalFilterActive: store.globalFilterActive,
-                        selectedSessionId: $selectedSessionId,
-                        selectedProjectId: $selectedProjectId
-                    )
+                    TimelineView(.everyMinute) { context in
+                        ToolsSidebarContent(
+                            projects: store.filteredProjects,
+                            rowsByProject: store.filteredSessionsByProject.mapValues(SessionRowModel.rows),
+                            now: context.date,
+                            filterText: filterText,
+                            globalFilterActive: store.globalFilterActive,
+                            selectedSessionId: $selectedSessionId,
+                            selectedProjectId: $selectedProjectId
+                        )
+                    }
                 case .analytics:
                     switch analyticsTab {
                     case .usage:
@@ -359,7 +368,8 @@ struct GlobalFilterEmptyRow: View {
 
 private struct SessionsSidebarContent: View {
     let projects: [Project]
-    let sessionsByProject: [String: [SessionSummary]]
+    let rowsByProject: [String: [SessionRowModel]]
+    let now: Date
     let filterText: String
     let globalFilterActive: Bool
     let bookmarks: [Bookmark]
@@ -405,6 +415,7 @@ private struct SessionsSidebarContent: View {
                     ProjectGroup(
                         project: project,
                         sessions: filteredSessions(for: project),
+                        now: now,
                         bookmarkCounts: bookmarkCounts,
                         selectedSessionId: $selectedSessionId,
                         selectedProjectId: $selectedProjectId
@@ -415,13 +426,11 @@ private struct SessionsSidebarContent: View {
         }
     }
 
-    // Subagents are hidden from the sidebar — their UUID titles add noise and
-    // they're already represented by their parent session row.
-    private func visibleSessions(for project: Project) -> [SessionSummary] {
-        (sessionsByProject[project.id] ?? []).filter { !$0.isSubagent }
+    private func visibleSessions(for project: Project) -> [SessionRowModel] {
+        rowsByProject[project.id] ?? []
     }
 
-    private func filteredSessions(for project: Project) -> [SessionSummary] {
+    private func filteredSessions(for project: Project) -> [SessionRowModel] {
         let sessions = visibleSessions(for: project)
         if filterText.isEmpty { return sessions }
         return sessions.filter { $0.title.localizedCaseInsensitiveContains(filterText) }
@@ -430,7 +439,8 @@ private struct SessionsSidebarContent: View {
 
 private struct ProjectGroup: View {
     let project: Project
-    let sessions: [SessionSummary]
+    let sessions: [SessionRowModel]
+    let now: Date
     let bookmarkCounts: [String: Int]
     @Binding var selectedSessionId: String?
     @Binding var selectedProjectId: String?
@@ -475,6 +485,7 @@ private struct ProjectGroup: View {
                 ForEach(sessions) { session in
                     SessionRow(
                         session: session,
+                        now: now,
                         bookmarkCount: bookmarkCounts[session.id] ?? 0,
                         isSelected: selectedSessionId == session.id
                     ) {
@@ -488,7 +499,8 @@ private struct ProjectGroup: View {
 }
 
 private struct SessionRow: View {
-    let session: SessionSummary
+    let session: SessionRowModel
+    let now: Date
     var bookmarkCount: Int = 0
     let isSelected: Bool
     let onSelect: () -> Void
@@ -503,7 +515,7 @@ private struct SessionRow: View {
                     .foregroundStyle(isSelected ? .white : .primary)
 
                 HStack(spacing: 4) {
-                    Text(formatRelativeTime(session.lastTimestamp))
+                    Text(session.lastDate.map { formatRelativeTime($0, now: now) } ?? "")
                         .font(.system(size: 11))
 
                     Text("\u{00B7}")
@@ -512,27 +524,25 @@ private struct SessionRow: View {
                     Text("\(session.messageCount) msgs")
                         .font(.system(size: 11))
 
-                    if !session.observability.errorClassifications.isEmpty {
+                    if !session.errorLabels.isEmpty {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 9))
                             .foregroundStyle(.red)
-                            .help("Errors: \(session.observability.errorClassifications.map(\.label).joined(separator: ", "))")
+                            .help("Errors: \(session.errorLabels.joined(separator: ", "))")
                     }
 
-                    if session.observability.hasIdleZombieGap {
+                    if session.hasIdleZombieGap {
                         Image(systemName: "moon.zzz.fill")
                             .font(.system(size: 9))
                             .foregroundStyle(.orange)
                             .help("Session resumed after 75+ min idle without /clear")
                     }
 
-                    // The worktree-state record names the checkout; observability only
-                    // infers one from worktree tool use, so prefer the record.
-                    if session.worktreeName != nil || session.observability.isWorktreeSession {
+                    if session.isWorktree {
                         Image(systemName: "arrow.triangle.branch")
                             .font(.system(size: 9))
                             .foregroundStyle(.cyan)
-                            .help(worktreeHelp)
+                            .help(session.worktreeHelp)
                     }
 
                     if let prNumber = session.prNumber {
@@ -549,8 +559,7 @@ private struct SessionRow: View {
                             .help("\(bookmarkCount) bookmarked turn\(bookmarkCount == 1 ? "" : "s")")
                     }
 
-                    if let model = session.primaryModel {
-                        let family = getModelFamily(model)
+                    if let family = session.modelFamily {
                         Spacer()
                         Text(family)
                             .font(Typography.micro)
@@ -573,14 +582,6 @@ private struct SessionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-    }
-
-    private var worktreeHelp: String {
-        if let name = session.worktreeName, let branch = session.worktreeBranch {
-            return "Worktree \(name) on branch \(branch)"
-        }
-        if let name = session.worktreeName { return "Worktree \(name)" }
-        return "Session uses a git worktree"
     }
 }
 
