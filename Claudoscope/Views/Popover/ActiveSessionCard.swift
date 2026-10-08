@@ -215,18 +215,21 @@ private struct ActiveSessionRow: View {
 private struct PulsingDot: View {
     let color: Color
     @Environment(\.accessibilityReduceMotion) var reduceMotion
-    @State private var isPulsing = false
+    @Environment(\.windowIsVisible) private var windowIsVisible
+
+    /// Pauses while the popover is closed: its view tree stays alive
+    /// off-screen and a repeatForever animation there kept rendering.
+    private var pulsing: Bool { !reduceMotion && windowIsVisible }
 
     var body: some View {
         Circle()
             .fill(color)
             .frame(width: 6, height: 6)
-            .opacity(reduceMotion ? 0.7 : (isPulsing ? 0.4 : 1.0))
+            .opacity(reduceMotion ? 0.7 : (pulsing ? 0.4 : 1.0))
             .animation(
-                reduceMotion ? nil : .easeInOut(duration: 1.5).repeatForever(autoreverses: true),
-                value: isPulsing
+                pulsing ? .easeInOut(duration: 1.5).repeatForever(autoreverses: true) : .default,
+                value: pulsing
             )
-            .onAppear { if !reduceMotion { isPulsing = true } }
     }
 }
 

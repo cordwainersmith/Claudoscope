@@ -151,6 +151,7 @@ struct MenuBarPopoverContent: View {
             }
         }
         .frame(width: 280)
+        .trackWindowVisibility()
         .onAppear { costAlertService.acknowledgeSeen() }
     }
 
@@ -208,7 +209,7 @@ private struct CostAlertStrip: View {
 // MARK: - Loading Logo
 
 struct LoadingLogoView: View {
-    @State private var isAnimating = false
+    @Environment(\.windowIsVisible) private var isAnimating
 
     var body: some View {
         VStack(spacing: 14) {
@@ -222,7 +223,7 @@ struct LoadingLogoView: View {
                     .scaleEffect(isAnimating ? 1.06 : 0.94)
                     .opacity(isAnimating ? 1.0 : 0.6)
                     .animation(
-                        .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                        isAnimating ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true) : .default,
                         value: isAnimating
                     )
             }
@@ -232,13 +233,12 @@ struct LoadingLogoView: View {
                 .foregroundStyle(.secondary)
                 .opacity(isAnimating ? 1.0 : 0.5)
                 .animation(
-                    .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+                    isAnimating ? .easeInOut(duration: 1.2).repeatForever(autoreverses: true) : .default,
                     value: isAnimating
                 )
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 32)
-        .onAppear { isAnimating = true }
     }
 }
 
