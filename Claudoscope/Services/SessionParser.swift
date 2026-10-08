@@ -73,7 +73,9 @@ actor SessionParser {
     ///     records decode instead of dropping the line.
     /// 13: denial markers + toolDenialKind in blocked counts, attributionPlugin
     ///     cost partition.
-    static let parserVersion: Int = 13
+    /// 14: prompt-length pricing tier (Haiku 5.5 over 100K tokens) and the
+    ///     Sonnet 5.5 / Mythos 5.1 rate splits.
+    static let parserVersion: Int = 14
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()

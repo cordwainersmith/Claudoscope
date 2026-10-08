@@ -39,12 +39,16 @@ struct PricingTables {
         "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "fable51": ModelPricing(input: 10,   output: 50,    cacheRead: 0.25,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "mythos": ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
+        "mythos51": ModelPricing(input: 10,  output: 50,    cacheRead: 0.25,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10,   webSearchRequestFee: 0.01),
         "opus55": ModelPricing(input: 4,     output: 20,    cacheRead: 0.20,   cacheCreation5m: 5.00,   cacheCreation1h: 8,    webSearchRequestFee: 0.01),
         "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30,   webSearchRequestFee: 0.01),
         "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6,    webSearchRequestFee: 0.01),
         "sonnet5": ModelPricing(input: 2,    output: 10,    cacheRead: 0.20,   cacheCreation5m: 2.50,   cacheCreation1h: 4,    webSearchRequestFee: 0.01),
+        "sonnet55": ModelPricing(input: 2,   output: 10,    cacheRead: 0.10,   cacheCreation5m: 2.50,   cacheCreation1h: 4,    webSearchRequestFee: 0.01),
         "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation5m: 1.25,   cacheCreation1h: 2,    webSearchRequestFee: 0.01),
+        "haiku55": ModelPricing(input: 0.10, output: 0.50,  cacheRead: 0.01,   cacheCreation5m: 0.125,  cacheCreation1h: 0.20, webSearchRequestFee: 0.01),
+        "haiku55Long": ModelPricing(input: 0.50, output: 2.50, cacheRead: 0.05, cacheCreation5m: 0.625, cacheCreation1h: 1.00, webSearchRequestFee: 0.01),
         "haiku35": ModelPricing(input: 0.80, output: 4,     cacheRead: 0.08,   cacheCreation5m: 1.00,   cacheCreation1h: 1.60, webSearchRequestFee: 0.01),
         "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation5m: 0.30,   cacheCreation1h: 0.50, webSearchRequestFee: 0.01),
     ]
@@ -53,16 +57,22 @@ struct PricingTables {
         // Fable and Mythos on Vertex are provisional: they assume Anthropic-mirrored
         // rates and are not yet bill-validated.
         // Opus 5.5 cache writes (1.25x / 2x input) and its Vertex rows are derived,
-        // not published.
+        // not published. Sonnet 5.5, Haiku 5.5 and Mythos 5.1 Vertex rows mirror the
+        // Anthropic list price per Google's "all future models" note; Mythos 5.1's
+        // availability on Vertex at all is unverified.
         "fable":  ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "fable51": ModelPricing(input: 10,   output: 50,    cacheRead: 0.25,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "mythos": ModelPricing(input: 10,    output: 50,    cacheRead: 1.00,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
+        "mythos51": ModelPricing(input: 10,  output: 50,    cacheRead: 0.25,   cacheCreation5m: 12.50,  cacheCreation1h: 20,   webSearchRequestFee: 0.01),
         "opus":   ModelPricing(input: 5,     output: 25,    cacheRead: 0.50,   cacheCreation5m: 6.25,   cacheCreation1h: 10,   webSearchRequestFee: 0.01),
         "opus55": ModelPricing(input: 4,     output: 20,    cacheRead: 0.20,   cacheCreation5m: 5.00,   cacheCreation1h: 8,    webSearchRequestFee: 0.01),
         "opus4":  ModelPricing(input: 15,    output: 75,    cacheRead: 1.50,   cacheCreation5m: 18.75,  cacheCreation1h: 30,   webSearchRequestFee: 0.01),
         "sonnet": ModelPricing(input: 3,     output: 15,    cacheRead: 0.30,   cacheCreation5m: 3.75,   cacheCreation1h: 6,    webSearchRequestFee: 0.01),
         "sonnet5": ModelPricing(input: 2,    output: 10,    cacheRead: 0.20,   cacheCreation5m: 2.50,   cacheCreation1h: 4,    webSearchRequestFee: 0.01),
+        "sonnet55": ModelPricing(input: 2,   output: 10,    cacheRead: 0.10,   cacheCreation5m: 2.50,   cacheCreation1h: 4,    webSearchRequestFee: 0.01),
         "haiku":  ModelPricing(input: 1,     output: 5,     cacheRead: 0.10,   cacheCreation5m: 1.25,   cacheCreation1h: 2,    webSearchRequestFee: 0.01),
+        "haiku55": ModelPricing(input: 0.10, output: 0.50,  cacheRead: 0.01,   cacheCreation5m: 0.125,  cacheCreation1h: 0.20, webSearchRequestFee: 0.01),
+        "haiku55Long": ModelPricing(input: 0.50, output: 2.50, cacheRead: 0.05, cacheCreation5m: 0.625, cacheCreation1h: 1.00, webSearchRequestFee: 0.01),
         "haiku35": ModelPricing(input: 0.80, output: 4,     cacheRead: 0.08,   cacheCreation5m: 1.00,   cacheCreation1h: 1.60, webSearchRequestFee: 0.01),
         "haiku3": ModelPricing(input: 0.25,  output: 1.25,  cacheRead: 0.03,   cacheCreation5m: 0.30,   cacheCreation1h: 0.50, webSearchRequestFee: 0.01),
     ]
@@ -73,12 +83,16 @@ struct PricingTables {
         "fable":  ModelPricing(input: 11,    output: 55,     cacheRead: 1.10,   cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
         "fable51": ModelPricing(input: 11,   output: 55,     cacheRead: 0.275,  cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
         "mythos": ModelPricing(input: 11,    output: 55,     cacheRead: 1.10,   cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
+        "mythos51": ModelPricing(input: 11,  output: 55,     cacheRead: 0.275,  cacheCreation5m: 13.75,   cacheCreation1h: 22,   webSearchRequestFee: 0.011),
         "opus":   ModelPricing(input: 5.50,  output: 27.50,  cacheRead: 0.55,   cacheCreation5m: 6.875,   cacheCreation1h: 11,   webSearchRequestFee: 0.011),
         "opus55": ModelPricing(input: 4.40,  output: 22,     cacheRead: 0.22,   cacheCreation5m: 5.50,    cacheCreation1h: 8.80, webSearchRequestFee: 0.011),
         "opus4":  ModelPricing(input: 16.50, output: 82.50,  cacheRead: 1.65,   cacheCreation5m: 20.625,  cacheCreation1h: 33,   webSearchRequestFee: 0.011),
         "sonnet": ModelPricing(input: 3.30,  output: 16.50,  cacheRead: 0.33,   cacheCreation5m: 4.125,   cacheCreation1h: 6.60, webSearchRequestFee: 0.011),
         "sonnet5": ModelPricing(input: 2.20, output: 11,     cacheRead: 0.22,   cacheCreation5m: 2.75,    cacheCreation1h: 4.40, webSearchRequestFee: 0.011),
+        "sonnet55": ModelPricing(input: 2.20, output: 11,    cacheRead: 0.11,   cacheCreation5m: 2.75,    cacheCreation1h: 4.40, webSearchRequestFee: 0.011),
         "haiku":  ModelPricing(input: 1.10,  output: 5.50,   cacheRead: 0.11,   cacheCreation5m: 1.375,   cacheCreation1h: 2.20, webSearchRequestFee: 0.011),
+        "haiku55": ModelPricing(input: 0.11, output: 0.55,   cacheRead: 0.011,  cacheCreation5m: 0.1375,  cacheCreation1h: 0.22, webSearchRequestFee: 0.011),
+        "haiku55Long": ModelPricing(input: 0.55, output: 2.75, cacheRead: 0.055, cacheCreation5m: 0.6875, cacheCreation1h: 1.10, webSearchRequestFee: 0.011),
         "haiku35": ModelPricing(input: 0.88, output: 4.40,   cacheRead: 0.088,  cacheCreation5m: 1.10,    cacheCreation1h: 1.76, webSearchRequestFee: 0.011),
         "haiku3": ModelPricing(input: 0.275, output: 1.375,  cacheRead: 0.033,  cacheCreation5m: 0.33,    cacheCreation1h: 0.55, webSearchRequestFee: 0.011),
     ]
@@ -134,13 +148,28 @@ private let legacyHaikuMarkers = ["claude-3-haiku", "claude-3-5-haiku"]
 /// rate differences, not dated windows: Anthropic cancelled the 2026-09-01 increase
 /// that would have moved Sonnet 5 onto the standard row. Fable 5.1 keeps Fable 5's
 /// $10/$50 input/output but drops cache reads to $0.25/MTok against Fable 5's $1.00.
-/// Opus 5.5 is $4/$20 (cache reads $0.20) against Opus 5's $5/$25.
+/// Opus 5.5 is $4/$20 (cache reads $0.20) against Opus 5's $5/$25. Sonnet 5.5 keeps
+/// Sonnet 5's $2/$10 but halves cache reads to $0.10; Mythos 5.1 keeps Mythos 5's
+/// $10/$50 with $0.25 cache reads; Haiku 5.5 is $0.10/$0.50 against Haiku 4.5's $1/$5.
+///
+/// Matching is substring, first hit wins, so a more specific marker must precede any
+/// marker it contains: "sonnet-5-5" before "sonnet-5", or Sonnet 5.5 would silently
+/// bill Sonnet 5's cache-read rate.
 private let rateSplitMarkers: [(marker: String, key: String)] = [
+    ("haiku-5-5", "haiku55"),
+    ("sonnet-5-5", "sonnet55"),
+    ("mythos-5-1", "mythos51"),
     ("sonnet-5", "sonnet5"),
     ("claude-3-5-haiku", "haiku35"),
     ("fable-5-1", "fable51"),
     ("opus-5-5", "opus55"),
 ]
+
+/// Haiku 5.5 is the one current model with a prompt-length tier: requests over this
+/// many tokens (input plus cache reads plus cache writes) bill at the `haiku55Long`
+/// row, 5x the base rate. Every other model is flat across its whole window.
+let haiku55LongPromptThreshold = 100_000
+private let promptTieredKeys: [String: String] = ["haiku55": "haiku55Long"]
 
 /// Canonical fingerprint of the dated rate windows in force, hashed into the cache
 /// key. No window is open today. It stays in the key because opening or moving one
@@ -196,11 +225,24 @@ let managedExactKeyPrefix = "@id:"
 /// is the only way to express the documented precedence rule — a contracted
 /// rate for one dated snapshot alongside a different rate for the model in
 /// general — in a table that is otherwise keyed by family.
-func getModelPricing(_ model: String?, table: [String: ModelPricing], on day: String) -> ModelPricing {
+///
+/// `promptTokens` is the size of the request (input plus cache reads plus cache
+/// writes). It only matters for a model with a prompt-length tier (Haiku 5.5 today);
+/// callers without per-message usage leave it at 0 and get the base row.
+func getModelPricing(
+    _ model: String?,
+    table: [String: ModelPricing],
+    on day: String,
+    promptTokens: Int = 0
+) -> ModelPricing {
     if let id = model?.lowercased(), let exact = table[managedExactKeyPrefix + id] {
         return exact
     }
-    return table[pricingKey(model, on: day)] ?? .unknown
+    var key = pricingKey(model, on: day)
+    if promptTokens > haiku55LongPromptThreshold, let long = promptTieredKeys[key] {
+        key = long
+    }
+    return table[key] ?? .unknown
 }
 
 /// Fast-mode billing multiplier. Confirmed against the published pricing page:
@@ -221,7 +263,8 @@ func estimateCostFromTokens(
     on day: String,
     speedMultiplier: Double = 1.0
 ) -> Double {
-    let p = getModelPricing(model, table: table, on: day)
+    let promptTokens = inputTokens + cacheReadTokens + cacheCreation5mTokens + cacheCreation1hTokens
+    let p = getModelPricing(model, table: table, on: day, promptTokens: promptTokens)
     let base = (Double(inputTokens) / 1e6) * p.input
          + (Double(outputTokens) / 1e6) * p.output
          + (Double(cacheReadTokens) / 1e6) * p.cacheRead
@@ -351,6 +394,8 @@ extension PricingTables {
             let family = rateKey(for: modelId)
             if looksLikeBuiltInModelId(modelId), family != getModelFamily(nil) {
                 table[family] = priced
+                // A contracted rate is flat, so it covers the long-prompt tier too.
+                if let long = promptTieredKeys[family] { table[long] = priced }
             }
         }
 

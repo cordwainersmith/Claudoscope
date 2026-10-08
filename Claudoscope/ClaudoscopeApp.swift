@@ -125,7 +125,7 @@ struct ClaudoscopeApp: App {
                 hasUpdate: updateService.updateAvailable != nil,
                 hasCostAlert: costAlertService.hasUnseen,
                 monochrome: store.monochromeMenuBarIcon,
-                waitingCount: store.fleetWaitingCount,
+                pips: store.menuBarPips,
                 waitingEscalated: store.fleetAttentionEscalated,
                 hasFleetWarning: store.fleetHasWarning
             )
@@ -203,17 +203,20 @@ private struct UpdateTriggerView: View {
     }
 }
 
-/// Loads the custom menu bar icon from bundle resources
+/// Menu bar label: the app icon, alert dots, and one pip per live session so
+/// "how many, and does any need me" reads without a number.
 struct MenuBarIcon: View {
     var hasUpdate: Bool = false
     var hasCostAlert: Bool = false
     var monochrome: Bool = false
-    /// Agents waiting on the user; rendered as a small count capsule.
-    var waitingCount: Int = 0
+    /// Live sessions, attention first (see `MenuBarPip.pips(for:)`).
+    var pips: [MenuBarPip] = []
     /// A wait went long or a waiting agent's cache is about to expire.
     var waitingEscalated: Bool = false
     /// A live agent ran with skipped permissions; red dot when no cost alert.
     var hasFleetWarning: Bool = false
+
+    private static let maxPips = 5
 
     var body: some View {
         let resourceName = monochrome ? "menu-bar-icon-mono" : "menu-bar-icon"
@@ -221,34 +224,91 @@ struct MenuBarIcon: View {
            let nsImage = NSImage(contentsOf: url) {
             nsImage.isTemplate = monochrome
             return AnyView(
-                ZStack(alignment: .topTrailing) {
-                    Image(nsImage: nsImage)
-                        .renderingMode(monochrome ? .template : .original)
-                    if hasCostAlert || hasFleetWarning {
-                        Circle()
-                            .fill(.red)
-                            .frame(width: 6, height: 6)
-                            .offset(x: 2, y: -2)
-                    } else if hasUpdate {
-                        Circle()
-                            .fill(.orange)
-                            .frame(width: 6, height: 6)
-                            .offset(x: 2, y: -2)
+                HStack(spacing: 4) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(nsImage: nsImage)
+                            .renderingMode(monochrome ? .template : .original)
+                        if hasCostAlert || hasFleetWarning {
+                            Circle()
+                                .fill(.red)
+                                .frame(width: 6, height: 6)
+                                .offset(x: 2, y: -2)
+                        } else if hasUpdate {
+                            Circle()
+                                .fill(.orange)
+                                .frame(width: 6, height: 6)
+                                .offset(x: 2, y: -2)
+                        }
                     }
-                    if waitingCount > 0 {
-                        Text("\(min(waitingCount, 9))")
-                            .font(.system(size: 8, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 3)
-                            .frame(minWidth: 10, minHeight: 10)
-                            .background(waitingEscalated ? Color.okabeVermillion : Color.okabeOrange)
-                            .clipShape(Capsule())
-                            .offset(x: 3, y: 9)
+                    if !pips.isEmpty {
+                        pipCluster
                     }
                 }
             )
         } else {
             return AnyView(Image(systemName: "chevron.left.forwardslash.chevron.right"))
+        }
+    }
+
+    private var pipCluster: some View {
+        HStack(spacing: 2.5) {
+            ForEach(Array(pips.prefix(Self.maxPips).enumerated()), id: \.offset) { _, pip in
+                pipView(pip)
+            }
+            if pips.count > Self.maxPips {
+                Text("+\(pips.count - Self.maxPips)")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+            }
+        }
+        .padding(.trailing, 1)
+    }
+
+    @ViewBuilder
+    private func pipView(_ pip: MenuBarPip) -> some View {
+        switch pip {
+        case .waiting:
+            Rectangle()
+                .fill(monochrome ? Color.primary : (waitingEscalated ? Color.okabeVermillion : Color.okabeOrange))
+                .frame(width: 5, height: 5)
+                .rotationEffect(.degrees(45))
+                .frame(width: 7, height: 7)
+        case .working:
+            Circle()
+                .fill(monochrome ? Color.primary : Color.okabeBlue)
+                .frame(width: 5, height: 5)
+                .frame(width: 7, height: 7)
+        case .idle:
+            Circle()
+                .strokeBorder(monochrome ? Color.primary.opacity(0.6) : Color.okabeGray, lineWidth: 1)
+                .frame(width: 5, height: 5)
+                .frame(width: 7, height: 7)
+        }
+    }
+}
+
+/// What one live session looks like in the menu bar. Order is the Fleet
+/// attention order: anything waiting on the user first, then working, then idle.
+enum MenuBarPip: Equatable {
+    case waiting, working, idle
+
+    static func pips(for agents: [FleetAgent]) -> [MenuBarPip] {
+        let live = agents.filter { $0.isLive || $0.state == .working }
+        return live.map { agent -> MenuBarPip in
+            switch agent.state {
+            case .blockedOnPermission, .waitingOnUser: return .waiting
+            case .working: return .working
+            case .idle, .failed, .done: return .idle
+            }
+        }
+        .sorted { rank($0) < rank($1) }
+    }
+
+    private static func rank(_ pip: MenuBarPip) -> Int {
+        switch pip {
+        case .waiting: return 0
+        case .working: return 1
+        case .idle: return 2
         }
     }
 }

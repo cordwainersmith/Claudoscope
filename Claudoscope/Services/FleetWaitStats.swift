@@ -45,7 +45,7 @@ enum FleetWaitStats {
     static func coldRestartCost(_ wait: FleetWaitRecord, pricingTable: [String: ModelPricing],
                                 dayKey: String) -> Double {
         guard let tokens = wait.contextTokens, tokens > 0 else { return 0 }
-        let pricing = getModelPricing(wait.model, table: pricingTable, on: dayKey)
+        let pricing = getModelPricing(wait.model, table: pricingTable, on: dayKey, promptTokens: tokens)
         let rate = wait.cacheTtlSeconds == 3600 ? pricing.cacheCreation1h : pricing.cacheCreation5m
         return Double(tokens) / 1_000_000 * rate
     }

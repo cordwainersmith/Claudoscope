@@ -476,3 +476,221 @@ final class PricingFamilyTests: XCTestCase {
         XCTAssertGreaterThan(data.totalCost, 0)
     }
 }
+
+// MARK: - Haiku 5.5, Sonnet 5.5, Mythos 5.1 (2026-10)
+
+extension PricingFamilyTests {
+
+    private var tierDay: String { "2026-10-08" }
+
+    // Haiku 5.5 is $0.10/$0.50 against Haiku 4.5's $1/$5, and is the one current
+    // model with a prompt-length tier: requests over 100K tokens bill 5x. Before
+    // the row existed its id fell to the Haiku 4.5 row, a 10x overcharge.
+
+    func testHaiku55KeepsTheHaikuFamilyLabel() {
+        XCTAssertEqual(getModelFamily("claude-haiku-5-5"), "haiku")
+        XCTAssertEqual(getModelFamily("claude-haiku-5-5-20261001"), "haiku")
+    }
+
+    func testHaiku55SmallPromptBillsAtBaseRow() {
+        let p = getModelPricing("claude-haiku-5-5", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertFalse(p.isUnknown)
+        XCTAssertEqual(p.input, 0.10, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 0.50, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.01, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 0.125, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 0.20, accuracy: 1e-9)
+    }
+
+    func testHaiku55LongPromptBillsAtLongRow() {
+        let p = getModelPricing("claude-haiku-5-5", table: PricingTables.anthropic, on: tierDay, promptTokens: 150_000)
+        XCTAssertEqual(p.input, 0.50, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 2.50, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.05, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 0.625, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 1.00, accuracy: 1e-9)
+    }
+
+    func testHaiku55TierBoundaryIsExclusive() {
+        let at = getModelPricing("claude-haiku-5-5", table: PricingTables.anthropic, on: tierDay, promptTokens: 100_000)
+        XCTAssertEqual(at.input, 0.10, accuracy: 1e-9)
+        let over = getModelPricing("claude-haiku-5-5", table: PricingTables.anthropic, on: tierDay, promptTokens: 100_001)
+        XCTAssertEqual(over.input, 0.50, accuracy: 1e-9)
+    }
+
+    func testPromptSizeDoesNotTierOtherModels() {
+        for model in ["claude-haiku-4-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-fable-5-1"] {
+            let small = getModelPricing(model, table: PricingTables.anthropic, on: tierDay, promptTokens: 1_000)
+            let large = getModelPricing(model, table: PricingTables.anthropic, on: tierDay, promptTokens: 900_000)
+            XCTAssertEqual(small.input, large.input, accuracy: 1e-9, model)
+            XCTAssertEqual(small.cacheRead, large.cacheRead, accuracy: 1e-9, model)
+        }
+    }
+
+    /// The tier is decided from the whole request: cache reads count toward the
+    /// 100K threshold, which is the common agentic shape (small fresh input, huge
+    /// cached prefix).
+    func testHaiku55CostEstimateUsesWholePromptForTier() {
+        // 10K fresh input + 120K cache read: over the threshold, so the long row.
+        let cost = estimateCostFromTokens(
+            model: "claude-haiku-5-5",
+            inputTokens: 10_000,
+            outputTokens: 1_000,
+            cacheReadTokens: 120_000,
+            cacheCreation5mTokens: 0,
+            cacheCreation1hTokens: 0,
+            table: PricingTables.anthropic,
+            on: tierDay
+        )
+        // 10K * $0.50 + 1K * $2.50 + 120K * $0.05, per MTok = 0.005 + 0.0025 + 0.006
+        XCTAssertEqual(cost, 0.0135, accuracy: 1e-9)
+
+        // Same shape under the threshold bills at the base row.
+        let small = estimateCostFromTokens(
+            model: "claude-haiku-5-5",
+            inputTokens: 10_000,
+            outputTokens: 1_000,
+            cacheReadTokens: 50_000,
+            cacheCreation5mTokens: 0,
+            cacheCreation1hTokens: 0,
+            table: PricingTables.anthropic,
+            on: tierDay
+        )
+        // 10K * $0.10 + 1K * $0.50 + 50K * $0.01 = 0.001 + 0.0005 + 0.0005
+        XCTAssertEqual(small, 0.002, accuracy: 1e-9)
+    }
+
+    func testHaiku55VertexRegionalRowsAre1_1x() {
+        let base = getModelPricing("claude-haiku-5-5", table: PricingTables.vertexRegional, on: tierDay)
+        XCTAssertEqual(base.input, 0.11, accuracy: 1e-9)
+        XCTAssertEqual(base.output, 0.55, accuracy: 1e-9)
+        XCTAssertEqual(base.cacheRead, 0.011, accuracy: 1e-9)
+        XCTAssertEqual(base.cacheCreation5m, 0.1375, accuracy: 1e-9)
+        XCTAssertEqual(base.cacheCreation1h, 0.22, accuracy: 1e-9)
+        XCTAssertEqual(base.webSearchRequestFee, 0.011, accuracy: 1e-9)
+
+        let long = getModelPricing("claude-haiku-5-5", table: PricingTables.vertexRegional, on: tierDay, promptTokens: 200_000)
+        XCTAssertEqual(long.input, 0.55, accuracy: 1e-9)
+        XCTAssertEqual(long.output, 2.75, accuracy: 1e-9)
+        XCTAssertEqual(long.cacheRead, 0.055, accuracy: 1e-9)
+        XCTAssertEqual(long.cacheCreation5m, 0.6875, accuracy: 1e-9)
+        XCTAssertEqual(long.cacheCreation1h, 1.10, accuracy: 1e-9)
+    }
+
+    func testHaiku45KeepsItsOwnRate() {
+        let p = getModelPricing("claude-haiku-4-5-20251001", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertEqual(p.input, 1.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 5.0, accuracy: 1e-9)
+    }
+
+    /// End-to-end: two Haiku 5.5 turns, one under and one over the tier, priced
+    /// per message through the parser.
+    func testHaiku55SessionBillsEachTurnAtItsTier() async throws {
+        let parser = SessionParser()
+        func record(_ uuid: String, _ msgId: String, cacheRead: Int) -> String {
+            "{\"type\":\"assistant\",\"uuid\":\"\(uuid)\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-10-08T12:00:00.000Z\",\"message\":{\"role\":\"assistant\",\"id\":\"\(msgId)\",\"stop_reason\":\"end_turn\",\"model\":\"claude-haiku-5-5\",\"usage\":{\"input_tokens\":10000,\"output_tokens\":1000,\"cache_read_input_tokens\":\(cacheRead),\"service_tier\":\"standard\"}}}"
+        }
+        let url = try writeTempFile([
+            record("u1", "m1", cacheRead: 50_000),
+            record("u2", "m2", cacheRead: 120_000),
+        ])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let s = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: PricingTables.anthropic)
+        XCTAssertEqual(s.estimatedCost, 0.002 + 0.0135, accuracy: 1e-9)
+    }
+
+    // Sonnet 5.5 keeps Sonnet 5's $2/$10 but halves cache reads. Before its own
+    // marker existed, "claude-sonnet-5-5" matched the "sonnet-5" substring and
+    // billed Sonnet 5's $0.20 cache reads, 2x.
+
+    func testSonnet55BillsItsOwnCacheReadRate() {
+        let p = getModelPricing("claude-sonnet-5-5", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertFalse(p.isUnknown)
+        XCTAssertEqual(p.input, 2.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.10, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 2.50, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 4.0, accuracy: 1e-9)
+    }
+
+    func testSonnet55VertexRegionalPricing() {
+        let p = getModelPricing("claude-sonnet-5-5", table: PricingTables.vertexRegional, on: tierDay)
+        XCTAssertEqual(p.input, 2.20, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 11.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.11, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 2.75, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 4.40, accuracy: 1e-9)
+    }
+
+    func testSonnet5StillBillsSonnet5Row() {
+        let p = getModelPricing("claude-sonnet-5", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertEqual(p.cacheRead, 0.20, accuracy: 1e-9)
+        let dated = getModelPricing("claude-sonnet-5-20260301", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertEqual(dated.cacheRead, 0.20, accuracy: 1e-9)
+    }
+
+    // Mythos 5.1 keeps Mythos 5's $10/$50 with $0.25 cache reads, the same split
+    // Fable 5.1 made against Fable 5.
+
+    func testMythos51KeepsTheMythosFamilyLabel() {
+        XCTAssertEqual(getModelFamily("claude-mythos-5-1"), "mythos")
+    }
+
+    func testMythos51BillsItsOwnCacheReadRate() {
+        let p = getModelPricing("claude-mythos-5-1", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertFalse(p.isUnknown)
+        XCTAssertEqual(p.input, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 50.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 12.5, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 20.0, accuracy: 1e-9)
+    }
+
+    func testMythos51VertexRegionalPricing() {
+        let p = getModelPricing("claude-mythos-5-1", table: PricingTables.vertexRegional, on: tierDay)
+        XCTAssertEqual(p.input, 11.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 55.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.275, accuracy: 1e-9)
+    }
+
+    func testMythos5KeepsTheStandardCacheReadRate() {
+        let p = getModelPricing("claude-mythos-5", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertEqual(p.cacheRead, 1.0, accuracy: 1e-9)
+    }
+
+    func testFable51UnchangedByNewSplits() {
+        let p = getModelPricing("claude-fable-5-1", table: PricingTables.anthropic, on: tierDay)
+        XCTAssertEqual(p.input, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 50.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.25, accuracy: 1e-9)
+    }
+
+    func testNewRowsExistOnEveryTable() {
+        for (name, table) in [
+            ("anthropic", PricingTables.anthropic),
+            ("vertexGlobal", PricingTables.vertexGlobal),
+            ("vertexRegional", PricingTables.vertexRegional),
+        ] {
+            for key in ["haiku55", "haiku55Long", "sonnet55", "mythos51"] {
+                XCTAssertNotNil(table[key], "\(key) missing from the \(name) table")
+            }
+        }
+    }
+
+    /// A managed contracted rate for Haiku 5.5 is flat, so it must also cover the
+    /// long-prompt tier instead of falling back to list price past 100K.
+    func testManagedHaiku55OverrideCoversLongTier() {
+        let managed = ManagedPricingOverride(
+            multiplier: nil,
+            overrides: ["claude-haiku-5-5": ManagedRateRow(input: 0.08, output: 0.40, cacheRead: 0.008, cacheWrite: 0.10)]
+        )
+        let table = PricingTables.resolvedTable(provider: .anthropic, region: .global, managed: managed)
+        let exact = getModelPricing("claude-haiku-5-5", table: table, on: tierDay, promptTokens: 500_000)
+        XCTAssertEqual(exact.input, 0.08, accuracy: 1e-9)
+        // A dated snapshot has no @id row, so it goes through the family/tier rows.
+        let dated = getModelPricing("claude-haiku-5-5-20261001", table: table, on: tierDay, promptTokens: 500_000)
+        XCTAssertEqual(dated.input, 0.08, accuracy: 1e-9)
+        XCTAssertTrue(dated.isManagedOverride)
+    }
+}

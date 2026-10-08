@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+Requires a one-time full reparse on first launch (parser version 14).
+
+### New Features
+- **Trace tab.** A session viewer tab that lays the whole session out on a time axis: your prompts, how long Claude worked on each, every tool call by category with errors and blocked calls marked, subagents forking off and merging back, context fill with a cut at every compaction, and cumulative cost. Idle stretches over five minutes collapse to a labeled break so a two-day session fits one screen (toggle off for true time). Hover for a readout, click any mark to open it in Chat, drag to measure a range (turns, tool calls, failures, spend), arrow keys step turns.
+- **Replay.** A play button in the Trace tab sweeps a playhead across the session at 60×, 300×, 1200× or fitted to twenty seconds, revealing the lanes as it goes with the current turn, context fill and spend so far in the footer. Space toggles, Escape stops.
+- **Share card.** Export the trace as a 1200×630 PNG (save or copy) with the project name, duration, turns, tool calls, agents, compactions, cost and model family. No transcript text and no agent descriptions go into the image.
+- **Menu bar session pips.** The waiting-count number next to the menu bar icon is replaced by one pip per live session: a blue dot while working, an amber diamond when waiting on you (red once the wait escalates), a hollow ring when idle, attention first. Past five sessions a "+N" takes over. Honors the monochrome icon setting.
+- **Haiku 5.5 pricing.** `claude-haiku-5-5` bills at $0.10/$0.50 per million tokens with $0.01 cache reads. It is the first current model with a prompt-length tier: a request over 100K tokens (input plus cached prefix) bills at $0.50/$2.50 for that message, and the estimator now decides this per message from the actual request size. Before this it was priced as Haiku 4.5, ten times too high on the common tier.
+
+### Fixed
+- **Sonnet 5.5 cache reads halved.** `claude-sonnet-5-5` matched the Sonnet 5 rate row by substring and billed $0.20 per million cached tokens; its own rate is $0.10. Input, output and cache-write rates were already right.
+- **Mythos 5.1 cache reads.** `claude-mythos-5-1` billed Mythos 5's $1.00 cache reads; its own rate is $0.25, the same split Fable 5.1 made against Fable 5.
+- **Rate markers are ordered most-specific first.** A new rate split for a point release (`sonnet-5-5`) can no longer be captured by its parent's marker (`sonnet-5`).
+
 ## [1.3.0]
 Adds a Fleet view: one board for every Claude Code session that is running now or ran in the last 24 hours, across all projects, with an attention queue for the ones waiting on you. Built on the session registry Claude Code writes at `~/.claude/sessions/`, which Claudoscope had never read, so liveness comes from the process itself rather than from how recently a transcript grew. Also catches Claudoscope up with Claude Code 2.1.271 through 2.1.289, including a billing correction for Opus 5.5.
 

@@ -223,6 +223,7 @@ private struct SessionDetailTabView: View {
 
     enum SessionTab: String, CaseIterable {
         case chat = "Chat"
+        case trace = "Trace"
         case files = "Files"
         case context = "Context"
         case agentTree = "Agent Tree"
@@ -231,7 +232,7 @@ private struct SessionDetailTabView: View {
     private var availableTabs: [SessionTab] {
         store.hasSubagentFiles(sessionId: session.id, projectId: session.projectId)
             ? SessionTab.allCases
-            : [.chat, .files, .context]
+            : [.chat, .trace, .files, .context]
     }
 
     /// Computed instead of an onChange reset so switching to a session
@@ -258,7 +259,7 @@ private struct SessionDetailTabView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: CGFloat(availableTabs.count) * 110)
+                .frame(width: CGFloat(availableTabs.count) * 100)
 
                 if let summary {
                     provenanceChips(summary)
@@ -284,6 +285,15 @@ private struct SessionDetailTabView: View {
                     scrollTargetUuid: $chatScrollTargetUuid,
                     onOpenFilesTab: { selectedTab = .files },
                     expandBlockedActions: expandBlocked
+                )
+                .id(session.id)
+            case .trace:
+                SessionTraceView(
+                    session: session,
+                    onJumpToChat: { uuid in
+                        chatScrollTargetUuid = uuid
+                        selectedTab = .chat
+                    }
                 )
                 .id(session.id)
             case .files:
@@ -375,6 +385,8 @@ private struct SessionDetailTabView: View {
         switch requested.tab {
         case "files":
             selectedTab = .files
+        case "trace":
+            selectedTab = .trace
         case "chat:blocked":
             selectedTab = .chat
             expandBlocked = true

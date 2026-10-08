@@ -83,6 +83,10 @@ final class SessionStore {
     var fleetAgents: [FleetAgent] = []
     var attentionQueue: [FleetAgent] = []
     var fleetWaitingCount: Int { attentionQueue.count }
+    /// One pip per live or working agent for the menu bar, attention first.
+    var menuBarPips: [MenuBarPip] {
+        MenuBarPip.pips(for: fleetAgents)
+    }
     /// Some waiting agent waited past `FleetStateEngine.longWait` or is about
     /// to lose its prompt cache. Refreshed on rebuild and by the 15s sweep.
     var fleetAttentionEscalated = false
