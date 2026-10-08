@@ -125,7 +125,7 @@ struct ClaudoscopeApp: App {
                 hasUpdate: updateService.updateAvailable != nil,
                 hasCostAlert: costAlertService.hasUnseen,
                 monochrome: store.monochromeMenuBarIcon,
-                liveCount: store.menuBarLiveCount,
+                liveCount: store.showMenuBarSessionCount ? store.menuBarLiveCount : 0,
                 waitingCount: store.fleetWaitingCount,
                 waitingEscalated: store.fleetAttentionEscalated,
                 hasFleetWarning: store.fleetHasWarning

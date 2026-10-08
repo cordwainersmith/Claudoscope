@@ -259,6 +259,13 @@ final class SessionStore {
         }
     }
 
+    /// Live-session count badge next to the menu bar icon. Off by default.
+    var showMenuBarSessionCount: Bool = false {
+        didSet {
+            UserDefaults.standard.set(showMenuBarSessionCount, forKey: Self.showMenuBarSessionCountKey)
+        }
+    }
+
     var fleetGroupByProject: Bool = false {
         didSet {
             UserDefaults.standard.set(fleetGroupByProject, forKey: Self.fleetGroupByProjectKey)
@@ -266,6 +273,7 @@ final class SessionStore {
     }
 
     private static let monochromeMenuBarIconKey = "monochromeMenuBarIcon"
+    private static let showMenuBarSessionCountKey = "showMenuBarSessionCount"
     private static let fleetGroupByProjectKey = "fleetGroupByProject"
     private static let pricingProviderKey = "pricingProvider"
     private static let pricingRegionKey = "pricingRegion"
@@ -582,6 +590,7 @@ final class SessionStore {
             self.realtimeSecretScanEnabled = defaults.bool(forKey: Self.realtimeSecretScanKey)
         }
         self.monochromeMenuBarIcon = defaults.bool(forKey: Self.monochromeMenuBarIconKey)
+        self.showMenuBarSessionCount = defaults.bool(forKey: Self.showMenuBarSessionCountKey)
         self.fleetGroupByProject = defaults.bool(forKey: Self.fleetGroupByProjectKey)
 
         // Both must be settled before performInitialScan() below: the scan's

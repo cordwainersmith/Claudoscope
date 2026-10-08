@@ -106,6 +106,20 @@ extension SettingsMainPanelView {
                     .foregroundStyle(.secondary)
             }
             .padding(12)
+
+            Divider().padding(.horizontal, 12)
+
+            VStack(alignment: .leading, spacing: 4) {
+                @Bindable var store = store
+                Toggle("Show live session count in the menu bar", isOn: $store.showMenuBarSessionCount)
+                    .toggleStyle(.checkbox)
+                    .font(Typography.body)
+
+                Text("A badge next to the icon with the number of running sessions. It turns amber when one is waiting on you and red when a wait has gone long.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
         }
     }
 
