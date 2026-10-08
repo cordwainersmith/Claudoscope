@@ -125,7 +125,8 @@ struct ClaudoscopeApp: App {
                 hasUpdate: updateService.updateAvailable != nil,
                 hasCostAlert: costAlertService.hasUnseen,
                 monochrome: store.monochromeMenuBarIcon,
-                pips: store.menuBarPips,
+                liveCount: store.menuBarLiveCount,
+                waitingCount: store.fleetWaitingCount,
                 waitingEscalated: store.fleetAttentionEscalated,
                 hasFleetWarning: store.fleetHasWarning
             )
@@ -203,19 +204,20 @@ private struct UpdateTriggerView: View {
     }
 }
 
-/// Menu bar label: the app icon, alert dots, and one pip per live session so
-/// "how many, and does any need me" reads without a number.
+/// Menu bar label: the app icon, alert dots, and a count of live sessions.
 ///
 /// MenuBarExtra renders only Text and Image in its label; shapes are dropped
-/// silently (the old count's capsule never drew). So the whole label is
+/// silently (the 1.3.0 count's capsule never drew). So the whole label is
 /// composed with ImageRenderer into one NSImage and shown as an Image.
 struct MenuBarIcon: View {
     var hasUpdate: Bool = false
     var hasCostAlert: Bool = false
     var monochrome: Bool = false
-    /// Live sessions, attention first (see `MenuBarPip.pips(for:)`).
-    var pips: [MenuBarPip] = []
-    /// A wait went long or a waiting agent's cache is about to expire.
+    /// Sessions with a live process or a working state.
+    var liveCount: Int = 0
+    /// How many of those are waiting on the user; tints the badge amber.
+    var waitingCount: Int = 0
+    /// A wait went long or a waiting agent's cache is about to expire; red badge.
     var waitingEscalated: Bool = false
     /// A live agent ran with skipped permissions; red dot when no cost alert.
     var hasFleetWarning: Bool = false
@@ -223,7 +225,8 @@ struct MenuBarIcon: View {
     var body: some View {
         let key = MenuBarLabelKey(
             hasUpdate: hasUpdate, hasCostAlert: hasCostAlert, monochrome: monochrome,
-            pips: pips, waitingEscalated: waitingEscalated, hasFleetWarning: hasFleetWarning
+            liveCount: liveCount, waitingCount: waitingCount,
+            waitingEscalated: waitingEscalated, hasFleetWarning: hasFleetWarning
         )
         if let image = MenuBarLabelRenderer.image(for: key) {
             Image(nsImage: image)
@@ -238,7 +241,8 @@ struct MenuBarLabelKey: Hashable {
     let hasUpdate: Bool
     let hasCostAlert: Bool
     let monochrome: Bool
-    let pips: [MenuBarPip]
+    let liveCount: Int
+    let waitingCount: Int
     let waitingEscalated: Bool
     let hasFleetWarning: Bool
 }
@@ -262,20 +266,19 @@ enum MenuBarLabelRenderer {
     }
 }
 
-/// The label as drawn: icon with alert dot, then the pip cluster.
+/// The label as drawn: icon with alert dot, then the live-session badge.
 struct MenuBarLabelContent: View {
     let key: MenuBarLabelKey
     let base: NSImage
 
-    private static let maxPips = 5
-
-    /// Template images must be drawn in solid black so the system tints them.
-    /// The color label has no appearance to adapt to, so its text is a mid
-    /// gray that reads on both a light and a dark menu bar.
-    private var ink: Color { key.monochrome ? .black : Color(red: 0.56, green: 0.56, blue: 0.58) }
+    private var badgeTint: Color {
+        if key.waitingEscalated { return .okabeVermillion }
+        if key.waitingCount > 0 { return .okabeOrange }
+        return .okabeBlue
+    }
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3) {
             ZStack(alignment: .topTrailing) {
                 Image(nsImage: base)
                     .renderingMode(.original)
@@ -291,68 +294,28 @@ struct MenuBarLabelContent: View {
                         .offset(x: 2, y: -2)
                 }
             }
-            if !key.pips.isEmpty {
-                HStack(spacing: 2.5) {
-                    ForEach(Array(key.pips.prefix(Self.maxPips).enumerated()), id: \.offset) { _, pip in
-                        pipView(pip)
-                    }
-                    if key.pips.count > Self.maxPips {
-                        Text("+\(key.pips.count - Self.maxPips)")
-                            .font(.system(size: 9, weight: .semibold, design: .rounded))
-                            .foregroundStyle(ink)
-                    }
-                }
-                .padding(.trailing, 1)
+            if key.liveCount > 0 {
+                badge
             }
         }
         .padding(.trailing, 2)
     }
 
+    /// Template images must be drawn in solid black so the system tints them,
+    /// so monochrome gets a bare bold number instead of a filled capsule.
     @ViewBuilder
-    private func pipView(_ pip: MenuBarPip) -> some View {
-        switch pip {
-        case .waiting:
-            Rectangle()
-                .fill(key.monochrome ? Color.black : (key.waitingEscalated ? Color.okabeVermillion : Color.okabeOrange))
-                .frame(width: 5, height: 5)
-                .rotationEffect(.degrees(45))
-                .frame(width: 7, height: 7)
-        case .working:
-            Circle()
-                .fill(key.monochrome ? Color.black : Color.okabeBlue)
-                .frame(width: 5, height: 5)
-                .frame(width: 7, height: 7)
-        case .idle:
-            Circle()
-                .strokeBorder(key.monochrome ? Color.black.opacity(0.6) : Color.okabeGray, lineWidth: 1)
-                .frame(width: 5, height: 5)
-                .frame(width: 7, height: 7)
-        }
-    }
-}
-
-/// What one live session looks like in the menu bar. Order is the Fleet
-/// attention order: anything waiting on the user first, then working, then idle.
-enum MenuBarPip: Hashable {
-    case waiting, working, idle
-
-    static func pips(for agents: [FleetAgent]) -> [MenuBarPip] {
-        let live = agents.filter { $0.isLive || $0.state == .working }
-        return live.map { agent -> MenuBarPip in
-            switch agent.state {
-            case .blockedOnPermission, .waitingOnUser: return .waiting
-            case .working: return .working
-            case .idle, .failed, .done: return .idle
-            }
-        }
-        .sorted { rank($0) < rank($1) }
-    }
-
-    private static func rank(_ pip: MenuBarPip) -> Int {
-        switch pip {
-        case .waiting: return 0
-        case .working: return 1
-        case .idle: return 2
+    private var badge: some View {
+        let text = Text("\(min(key.liveCount, 99))")
+            .font(.system(size: 11, weight: .bold, design: .rounded))
+            .monospacedDigit()
+        if key.monochrome {
+            text.foregroundStyle(.black)
+        } else {
+            text
+                .foregroundStyle(.white)
+                .padding(.horizontal, 5)
+                .frame(minWidth: 17, minHeight: 15)
+                .background(badgeTint, in: Capsule())
         }
     }
 }

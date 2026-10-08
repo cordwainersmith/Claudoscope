@@ -197,31 +197,4 @@ final class SessionTraceTests: XCTestCase {
         ]))
         XCTAssertNil(SessionTrace.build(for: s, blockedToolUseIds: [], pricingTable: PricingTables.anthropic))
     }
-
-    // MARK: - Menu bar pips
-
-    func testMenuBarPipsOrderAttentionFirst() {
-        func agent(_ state: FleetState, live: Bool = true) -> FleetAgent {
-            let summary = SessionSummary(
-                id: UUID().uuidString, projectId: "-p", slug: nil, title: "t",
-                firstTimestamp: "2026-10-08T10:00:00.000Z", lastTimestamp: "2026-10-08T10:00:00.000Z",
-                messageCount: 1, primaryModel: nil,
-                totalInputTokens: 0, totalOutputTokens: 0, totalCacheReadTokens: 0,
-                totalCacheCreationTokens: 0, totalCacheCreation5mTokens: 0,
-                totalCacheCreation1hTokens: 0, compactionCount: 0, estimatedCost: 0,
-                hasError: false, modelBreakdown: [], toolCallCount: 0,
-                observability: .empty, isSubagent: false, dailyContributions: []
-            )
-            return FleetAgent(summary: summary, registry: nil, state: state,
-                              since: Date(), isLive: live, isBackgroundJob: false, isBypass: false)
-        }
-        let pips = MenuBarPip.pips(for: [
-            agent(.working),
-            agent(.idle),
-            agent(.waitingOnUser(reason: "plan")),
-            agent(.done, live: false),
-            agent(.working, live: false),
-        ])
-        XCTAssertEqual(pips, [.waiting, .working, .working, .idle])
-    }
 }
