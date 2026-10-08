@@ -246,6 +246,10 @@ The chat view renders the complete conversation thread with:
 - In-conversation search across messages, thinking blocks, tool inputs, and tool results, with auto-expansion of matching collapsed blocks
 - A **Focus** toggle that hides thinking blocks and tool/MCP activity so you can read just the conversation. Filtering is display-only, so tokens and cost stay computed on the full transcript.
 
+**Trace tab.** Lays the whole session out on a time axis: your prompts, how long Claude worked on each, every tool call by category with errors and blocked calls marked, subagents forking off and merging back, context fill with a cut at every compaction, and cumulative cost. Idle stretches over five minutes collapse to a labeled break so a two-day session fits one screen. Hover for a readout, click any mark to open it in Chat, drag to measure a range, and press Replay to sweep a playhead across the session at 60x to 1200x. A Share button exports the trace as a PNG card with no transcript text in it.
+
+![Trace tab](screenshots/trace-view.gif)
+
 **Files tab.** Every session also has a Files tab listing each file Claude edited or wrote, with a chronological diff for every individual edit reconstructed from the transcript. Edits made by subagents are merged in with a badge and anchored to the call that spawned them. Each entry offers open, reveal in Finder, copy patch, and jump to the matching point in the chat, and files that changed on disk after the session touched them are flagged.
 
 **Context tab.** A per-turn chart of how full the context window actually got, plotted against the ceiling of the model that turn ran on, with every compaction event marked on the timeline. It reports peak context, peak utilization (highlighted past 80%, where auto-compact becomes likely to fire mid-task), and the compaction count, so you can see whether a session was running out of room and whether compaction bought it any. Sessions that mix model generations across the Claude 4.7 tokenizer change carry a caveat, since later models produce roughly 30% more tokens for the same text and turn-to-turn comparisons across that boundary are not like-for-like.
