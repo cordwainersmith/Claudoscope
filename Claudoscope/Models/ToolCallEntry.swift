@@ -28,12 +28,14 @@ struct ToolAnalytics: Sendable {
     )
 }
 
-/// Extract tool calls from a parsed session
-func extractToolCalls(from session: ParsedSession) -> [ToolCallEntry] {
+/// Extract tool calls from a parsed session. `ownOnly` leaves out a continued
+/// session's copies of its parent, for the Tools view; the chat shows the
+/// copies, so its blocked-call markers keep the default.
+func extractToolCalls(from session: ParsedSession, ownOnly: Bool = false) -> [ToolCallEntry] {
     var entries: [ToolCallEntry] = []
     var turnIndex = 0
 
-    for record in session.records {
+    for record in session.records where !(ownOnly && session.isCopiedFromParent(record)) {
         guard record.type == .assistant else { continue }
         turnIndex += 1
 

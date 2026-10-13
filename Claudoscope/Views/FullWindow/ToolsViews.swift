@@ -134,7 +134,7 @@ struct ToolsMainPanelView: View {
     @State private var expandedEntries: Set<String> = []
 
     private var entries: [ToolCallEntry] {
-        extractToolCalls(from: session)
+        extractToolCalls(from: session, ownOnly: true)
     }
 
     private var analytics: ToolAnalytics {

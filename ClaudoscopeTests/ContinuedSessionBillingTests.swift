@@ -152,6 +152,36 @@ final class ContinuedSessionBillingTests: XCTestCase {
         XCTAssertEqual(session.metadata.firstTimestamp, t2)
     }
 
+    func testTraceSkipsCopiesButIndexesTheChatsRecords() async throws {
+        let (parent, job) = try writePair()
+        let session = try await SessionParser().parse(url: job, sessionId: "child-id", continuationParent: parent)
+
+        XCTAssertEqual(session.copiedRecordUUIDs, ["u1", "a1"])
+        XCTAssertEqual(session.ownRecords.compactMap(\.uuid), ["u2", "a2"])
+
+        let trace = try XCTUnwrap(SessionTrace.build(for: session, blockedToolUseIds: [], pricingTable: table))
+        XCTAssertEqual(trace.userTurns.count, 1)
+        XCTAssertEqual(trace.costPoints.count, 1)
+        XCTAssertEqual(trace.userTurns.first?.recordIndex, session.records.firstIndex { $0.uuid == "u2" },
+                       "trace marks still index the full record list the chat renders")
+    }
+
+    func testToolsSkipCopiedCallsWhileTheChatKeepsThem() async throws {
+        func call(_ session: String) -> String {
+            """
+            {"type":"assistant","uuid":"a1","sessionId":"\(session)","timestamp":"\(t1)","message":{"role":"assistant","id":"msg_A","model":"claude-opus-4-5-20250120","stop_reason":"tool_use","usage":{"input_tokens":100,"output_tokens":200},"content":[{"type":"tool_use","id":"toolu_A","name":"Bash","input":{"command":"ls"}}]}}
+            """
+        }
+        let parent = try write("parent-id", [user("u1", "parent-id", at: t0), call("parent-id")])
+        let job = try write("child-id", [user("u1", "child-id", at: t0), call("child-id")] + jobOwnLines.dropFirst())
+        let session = try await SessionParser().parse(url: job, sessionId: "child-id", continuationParent: parent)
+
+        XCTAssertEqual(extractToolCalls(from: session).map(\.id), ["toolu_A"],
+                       "the chat's blocked-call markers still cover the copied history")
+        XCTAssertTrue(extractToolCalls(from: session, ownOnly: true).isEmpty,
+                      "the Tools view lists only the job's own calls")
+    }
+
     // MARK: - Cache fingerprint and reconcile
 
     func testReconcileParsesJobAgainstParentAndRereadsItWhenParentGoes() async throws {

@@ -301,6 +301,7 @@ actor SessionParser {
         // A continued session's copies of its parent stay in `records` for the
         // chat but are left out of every figure below.
         let copiedFromParent = continuationParentUUIDs(continuationParent, for: url) ?? []
+        var copiedInRecords = Set<String>()
 
         // Phase 3: replay the buffered records using the original accumulation logic.
         for (idx, record) in bufferedRecords.enumerated() {
@@ -328,6 +329,7 @@ actor SessionParser {
             if record.isVisibleInTranscriptOnly == true { continue }
 
             let isOwn = !(record.uuid.map(copiedFromParent.contains) ?? false)
+            if !isOwn, let uuid = record.uuid { copiedInRecords.insert(uuid) }
 
             // Capture slug — keep the latest non-empty one. Claude Code rewrites the
             // random initial slug to a meaningful one as work progresses (or when the
@@ -466,7 +468,8 @@ actor SessionParser {
             toolResultMap: toolResultMap,
             metadata: metadata,
             parentSessionId: parentSessionId,
-            isSubagent: isSubagentFile
+            isSubagent: isSubagentFile,
+            copiedRecordUUIDs: copiedInRecords
         )
     }
 
@@ -484,7 +487,8 @@ actor SessionParser {
             toolResultMap: parsed.toolResultMap,
             metadata: parsed.metadata,
             parentSessionId: parsed.parentSessionId,
-            isSubagent: parsed.isSubagent
+            isSubagent: parsed.isSubagent,
+            copiedRecordUUIDs: parsed.copiedRecordUUIDs
         )
     }
 

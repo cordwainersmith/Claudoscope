@@ -11,8 +11,12 @@ struct ParsedSession: Sendable {
     let metadata: SessionMetadata
     let parentSessionId: String?
     let isSubagent: Bool
+    /// uuids of records a continued session's file copied in from its parent
+    /// transcript. They render in the chat but belong to the parent, so views
+    /// that compute this session's own figures skip them.
+    let copiedRecordUUIDs: Set<String>
 
-    init(id: String, projectId: String, slug: String?, records: [ParsedRecordRaw], toolResultMap: [String: ToolResultEntry], metadata: SessionMetadata, parentSessionId: String?, isSubagent: Bool = false) {
+    init(id: String, projectId: String, slug: String?, records: [ParsedRecordRaw], toolResultMap: [String: ToolResultEntry], metadata: SessionMetadata, parentSessionId: String?, isSubagent: Bool = false, copiedRecordUUIDs: Set<String> = []) {
         self.id = id
         self.projectId = projectId
         self.slug = slug
@@ -21,6 +25,17 @@ struct ParsedSession: Sendable {
         self.metadata = metadata
         self.parentSessionId = parentSessionId
         self.isSubagent = isSubagent
+        self.copiedRecordUUIDs = copiedRecordUUIDs
+    }
+
+    /// Whether `record` is one of the parent's copies.
+    func isCopiedFromParent(_ record: ParsedRecordRaw) -> Bool {
+        record.uuid.map(copiedRecordUUIDs.contains) ?? false
+    }
+
+    /// `records` without the parent's copies.
+    var ownRecords: [ParsedRecordRaw] {
+        copiedRecordUUIDs.isEmpty ? records : records.filter { !isCopiedFromParent($0) }
     }
 }
 

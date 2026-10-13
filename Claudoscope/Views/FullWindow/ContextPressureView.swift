@@ -12,7 +12,7 @@ struct ContextPressureView: View {
     /// The series is computed once here rather than in a body-level computed
     /// property: it walks every record, and a view body re-evaluates constantly.
     init(session: ParsedSession) {
-        let points = ContextPressurePoint.series(for: session.records)
+        let points = ContextPressurePoint.series(for: session.ownRecords)
         self.points = points
         self.compactionTimestamps = session.metadata.compactionEvents.compactMap(\.timestamp)
         self.mixedTokenizers = Self.hasMixedTokenizers(session.metadata.models)

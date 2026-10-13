@@ -131,7 +131,9 @@ struct SessionTrace: Sendable, Equatable {
             openTurn = nil
         }
 
-        for (index, record) in records.enumerated() {
+        // A continued session's copies of its parent are drawn in the parent's
+        // trace, not here; indices stay into `records` for the chat anchors.
+        for (index, record) in records.enumerated() where !session.isCopiedFromParent(record) {
             guard let ts = record.timestamp, let time = ISO8601.parse(ts) else { continue }
             switch record.type {
             case .user:
@@ -208,7 +210,7 @@ struct SessionTrace: Sendable, Equatable {
         }
         closeTurn()
 
-        let contextPoints = ContextPressurePoint.series(for: records).compactMap { point -> ContextPoint? in
+        let contextPoints = ContextPressurePoint.series(for: session.ownRecords).compactMap { point -> ContextPoint? in
             guard let time = ISO8601.parse(point.timestamp) else { return nil }
             return ContextPoint(time: time, utilization: point.utilization, tokens: point.contextTokens)
         }
