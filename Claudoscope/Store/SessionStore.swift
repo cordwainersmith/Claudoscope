@@ -321,6 +321,13 @@ final class SessionStore {
     /// before recomputing global keys so a straggler batch upsert can never
     /// land after a global-key wipe and resurrect stale-priced rows.
     @ObservationIgnored private var scanTask: Task<Void, Never>?
+    /// Continued sessions (a conversation handed off to a background job):
+    /// job session id → parent transcript, from the parents'
+    /// `continuedInSessionId`. Feeds the parser and the cache fingerprints.
+    @ObservationIgnored private var continuationParents: [String: URL] = [:]
+    /// Job id → memo key of the parent link it was last re-read for (see
+    /// `ContinuationEngine.needsReread`), so an unreadable parent can't loop.
+    @ObservationIgnored private var continuationRereads: [String: String] = [:]
     private let watcher: ClaudeFileWatcher
     private let plansService: PlansService
     private let tasksJobsService: TasksJobsService
@@ -842,6 +849,9 @@ final class SessionStore {
                     self.isReconciling = true
                     self.projects = hydratedProjects
                     self.sessionsByProject = grouped
+                    self.continuationParents = ContinuationEngine.parents(
+                        in: grouped, transcriptURL: self.transcriptURL(projectId:sessionId:)
+                    )
                     self.isLoading = false
                     self.rebuildFleet()
                     self.recomputeAnalytics()
@@ -867,6 +877,7 @@ final class SessionStore {
         let reconcileStart = Date()
         let liveKeys = await scanner.reconcile(
             store: summaryStore,
+            continuationParents: continuationParents,
             onProgress: { [weak self] processed, total in
                 self?.scanSessionsProcessed = processed
                 self?.scanSessionsTotal = total
@@ -935,25 +946,8 @@ final class SessionStore {
             let sessionId = url.deletingPathExtension().lastPathComponent
             let projectId = Self.projectId(for: url)
 
-            // Invalidate cache
-            await cache.invalidate(sessionId)
-
-            // Fingerprint BEFORE parsing: bytes appended mid-parse would
-            // otherwise be recorded as already cached. A pre-parse identity is
-            // at worst stale, which self-heals on the next reconcile.
-            let identity = SessionSummaryStore.statIdentity(for: url)
-
             do {
-                let summary = try await parser.parseMetadata(
-                    url: url,
-                    sessionId: sessionId,
-                    pricingTable: pricingTable
-                )
-
-                // applySummary re-reads state after the await so concurrent
-                // handlers (or a rescan) that completed during the suspension
-                // don't get clobbered.
-                self.applySummary(summary, projectId: projectId)
+                let (summary, identity) = try await parseAndApply(url: url, sessionId: sessionId, projectId: projectId)
 
                 // Give the notification service the session title (subagents
                 // skipped inside) so "your turn" and block banners can show it.
@@ -987,22 +981,7 @@ final class SessionStore {
                     await self.recomputeDataCoverage()
                 }
 
-                // Write-through to the summary cache. Failures are non-fatal:
-                // memory stays authoritative and the next reconcile heals.
-                if let store = summaryStore, let identity {
-                    do {
-                        let record = try SessionSummaryRecord.make(
-                            summary: summary,
-                            filePath: url.path,
-                            projectDir: projectId,
-                            identity: identity
-                        )
-                        try await store.upsert([record])
-                    } catch {
-                        NSLog("[Claudoscope] Watcher: cache upsert failed for %@: %@",
-                              sessionId, error.localizedDescription)
-                    }
-                }
+                await writeThrough(summary, url: url, projectId: projectId, identity: identity)
             } catch {
                 NSLog("[Claudoscope] Watcher: failed to parse session %@ in project %@: %@",
                       sessionId, projectId, error.localizedDescription)
@@ -1082,18 +1061,127 @@ final class SessionStore {
         return url.deletingLastPathComponent().lastPathComponent
     }
 
+    /// Parses one transcript, against its parent when it is a continued
+    /// session, and applies the summary. Returns the pre-parse fingerprint for
+    /// `writeThrough`.
+    private func parseAndApply(
+        url: URL, sessionId: String, projectId: String
+    ) async throws -> (summary: SessionSummary, identity: SessionSummaryStore.FileIdentity?) {
+        await cache.invalidate(sessionId)
+        let parent = continuationParents[sessionId]
+        // Fingerprint BEFORE parsing: bytes appended mid-parse would
+        // otherwise be recorded as already cached. A pre-parse identity is
+        // at worst stale, which self-heals on the next reconcile.
+        let identity = SessionSummaryStore.statIdentity(for: url, continuationParent: parent)
+        let summary = try await parser.parseMetadata(
+            url: url, sessionId: sessionId, pricingTable: pricingTable, continuationParent: parent
+        )
+        // applySummary re-reads state after the await so concurrent
+        // handlers (or a rescan) that completed during the suspension
+        // don't get clobbered.
+        applySummary(summary, projectId: projectId)
+        return (summary, identity)
+    }
+
+    /// Write-through to the summary cache. Failures are non-fatal: memory
+    /// stays authoritative and the next reconcile heals.
+    private func writeThrough(
+        _ summary: SessionSummary, url: URL, projectId: String, identity: SessionSummaryStore.FileIdentity?
+    ) async {
+        guard let store = summaryStore, let identity else { return }
+        do {
+            let record = try SessionSummaryRecord.make(
+                summary: summary,
+                filePath: url.path,
+                projectDir: projectId,
+                identity: identity
+            )
+            try await store.upsert([record])
+        } catch {
+            NSLog("[Claudoscope] SummaryCache: upsert failed for %@: %@",
+                  summary.id, error.localizedDescription)
+        }
+    }
+
+    /// A session's main transcript: `~/.claude/projects/<projectId>/<sessionId>.jsonl`.
+    private func transcriptURL(projectId: String, sessionId: String) -> URL {
+        claudeDir.appendingPathComponent("projects")
+            .appendingPathComponent(projectId)
+            .appendingPathComponent("\(sessionId).jsonl")
+    }
+
+    /// Keeps `continuationParents` in step with a summary that was applied
+    /// (`current`) or removed (`current == nil`), then re-reads any continued
+    /// session whose parent link changed or that was parsed against the wrong
+    /// parent (a reconcile can parse a job before it has seen the parent).
+    private func noteContinuation(previous: SessionSummary?, current: SessionSummary?, projectId: String) {
+        let oldJob = previous?.continuedInSessionId
+        let newJob = current?.continuedInSessionId
+        if let oldJob, oldJob != newJob {
+            continuationParents[oldJob] = nil
+            // The memo guards one link; once that link is gone, a parent that
+            // comes back gets a fresh try.
+            continuationRereads[oldJob] = nil
+            rereadIfContinuationStale(jobId: oldJob)
+        }
+        if let current, let newJob {
+            continuationParents[newJob] = transcriptURL(projectId: projectId, sessionId: current.id)
+            rereadIfContinuationStale(jobId: newJob)
+        }
+        if let current {
+            rereadIfContinuationStale(current, projectId: projectId)
+        }
+    }
+
+    /// Looks the job up by id (it can live in any project) and re-reads it if
+    /// it is stale. A job not loaded yet is checked when it is applied.
+    private func rereadIfContinuationStale(jobId: String) {
+        for (projectId, sessions) in sessionsByProject {
+            if let job = sessions.first(where: { $0.id == jobId }) {
+                rereadIfContinuationStale(job, projectId: projectId)
+                return
+            }
+        }
+    }
+
+    /// Re-reads `job` against its current parent link when
+    /// `ContinuationEngine.needsReread` says it is stale, recording the attempt.
+    private func rereadIfContinuationStale(_ job: SessionSummary, projectId: String) {
+        let linked = continuationParents[job.id]?.deletingPathExtension().lastPathComponent
+        guard ContinuationEngine.needsReread(
+            job, linkedParentId: linked, lastAttempt: continuationRereads[job.id]
+        ) else { return }
+        continuationRereads[job.id] = ContinuationEngine.attemptKey(linked)
+        let url = transcriptURL(projectId: projectId, sessionId: job.id)
+        Task {
+            do {
+                let (summary, identity) = try await self.parseAndApply(
+                    url: url, sessionId: job.id, projectId: projectId
+                )
+                await self.writeThrough(summary, url: url, projectId: projectId, identity: identity)
+                self.scheduleDerivedRefresh()
+            } catch {
+                NSLog("[Claudoscope] Continuation: failed to re-read %@: %@",
+                      job.id, error.localizedDescription)
+            }
+        }
+    }
+
     /// Insert-or-replace one summary in the in-memory index, creating its
     /// Project entry when needed. Shared by the watcher handler and the
     /// reconcile delta application; reads current state at call time, so it
     /// is safe after suspensions.
     private func applySummary(_ summary: SessionSummary, projectId: String) {
         var sessions = sessionsByProject[projectId] ?? []
+        var previous: SessionSummary?
         if let idx = sessions.firstIndex(where: { $0.id == summary.id }) {
+            previous = sessions[idx]
             sessions[idx] = summary
         } else {
             sessions.insert(summary, at: 0)
         }
         sessionsByProject[projectId] = sessions
+        noteContinuation(previous: previous, current: summary, projectId: projectId)
 
         if !projects.contains(where: { $0.id == projectId }) {
             let project = Project(
@@ -1111,6 +1199,7 @@ final class SessionStore {
     /// entry when its last session goes.
     private func removeSummary(projectId: String, sessionId: String) {
         guard var sessions = sessionsByProject[projectId] else { return }
+        let removed = sessions.first { $0.id == sessionId }
         sessions.removeAll { $0.id == sessionId }
         if sessions.isEmpty {
             sessionsByProject.removeValue(forKey: projectId)
@@ -1118,6 +1207,7 @@ final class SessionStore {
         } else {
             sessionsByProject[projectId] = sessions
         }
+        noteContinuation(previous: removed, current: nil, projectId: projectId)
     }
 
     private let deltaTracker = DeltaTracker()
@@ -1507,7 +1597,10 @@ final class SessionStore {
         }
 
         do {
-            let parsed = try await parser.parse(url: fileURL, sessionId: parseSessionId)
+            let parsed = try await parser.parse(
+                url: fileURL, sessionId: parseSessionId,
+                continuationParent: subagentFileName == nil ? continuationParents[id] : nil
+            )
             let session = if subagentFileName != nil {
                 ParsedSession(
                     id: parsed.id,

@@ -163,7 +163,9 @@ actor CoworkService {
                 gitBranch: s.gitBranch,
                 latestTurn: s.latestTurn,
                 blockedActionCount: s.blockedActionCount,
-                changedFileCount: s.changedFileCount
+                changedFileCount: s.changedFileCount,
+                continuedInSessionId: s.continuedInSessionId,
+                continuedFromSessionId: s.continuedFromSessionId
             )
             return (parsed, summary)
         } catch {

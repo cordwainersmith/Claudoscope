@@ -24,9 +24,10 @@ final class SessionSummaryStore: Sendable {
 
     /// On-disk fingerprint a cached row must match exactly to stay valid.
     /// Parent fields apply only to context-fork subagent files (acompact /
-    /// aside), whose parse output also depends on the parent transcript;
-    /// nil for everything else. Always compared with Swift ==, never in SQL,
-    /// so nil parent == nil parent matches and NULL semantics can't bite.
+    /// aside) and continued sessions, whose parse output also depends on the
+    /// parent transcript; nil for everything else. Always compared with
+    /// Swift ==, never in SQL, so nil parent == nil parent matches and NULL
+    /// semantics can't bite.
     struct FileIdentity: Equatable, Sendable {
         let size: Int64
         let mtime: Double
@@ -41,15 +42,17 @@ final class SessionSummaryStore: Sendable {
     /// snapshot instead, so a context-fork pair is fingerprinted from one
     /// consistent directory listing. Returns nil when the file can't be
     /// statted (vanished between the event and the handler).
-    static func statIdentity(for url: URL) -> FileIdentity? {
+    /// `continuationParent` is the parent transcript of a continued session.
+    static func statIdentity(for url: URL, continuationParent: URL? = nil) -> FileIdentity? {
         let fm = FileManager.default
         guard let attrs = try? fm.attributesOfItem(atPath: url.path),
               let mdate = attrs[.modificationDate] as? Date,
               let size = attrs[.size] as? Int64 else { return nil }
         var parentSize: Int64?
         var parentMtime: Double?
-        if SessionParser.isContextForkSubagentFile(url) {
-            let parentPath = SessionParser.parentTranscriptURL(forSubagentFile: url).path
+        let parentURL = SessionParser.isContextForkSubagentFile(url)
+            ? SessionParser.parentTranscriptURL(forSubagentFile: url) : continuationParent
+        if let parentPath = parentURL?.path {
             if let pAttrs = try? fm.attributesOfItem(atPath: parentPath),
                let pDate = pAttrs[.modificationDate] as? Date,
                let pSize = pAttrs[.size] as? Int64 {

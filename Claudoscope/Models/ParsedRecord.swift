@@ -125,6 +125,10 @@ struct ParsedRecordRaw: Decodable, Sendable {
     // "bg" for a background session. Single-valued per session.
     let sessionKind: String?
 
+    // type:"continued-in" (2.1.296): the session this transcript handed its
+    // conversation to when it moved into a background job.
+    let continuedInSessionId: String?
+
     // Permission mode and git branch, stamped on type:"permission-mode" records
     // and on human user records. Both change mid-session (bypass then plan, a
     // branch switch), so the parser keeps last-wins plus an ever-bypassed flag.
@@ -182,6 +186,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         attributionPlugin = try container.decodeIfPresent(String.self, forKey: .attributionPlugin)
         toolDenialKind = try container.decodeIfPresent(String.self, forKey: .toolDenialKind)
         sessionKind = try container.decodeIfPresent(String.self, forKey: .sessionKind)
+        continuedInSessionId = try container.decodeIfPresent(String.self, forKey: .continuedInSessionId)
         permissionMode = try container.decodeIfPresent(String.self, forKey: .permissionMode)
         gitBranch = try container.decodeIfPresent(String.self, forKey: .gitBranch)
         if mode == .full {
@@ -207,7 +212,7 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case hookCount, hookInfos, hookErrors, preventedContinuation, attachment
         case attributionAgent, attributionSkill, attributionMcpServer, attributionMcpTool
         case attributionPlugin, toolDenialKind
-        case sessionKind
+        case sessionKind, continuedInSessionId
         case permissionMode, gitBranch
     }
 }

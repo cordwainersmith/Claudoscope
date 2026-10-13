@@ -75,7 +75,9 @@ actor SessionParser {
     ///     cost partition.
     /// 14: prompt-length pricing tier (Haiku 5.5 over 100K tokens) and the
     ///     Sonnet 5.5 / Mythos 5.1 rate splits.
-    static let parserVersion: Int = 14
+    /// 15: a continued session's copies of its parent transcript are left out
+    ///     of its figures; continuedInSessionId / continuedFromSessionId.
+    static let parserVersion: Int = 15
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -94,6 +96,11 @@ actor SessionParser {
     /// their copied usage blocks aren't billed twice.
     private var parentMsgIdCache: [String: (mtime: Date, ids: Set<String>)] = [:]
     private static let parentMsgIdCacheLimit = 16
+
+    /// Every record uuid of a continued session's parent transcript, keyed by
+    /// path and validated by mtime. See `continuationParentUUIDs`.
+    private var continuationUUIDCache: [String: (mtime: Date, uuids: Set<String>)] = [:]
+    private static let continuationUUIDCacheLimit = 16
 
     /// Collects every `message.id` whose record carries `stop_reason`, used to
     /// distinguish ordinary streaming intermediates (dropped because the
@@ -208,8 +215,39 @@ actor SessionParser {
         return ids
     }
 
-    /// Full parse of a JSONL session file into a ParsedSession
-    func parse(url: URL, sessionId: String) throws -> ParsedSession {
+    /// Record uuids of the transcript a continued session was handed off from.
+    /// When a conversation moves into a background job (2.1.296), the job's file
+    /// carries a copy of the parent's records: same uuids, `sessionId`
+    /// rewritten to the job's, so the continuation skip in `parse` and
+    /// `parseMetadata` (which matches the parent's sessionId) can't see them.
+    /// Nil when there is no usable parent (none given, the file itself, or
+    /// unreadable), in which case nothing counts as copied. Synchronous for the
+    /// same reentrancy reason as `parentAssistantMessageIds`.
+    private func continuationParentUUIDs(_ parent: URL?, for url: URL) -> Set<String>? {
+        guard let parent, parent.standardizedFileURL != url.standardizedFileURL,
+              let attrs = try? FileManager.default.attributesOfItem(atPath: parent.path),
+              let mtime = attrs[.modificationDate] as? Date else { return nil }
+        if let cached = continuationUUIDCache[parent.path], cached.mtime == mtime {
+            return cached.uuids
+        }
+        guard let handle = FileHandle(forReadingAtPath: parent.path) else { return nil }
+        defer { handle.closeFile() }
+        var uuids = Set<String>()
+        for line in StreamingLineReader(fileHandle: handle) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty { continue }
+            guard let data = trimmed.data(using: .utf8),
+                  let uuid = (try? liteDecoder.decode(ParsedRecordRaw.self, from: data))?.uuid else { continue }
+            uuids.insert(uuid)
+        }
+        if continuationUUIDCache.count >= Self.continuationUUIDCacheLimit { continuationUUIDCache.removeAll() }
+        continuationUUIDCache[parent.path] = (mtime, uuids)
+        return uuids
+    }
+
+    /// Full parse of a JSONL session file into a ParsedSession. A continued
+    /// session passes its parent transcript as `continuationParent`.
+    func parse(url: URL, sessionId: String, continuationParent: URL? = nil) throws -> ParsedSession {
         guard let fileHandle = FileHandle(forReadingAtPath: url.path) else {
             throw SessionParserError.fileNotFound
         }
@@ -260,6 +298,9 @@ actor SessionParser {
         let parentReplayMsgIds: Set<String> =
             (isSubagentFile && Self.isContextForkFilename(url.lastPathComponent))
             ? parentAssistantMessageIds(forSubagentFileAt: url) : []
+        // A continued session's copies of its parent stay in `records` for the
+        // chat but are left out of every figure below.
+        let copiedFromParent = continuationParentUUIDs(continuationParent, for: url) ?? []
 
         // Phase 3: replay the buffered records using the original accumulation logic.
         for (idx, record) in bufferedRecords.enumerated() {
@@ -286,26 +327,28 @@ actor SessionParser {
             if record.type == .progress { continue }
             if record.isVisibleInTranscriptOnly == true { continue }
 
+            let isOwn = !(record.uuid.map(copiedFromParent.contains) ?? false)
+
             // Capture slug — keep the latest non-empty one. Claude Code rewrites the
             // random initial slug to a meaningful one as work progresses (or when the
             // user runs /rename), so the last record wins.
-            if let s = record.slug, !s.isEmpty {
+            if isOwn, let s = record.slug, !s.isEmpty {
                 slug = s
             }
 
             // Track timestamps
-            if let ts = record.timestamp {
+            if isOwn, let ts = record.timestamp {
                 if firstTimestamp.isEmpty { firstTimestamp = ts }
                 lastTimestamp = ts
             }
 
-            messageCount += 1
+            if isOwn { messageCount += 1 }
 
-            if record.type == .user {
+            if isOwn, record.type == .user {
                 userMessageCount += 1
             }
 
-            if record.type == .assistant {
+            if isOwn, record.type == .assistant {
                 assistantMessageCount += 1
 
                 // Bill the record if (a) it has stop_reason (the normal final
@@ -341,7 +384,7 @@ actor SessionParser {
             }
 
             // Compaction boundaries
-            if record.type == .system && record.subtype == "compact_boundary" {
+            if isOwn && record.type == .system && record.subtype == "compact_boundary" {
                 compactionCount += 1
             }
 
@@ -445,8 +488,11 @@ actor SessionParser {
         )
     }
 
-    /// Quick metadata extraction for sidebar listing
-    func parseMetadata(url: URL, sessionId: String, pricingTable: [String: ModelPricing]) throws -> SessionSummary {
+    /// Quick metadata extraction for sidebar listing. A continued session
+    /// passes its parent transcript as `continuationParent`.
+    func parseMetadata(
+        url: URL, sessionId: String, pricingTable: [String: ModelPricing], continuationParent: URL? = nil
+    ) throws -> SessionSummary {
         // Single disk pass: stream-decode the file once into a buffered list of
         // lite-decoded records, then process the buffer in memory. Previously
         // we made two disk passes (one for stopReasonMsgIds, one for the main
@@ -501,6 +547,12 @@ actor SessionParser {
         let parentReplayMsgIds: Set<String> =
             (isSubagentFile && Self.isContextForkFilename(url.lastPathComponent))
             ? parentAssistantMessageIds(forSubagentFileAt: url) : []
+        // A continued session's copies of its parent belong to the parent.
+        let parentUUIDs = continuationParentUUIDs(continuationParent, for: url)
+        let copiedFromParent = parentUUIDs ?? []
+        let continuedFromSessionId = parentUUIDs == nil
+            ? nil : continuationParent?.deletingPathExtension().lastPathComponent
+        var copiedRecordCount = 0
         // Per-day accumulators (LOCAL day key). The lump token/cost totals and the
         // per-family modelBreakdown are derived from these after the loop.
         var dayAccs: [String: DayAcc] = [:]
@@ -520,6 +572,7 @@ actor SessionParser {
         // Scalars: one value per file across the corpus, so first non-nil wins.
         var attributionAgent: String?
         var sessionKind: String?
+        var continuedInSessionId: String?
         // Permission mode and branch change mid-session: last wins, plus a
         // sticky flag for any bypassPermissions record.
         var everBypassed = false
@@ -595,6 +648,12 @@ actor SessionParser {
         var changedFiles = Set<String>()
         for (idx, raw) in bufferedRecords.enumerated() {
             try Task.checkCancellation()
+            // Before the timestamp capture: the parent's copies must not set
+            // this session's start time either.
+            if let uuid = raw.uuid, copiedFromParent.contains(uuid) {
+                copiedRecordCount += 1
+                continue
+            }
             if let ts = raw.timestamp {
                 if firstTimestamp.isEmpty { firstTimestamp = ts }
                 lastTimestamp = ts
@@ -649,6 +708,9 @@ actor SessionParser {
             }
             if sessionKind == nil, let k = raw.sessionKind, !k.isEmpty {
                 sessionKind = k
+            }
+            if let next = raw.continuedInSessionId, !next.isEmpty {
+                continuedInSessionId = next
             }
             if let mode = raw.permissionMode, !mode.isEmpty {
                 lastPermissionMode = mode
@@ -1224,7 +1286,7 @@ actor SessionParser {
             title: title,
             firstTimestamp: firstTimestamp,
             lastTimestamp: lastTimestamp,
-            messageCount: lineCount,
+            messageCount: lineCount - copiedRecordCount,
             primaryModel: primaryModel,
             totalInputTokens: totalInputTokens,
             totalOutputTokens: totalOutputTokens,
@@ -1257,7 +1319,9 @@ actor SessionParser {
             gitBranch: gitBranch,
             latestTurn: latestTurn == LatestTurn() ? nil : latestTurn,
             blockedActionCount: blockedActionCount,
-            changedFileCount: changedFiles.count
+            changedFileCount: changedFiles.count,
+            continuedInSessionId: continuedInSessionId,
+            continuedFromSessionId: continuedFromSessionId
         )
     }
 

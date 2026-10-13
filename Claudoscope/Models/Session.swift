@@ -139,6 +139,11 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// before parserVersion 12.
     var blockedActionCount: Int? = nil
     var changedFileCount: Int? = nil
+    /// A conversation handed off to a background job: on the parent, the job's
+    /// session id from its `continued-in` record; on the job, the parent whose
+    /// copied records were left out of its figures. Nil for every other session.
+    var continuedInSessionId: String? = nil
+    var continuedFromSessionId: String? = nil
 
     init(
         id: String,
@@ -181,7 +186,9 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         gitBranch: String? = nil,
         latestTurn: LatestTurn? = nil,
         blockedActionCount: Int? = nil,
-        changedFileCount: Int? = nil
+        changedFileCount: Int? = nil,
+        continuedInSessionId: String? = nil,
+        continuedFromSessionId: String? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -224,6 +231,8 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.latestTurn = latestTurn
         self.blockedActionCount = blockedActionCount
         self.changedFileCount = changedFileCount
+        self.continuedInSessionId = continuedInSessionId
+        self.continuedFromSessionId = continuedFromSessionId
     }
 }
 

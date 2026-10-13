@@ -114,21 +114,23 @@ struct ProjectScanner {
     /// Cache fingerprint for a file, computed from the enumeration's stat
     /// snapshot (never re-stat after parsing: a mid-parse append then stores a
     /// stale identity that self-heals on the next pass). Context-fork subagent
-    /// files additionally fingerprint their parent transcript, because their
-    /// parse output depends on it (replayed msg-id stripping). Parent absent
-    /// on disk = nil fields, matching a stored NULL row via Swift ==.
+    /// files and continued sessions additionally fingerprint their parent
+    /// transcript, because their parse output depends on it (replayed records
+    /// stripped). Parent absent on disk = nil fields, matching a stored NULL
+    /// row via Swift ==.
     private func identityFor(
         _ entry: ScanEntry,
-        statByPath: [String: (size: Int64, mtime: Double)]
+        statByPath: [String: (size: Int64, mtime: Double)],
+        continuationParents: [String: URL]
     ) -> SessionSummaryStore.FileIdentity {
         var parentSize: Int64?
         var parentMtime: Double?
-        if SessionParser.isContextForkSubagentFile(entry.url) {
-            let parentPath = SessionParser.parentTranscriptURL(forSubagentFile: entry.url).path
-            if let stat = statByPath[parentPath] {
-                parentSize = stat.size
-                parentMtime = stat.mtime
-            }
+        let parentPath = SessionParser.isContextForkSubagentFile(entry.url)
+            ? SessionParser.parentTranscriptURL(forSubagentFile: entry.url).path
+            : continuationParents[entry.sessionId]?.path
+        if let parentPath, let stat = statByPath[parentPath] {
+            parentSize = stat.size
+            parentMtime = stat.mtime
         }
         return SessionSummaryStore.FileIdentity(
             size: entry.size, mtime: entry.mtime, parentSize: parentSize, parentMtime: parentMtime
@@ -233,8 +235,12 @@ struct ProjectScanner {
     ///
     /// `store == nil` degrades to a full parse through the same code path
     /// (every file counts as changed, no cache writes) — today's behavior.
+    ///
+    /// `continuationParents` maps a continued session's id to its parent
+    /// transcript; those sessions parse against it and fingerprint it.
     func reconcile(
         store: SessionSummaryStore?,
+        continuationParents: [String: URL] = [:],
         onProgress: (@Sendable @MainActor (Int, Int) -> Void)? = nil,
         applyDelta: (@Sendable @MainActor (ReconcileDelta) -> Void)? = nil
     ) async -> Set<LiveEntryKey> {
@@ -262,7 +268,7 @@ struct ProjectScanner {
         // Entries keep their newest-first order so fresh sessions land first.
         var changed: [(entry: ScanEntry, identity: SessionSummaryStore.FileIdentity)] = []
         for entry in entries {
-            let identity = identityFor(entry, statByPath: statByPath)
+            let identity = identityFor(entry, statByPath: statByPath, continuationParents: continuationParents)
             if dbIdentities[entry.url.path] == identity { continue }
             changed.append((entry, identity))
         }
@@ -327,12 +333,14 @@ struct ProjectScanner {
 
                 let capturedEntry = entry
                 let capturedIdentity = identity
+                let capturedParent = continuationParents[entry.sessionId]
                 group.addTask { [parser, pricingTable] in
                     do {
                         let summary = try await parser.parseMetadata(
                             url: capturedEntry.url,
                             sessionId: capturedEntry.sessionId,
-                            pricingTable: pricingTable
+                            pricingTable: pricingTable,
+                            continuationParent: capturedParent
                         )
                         let record = try SessionSummaryRecord.make(
                             summary: summary,
