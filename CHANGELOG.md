@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.1]
+A fix release for Claude Code's background jobs. When a conversation moves into a background job (Claude Code 2.1.291 and later), the job's transcript carries a copy of the conversation so far, and the terminal it left behind stays registered. Claudoscope billed that copied history twice and showed the terminal as a second live agent. Both are fixed, along with an Insights tab that stayed empty on first open. Thanks to @beardedeagle for all of the fixes in this release.
+
+Requires a one-time full reparse on first launch (parser version 15).
+
+### Fixed
+- **Continued sessions billed twice.** A background job's transcript repeats the parent conversation's records under the job's own session id, so the spend before the handoff counted once in the parent and again in the job: in Fleet's TODAY figure, Usage, the popover, and the job's own cost. The parser now matches the job's records against its parent's and leaves the copies out of cost, start time, counts and per-day attribution. The chat still shows the copied history; Trace, the Tools view and the context gauge show only the job's own work. With no readable parent the job is billed in full, and a parent that comes back later triggers a re-read.
+- **Parked terminals counted as live agents.** After a handoff, Claude Code keeps the terminal's registry entry alive and still reporting busy. Fleet read it as a second agent: the session showed twice on the board (once as a stale Working card), was counted twice in the menu bar and popover, and added its spend rate to LIVE BURN. Parked entries are now left out, and the terminal's session lands as Done.
+- **Handoffs shown as crashes.** A terminal seen busy just before its conversation moved into a job was marked Failed, "Process exited mid-turn". A process still registered as parked on the same session is now treated as a handoff, not an exit.
+- **Insights empty on first open.** The dashboard opens on Analytics, but rail data only loaded on a rail switch, so Insights stayed blank until you left and came back. It now loads on open, and rerunning `/insights` refreshes the tab while it is showing.
+
+### Changed
+- **Install docs point at the official Homebrew cask.** `brew install --cask claudoscope` with no tap step. Existing tap installs migrate on the next `brew upgrade`.
+
 ## [1.4.0]
 The session viewer release. Until now the Sessions rail showed a transcript and left you to scroll. 1.4.0 turns it into a place to study a session: a Trace tab lays the whole run out on a time axis with a Replay that plays it back as a movie, a minimap above the chat shows the session's shape at a glance, bookmarks pin the turns worth coming back to, and a Resume button drops you back into the session in your terminal. Also cuts main-thread CPU while sessions stream (43 percent down to under 1 percent with no window open), adds Haiku 5.5 pricing, and makes the menu bar live-session badge draw as designed.
 
