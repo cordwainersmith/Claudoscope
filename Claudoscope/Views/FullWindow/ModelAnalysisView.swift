@@ -30,6 +30,11 @@ struct ModelAnalysisView: View {
                         .padding(.horizontal, 24)
                 }
 
+                if !data.modelFallbacks.isEmpty {
+                    ModelFallbacksView(rows: data.modelFallbacks)
+                        .padding(.horizontal, 24)
+                }
+
                 // What-if calculator
                 WhatIfCalculatorView(
                     threshold: $outputThreshold,
@@ -39,6 +44,42 @@ struct ModelAnalysisView: View {
             }
             .padding(.vertical, 24)
         }
+    }
+}
+
+// MARK: - Model Fallbacks
+
+/// Turns answered by a different model than the one Claude Code asked for,
+/// e.g. the automatic retry on another model after a flagged message.
+private struct ModelFallbacksView: View {
+    let rows: [ModelFallbackRow]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Model Fallbacks")
+                .font(.system(size: 13, weight: .medium))
+            Text("Turns answered by a different model than the one requested.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            ForEach(rows) { row in
+                HStack {
+                    Text(row.requested)
+                        .font(.system(size: 12, design: .monospaced))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                    Text(row.served)
+                        .font(.system(size: 12, design: .monospaced))
+                    Spacer()
+                    Text("\(row.turnCount) turns, \(row.sessionCount) sessions")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

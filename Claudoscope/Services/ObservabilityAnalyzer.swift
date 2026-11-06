@@ -14,12 +14,15 @@ struct ObservabilityAnalyzer {
 
     // MARK: - Effort Classification
 
+    /// Fallback for transcripts that predate the recorded `effort` field. The
+    /// top bucket maps to `.xhigh` because the `ultrathink` keyword runs a turn
+    /// at xhigh (Claude Code 2.1.311).
     static func classifyEffort(thinkingChars: Int, outputTokens: Int, stopReason: String?) -> EffortLevel {
         if stopReason == "max_tokens" {
-            return .ultrathink
+            return .xhigh
         }
         if thinkingChars >= thinkingCharsHigh || outputTokens >= outputTokensHigh {
-            return .ultrathink
+            return .xhigh
         }
         if thinkingChars >= thinkingCharsMedium || outputTokens >= outputTokensMedium {
             return .high
@@ -28,6 +31,16 @@ struct ObservabilityAnalyzer {
             return .medium
         }
         return .low
+    }
+
+    /// The effort level Claude Code recorded on an assistant record. A per-turn
+    /// override (the ultrathink keyword) wins over the session level. Nil when
+    /// neither is present or the value is one this build does not know, so the
+    /// caller falls back to `classifyEffort`.
+    static func recordedEffort(effort: String?, perTurnEffort: String?) -> EffortLevel? {
+        if let turn = perTurnEffort, let level = EffortLevel(rawValue: turn) { return level }
+        if let session = effort, let level = EffortLevel(rawValue: session) { return level }
+        return nil
     }
 
     // MARK: - Error Classification
@@ -207,6 +220,7 @@ struct ObservabilityAnalyzer {
     static func computeObservability(
         turnDurations: [TurnDuration],
         effortCounts: [EffortLevel: Int],
+        estimatedEffortTurns: Int = 0,
         errorDetails: [SessionErrorDetail],
         idleGapResult: IdleGapResult,
         compactionEvents: [CompactionEvent],
@@ -233,23 +247,12 @@ struct ObservabilityAnalyzer {
         }
 
         // Effort distribution
-        let distribution = EffortDistribution(
-            low: effortCounts[.low, default: 0],
-            medium: effortCounts[.medium, default: 0],
-            high: effortCounts[.high, default: 0],
-            ultrathink: effortCounts[.ultrathink, default: 0]
-        )
+        let distribution = EffortDistribution(counts: effortCounts, estimatedTurns: estimatedEffortTurns)
 
         // Dominant effort level (most frequent)
         let dominant: EffortLevel?
         if distribution.total > 0 {
-            let levels: [(EffortLevel, Int)] = [
-                (.low, distribution.low),
-                (.medium, distribution.medium),
-                (.high, distribution.high),
-                (.ultrathink, distribution.ultrathink),
-            ]
-            dominant = levels.max(by: { $0.1 < $1.1 })?.0
+            dominant = EffortLevel.allCases.max(by: { distribution.count($0) < distribution.count($1) })
         } else {
             dominant = nil
         }
@@ -407,17 +410,44 @@ struct ObservabilityAnalyzer {
         return .other
     }
 
+    /// Maps a recorded `permissionDecision` (2.1.29x+) to a kind. Nil for an
+    /// approval or when the record carries none.
+    static func blockedKind(fromPermissionDecision decision: PermissionDecisionRaw?) -> BlockedActionKind? {
+        guard let decision, decision.isReject else { return nil }
+        if decision.source == "user_reject" { return .userRejected }
+        switch decision.reasonType {
+        case "safetyCheck": return .safetyCheck
+        case "mode": return .modeDenied
+        case "rule", "subcommandResults": return .permissionSetting
+        default: return .other
+        }
+    }
+
     static func extractBlockedActions(from entries: [ToolCallEntry]) -> [BlockedAction] {
         entries.compactMap { entry in
-            guard entry.toolDenialKind != nil
+            guard entry.permissionDecision?.isReject == true
+                || entry.toolDenialKind != nil
                 || isDenial(resultContent: entry.resultContent, isError: entry.isError) else { return nil }
-            let reason = (entry.resultContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            var reason = (entry.resultContent ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if let breaker = entry.permissionDecision?.circuitBreaker, !breaker.isEmpty {
+                reason += reason.isEmpty ? "[\(breaker)]" : " [\(breaker)]"
+            }
+            // A destructive git or IaC command keeps its specific label whatever
+            // refused it; otherwise the recorded decision is the best source.
+            let byCommand = classifyBlockedAction(toolName: entry.toolName, command: entry.primaryArg, reason: reason)
+            let kind: BlockedActionKind
+            if byCommand == .destructiveGit || byCommand == .iacDestroy {
+                kind = byCommand
+            } else {
+                kind = blockedKind(fromPermissionDecision: entry.permissionDecision)
+                    ?? blockedKind(fromDenialKind: entry.toolDenialKind)
+                    ?? byCommand
+            }
             return BlockedAction(
                 id: entry.id,
                 toolName: entry.toolName,
                 command: entry.primaryArg,
-                kind: blockedKind(fromDenialKind: entry.toolDenialKind)
-                    ?? classifyBlockedAction(toolName: entry.toolName, command: entry.primaryArg, reason: reason),
+                kind: kind,
                 reason: reason,
                 turnIndex: entry.turnIndex,
                 timestamp: entry.timestamp

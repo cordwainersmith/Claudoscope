@@ -136,6 +136,20 @@ struct ParsedRecordRaw: Decodable, Sendable {
     let permissionMode: String?
     let gitBranch: String?
 
+    // Per assistant record (Claude Code 2.1.29x+): the effort level the request
+    // ran at, a per-turn override such as the ultrathink keyword, the model the
+    // client asked for (differs from message.model after a fallback), and how
+    // long the model thought.
+    let effort: String?
+    let perTurnEffort: String?
+    let requestedModel: String?
+    let thinkingDurationMs: Int?
+
+    // Per tool-result record: who approved or refused the call, and whether it
+    // ran in the sandbox.
+    let permissionDecision: PermissionDecisionRaw?
+    let sandboxed: Bool?
+
     // Captures the raw `type` string when it doesn't match a known RecordType,
     // so a future telemetry layer can surface unrecognized record types instead
     // of silently dropping them.
@@ -189,6 +203,13 @@ struct ParsedRecordRaw: Decodable, Sendable {
         continuedInSessionId = try container.decodeIfPresent(String.self, forKey: .continuedInSessionId)
         permissionMode = try container.decodeIfPresent(String.self, forKey: .permissionMode)
         gitBranch = try container.decodeIfPresent(String.self, forKey: .gitBranch)
+        // Lenient: a shape change in these must never drop the line.
+        effort = try? container.decodeIfPresent(String.self, forKey: .effort)
+        perTurnEffort = try? container.decodeIfPresent(String.self, forKey: .perTurnEffort)
+        requestedModel = try? container.decodeIfPresent(String.self, forKey: .requestedModel)
+        thinkingDurationMs = try? container.decodeIfPresent(Int.self, forKey: .thinkingDurationMs)
+        permissionDecision = try? container.decodeIfPresent(PermissionDecisionRaw.self, forKey: .permissionDecision)
+        sandboxed = try? container.decodeIfPresent(Bool.self, forKey: .sandboxed)
         if mode == .full {
             parentUuid = try container.decodeIfPresent(String.self, forKey: .parentUuid)
             cwd = try container.decodeIfPresent(String.self, forKey: .cwd)
@@ -214,7 +235,42 @@ struct ParsedRecordRaw: Decodable, Sendable {
         case attributionPlugin, toolDenialKind
         case sessionKind, continuedInSessionId
         case permissionMode, gitBranch
+        case effort, perTurnEffort, requestedModel, thinkingDurationMs
+        case permissionDecision, sandboxed
     }
+}
+
+/// `permissionDecision` on a tool-result record. Every field is optional and
+/// decoded leniently; Claude Code adds keys here over time.
+struct PermissionDecisionRaw: Decodable, Sendable, Equatable {
+    let decision: String?
+    let source: String?
+    let reasonType: String?
+    let ruleSource: String?
+    let circuitBreaker: String?
+
+    init(decision: String?, source: String?, reasonType: String? = nil, ruleSource: String? = nil, circuitBreaker: String? = nil) {
+        self.decision = decision
+        self.source = source
+        self.reasonType = reasonType
+        self.ruleSource = ruleSource
+        self.circuitBreaker = circuitBreaker
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        decision = try? c.decodeIfPresent(String.self, forKey: .decision)
+        source = try? c.decodeIfPresent(String.self, forKey: .source)
+        reasonType = try? c.decodeIfPresent(String.self, forKey: .reasonType)
+        ruleSource = try? c.decodeIfPresent(String.self, forKey: .ruleSource)
+        circuitBreaker = try? c.decodeIfPresent(String.self, forKey: .circuitBreaker)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case decision, source, reasonType, ruleSource, circuitBreaker
+    }
+
+    var isReject: Bool { decision == "reject" }
 }
 
 /// One entry of a stop_hook_summary's `hookInfos` array. durationMs is absent

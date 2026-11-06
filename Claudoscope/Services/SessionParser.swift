@@ -46,6 +46,16 @@ private struct DayAcc {
     var skill: [String: AttrAcc] = [:]
     var mcp: [McpKey: AttrAcc] = [:]
     var plugin: [String: AttrAcc] = [:]
+    /// Total partition of billed turns by effort level.
+    var effort: [EffortLevel: EffortAcc] = [:]
+    var permission: PermissionStats?
+}
+
+private struct EffortAcc {
+    var turnCount = 0
+    var estimatedCost = 0.0
+    var thinkingDurationMs = 0
+    var estimatedTurnCount = 0
 }
 
 /// Stream-parses Claude Code JSONL session files.
@@ -410,7 +420,8 @@ actor SessionParser {
                     content: record.toolUseResult?.content ?? "",
                     isError: record.toolUseResult?.isError ?? false,
                     timestamp: record.timestamp,
-                    toolDenialKind: record.toolDenialKind
+                    toolDenialKind: record.toolDenialKind,
+                    permissionDecision: record.permissionDecision
                 )
             }
 
@@ -429,7 +440,8 @@ actor SessionParser {
                             content: resultText,
                             isError: block.isError ?? false,
                             timestamp: record.timestamp,
-                            toolDenialKind: record.toolDenialKind
+                            toolDenialKind: record.toolDenialKind,
+                    permissionDecision: record.permissionDecision
                         )
                     }
                 }
@@ -605,6 +617,8 @@ actor SessionParser {
         // Observability tracking
         var turnDurations: [TurnDuration] = []
         var effortCounts: [EffortLevel: Int] = [:]
+        var estimatedEffortTurns = 0
+        var fallbackCounts: [String: ModelFallback] = [:]
         var errorDetails: [SessionErrorDetail] = []
         var compactionEvents: [CompactionEvent] = []
         var parallelToolGroups: [ParallelToolGroup] = []
@@ -858,7 +872,35 @@ actor SessionParser {
                         speedMultiplier: speedMultiplier
                     )
 
+                    // Recorded effort (2.1.29x+) wins; older records fall back to
+                    // the thinking/output heuristic and are counted as estimated.
+                    let recordedEffort = ObservabilityAnalyzer.recordedEffort(
+                        effort: raw.effort, perTurnEffort: raw.perTurnEffort
+                    )
+                    let effort = recordedEffort ?? ObservabilityAnalyzer.classifyEffort(
+                        thinkingChars: turnThinkingChars,
+                        outputTokens: msgOutput,
+                        stopReason: raw.message?.stopReason
+                    )
+
+                    if let requested = raw.requestedModel, let served = raw.message?.model,
+                       served != "<synthetic>" {
+                        let req = canonicalModelId(requested)
+                        let srv = canonicalModelId(served)
+                        if req != srv {
+                            let key = req + "|" + srv
+                            let prior = fallbackCounts[key]?.count ?? 0
+                            fallbackCounts[key] = ModelFallback(requested: req, served: srv, count: prior + 1)
+                        }
+                    }
+
                     var day = dayAccs[dayKey] ?? DayAcc()
+                    var effortAcc = day.effort[effort] ?? EffortAcc()
+                    effortAcc.turnCount += 1
+                    effortAcc.estimatedCost += msgCost
+                    effortAcc.thinkingDurationMs += raw.thinkingDurationMs ?? 0
+                    if recordedEffort == nil { effortAcc.estimatedTurnCount += 1 }
+                    day.effort[effort] = effortAcc
                     day.inputTokens += msgInput
                     day.outputTokens += msgOutput
                     day.cacheReadTokens += msgCacheRead
@@ -943,12 +985,8 @@ actor SessionParser {
                         model: raw.message?.model
                     ))
 
-                    let effort = ObservabilityAnalyzer.classifyEffort(
-                        thinkingChars: turnThinkingChars,
-                        outputTokens: msgOutput,
-                        stopReason: raw.message?.stopReason
-                    )
                     effortCounts[effort, default: 0] += 1
+                    if recordedEffort == nil { estimatedEffortTurns += 1 }
 
                     // Observability: parallel tool groups (more than 1 tool_use in one turn)
                     if turnToolNames.count > 1 {
@@ -1033,9 +1071,19 @@ actor SessionParser {
                 }
             }
 
+            if raw.type == .user, let decision = raw.permissionDecision {
+                let dayKey = raw.timestamp.flatMap(localDayKey) ?? lastSeenDay ?? "1970-01-01"
+                var day = dayAccs[dayKey] ?? DayAcc()
+                var stats = day.permission ?? PermissionStats()
+                stats.record(decision, sandboxed: raw.sandboxed)
+                day.permission = stats
+                dayAccs[dayKey] = day
+            }
+
             // A refusal is not a failure, so it stays out of hasError.
             if raw.type == .user, let result = raw.toolUseResult {
                 if raw.toolDenialKind != nil
+                    || raw.permissionDecision?.isReject == true
                     || (result.isBareString && ObservabilityAnalyzer.isBareDenialResult(result.content)) {
                     blockedActionCount += 1
                 }
@@ -1196,6 +1244,16 @@ actor SessionParser {
                     turnCount: a.turnCount
                 )
             }
+            let efforts = EffortLevel.allCases.compactMap { level -> EffortDayCost? in
+                guard let e = acc.effort[level] else { return nil }
+                return EffortDayCost(
+                    level: level,
+                    turnCount: e.turnCount,
+                    estimatedCost: e.estimatedCost,
+                    thinkingDurationMs: e.thinkingDurationMs,
+                    estimatedTurnCount: e.estimatedTurnCount
+                )
+            }
             return DailyContribution(
                 date: dayKey,
                 inputTokens: acc.inputTokens,
@@ -1208,7 +1266,9 @@ actor SessionParser {
                 modelBreakdown: models,
                 skillBreakdown: skills,
                 mcpBreakdown: mcps,
-                pluginBreakdown: plugins
+                pluginBreakdown: plugins,
+                effortBreakdown: efforts.isEmpty ? nil : efforts,
+                permissionStats: acc.permission
             )
         }
 
@@ -1288,6 +1348,7 @@ actor SessionParser {
         let observability = ObservabilityAnalyzer.computeObservability(
             turnDurations: turnDurations,
             effortCounts: effortCounts,
+            estimatedEffortTurns: estimatedEffortTurns,
             errorDetails: errorDetails,
             idleGapResult: idleGapResult,
             compactionEvents: compactionEvents,
@@ -1337,7 +1398,10 @@ actor SessionParser {
             blockedActionCount: blockedActionCount,
             changedFileCount: changedFiles.count,
             continuedInSessionId: continuedInSessionId,
-            continuedFromSessionId: continuedFromSessionId
+            continuedFromSessionId: continuedFromSessionId,
+            modelFallbacks: fallbackCounts.isEmpty
+                ? nil
+                : fallbackCounts.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.requested < $1.requested }
         )
     }
 

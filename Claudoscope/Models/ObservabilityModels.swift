@@ -19,29 +19,67 @@ enum EffortLevel: String, CaseIterable, Sendable, Codable {
     case low
     case medium
     case high
-    case ultrathink
+    case xhigh
+    case max
 
     var label: String {
         switch self {
         case .low: return "Low"
         case .medium: return "Medium"
         case .high: return "High"
-        case .ultrathink: return "Ultra-think"
+        case .xhigh: return "X-High"
+        case .max: return "Max"
         }
     }
 }
 
 // MARK: - Effort Distribution
 
+/// Turn counts per effort level. Since Claude Code records the level on every
+/// assistant record, these are recorded values; `estimatedTurns` counts the
+/// turns from older transcripts whose level was inferred by
+/// `ObservabilityAnalyzer.classifyEffort` instead.
 struct EffortDistribution: Sendable, Codable, Equatable {
     let low: Int
     let medium: Int
     let high: Int
-    let ultrathink: Int
+    let xhigh: Int
+    let max: Int
+    let estimatedTurns: Int
 
-    var total: Int { low + medium + high + ultrathink }
+    var total: Int { low + medium + high + xhigh + max }
 
-    static let zero = EffortDistribution(low: 0, medium: 0, high: 0, ultrathink: 0)
+    init(low: Int, medium: Int, high: Int, xhigh: Int, max: Int, estimatedTurns: Int = 0) {
+        self.low = low
+        self.medium = medium
+        self.high = high
+        self.xhigh = xhigh
+        self.max = max
+        self.estimatedTurns = estimatedTurns
+    }
+
+    init(counts: [EffortLevel: Int], estimatedTurns: Int) {
+        self.init(
+            low: counts[.low, default: 0],
+            medium: counts[.medium, default: 0],
+            high: counts[.high, default: 0],
+            xhigh: counts[.xhigh, default: 0],
+            max: counts[.max, default: 0],
+            estimatedTurns: estimatedTurns
+        )
+    }
+
+    func count(_ level: EffortLevel) -> Int {
+        switch level {
+        case .low: return low
+        case .medium: return medium
+        case .high: return high
+        case .xhigh: return xhigh
+        case .max: return max
+        }
+    }
+
+    static let zero = EffortDistribution(low: 0, medium: 0, high: 0, xhigh: 0, max: 0)
 }
 
 // MARK: - Effort Cost Breakdown
@@ -52,6 +90,11 @@ struct EffortCostBreakdown: Identifiable, Sendable {
     let turnCount: Int
     let totalCost: Double
     let avgCostPerTurn: Double
+    /// Mean recorded thinking time per turn; nil when no turn at this level
+    /// recorded one.
+    var avgThinkingMs: Double? = nil
+    /// Share of this level's turns whose level was inferred, not recorded.
+    var estimatedShare: Double = 0
 }
 
 // MARK: - Error Classification
@@ -200,6 +243,8 @@ enum BlockedActionKind: String, Sendable {
     case iacDestroy
     case permissionSetting
     case userRejected
+    case safetyCheck
+    case modeDenied
     case other
 
     var label: String {
@@ -208,6 +253,8 @@ enum BlockedActionKind: String, Sendable {
         case .iacDestroy: return "Infra destroy"
         case .permissionSetting: return "Permission denied"
         case .userRejected: return "User rejected"
+        case .safetyCheck: return "Safety check"
+        case .modeDenied: return "Mode denied"
         case .other: return "Blocked"
         }
     }

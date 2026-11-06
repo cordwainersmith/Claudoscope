@@ -31,14 +31,9 @@ struct TurnDurationBadge: View {
 struct EffortLevelBadge: View {
     let level: EffortLevel
 
-    private var color: Color {
-        switch level {
-        case .low: return .green
-        case .medium: return .blue
-        case .high: return .orange
-        case .ultrathink: return .red
-        }
-    }
+    var isEstimated = false
+
+    private var color: Color { Color.forEffort(level) }
 
     var body: some View {
         HStack(spacing: 3) {
@@ -52,6 +47,9 @@ struct EffortLevelBadge: View {
         .padding(.vertical, 1)
         .background(color.opacity(0.1))
         .clipShape(Capsule())
+        .help(isEstimated
+              ? "Estimated from thinking length and output size; this record predates recorded effort"
+              : "Effort level recorded by Claude Code")
     }
 }
 

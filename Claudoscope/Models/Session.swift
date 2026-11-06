@@ -44,6 +44,7 @@ struct ToolResultEntry: Sendable {
     let isError: Bool
     let timestamp: String?
     var toolDenialKind: String? = nil
+    var permissionDecision: PermissionDecisionRaw? = nil
 }
 
 // MARK: - Session Metadata
@@ -159,6 +160,10 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
     /// copied records were left out of its figures. Nil for every other session.
     var continuedInSessionId: String? = nil
     var continuedFromSessionId: String? = nil
+    /// Billed turns where the model that answered differs from the one the
+    /// client asked for (`requestedModel`), e.g. the automatic retry on another
+    /// model after a flagged message. Nil when there were none.
+    var modelFallbacks: [ModelFallback]? = nil
 
     init(
         id: String,
@@ -203,7 +208,8 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         blockedActionCount: Int? = nil,
         changedFileCount: Int? = nil,
         continuedInSessionId: String? = nil,
-        continuedFromSessionId: String? = nil
+        continuedFromSessionId: String? = nil,
+        modelFallbacks: [ModelFallback]? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -248,7 +254,16 @@ struct SessionSummary: Identifiable, Sendable, Codable, Equatable {
         self.changedFileCount = changedFileCount
         self.continuedInSessionId = continuedInSessionId
         self.continuedFromSessionId = continuedFromSessionId
+        self.modelFallbacks = modelFallbacks
     }
+}
+
+/// One requested-to-served model pair and how many billed turns took it. Ids
+/// are canonical (`canonicalModelId`).
+struct ModelFallback: Sendable, Codable, Equatable {
+    let requested: String
+    let served: String
+    let count: Int
 }
 
 struct LatestTurn: Sendable, Codable, Equatable {
@@ -367,4 +382,73 @@ struct DailyContribution: Sendable, Codable, Equatable {
     var skillBreakdown: [SkillAttribution]? = nil
     var mcpBreakdown: [McpAttribution]? = nil
     var pluginBreakdown: [PluginAttribution]? = nil
+    /// Billed turns per effort level on this day. A total partition: every
+    /// billed turn lands in exactly one level.
+    var effortBreakdown: [EffortDayCost]? = nil
+    /// Approvals and refusals of tool calls on this day.
+    var permissionStats: PermissionStats? = nil
+
+    /// A day that exists only because a tool call was approved or refused on
+    /// it (e.g. just after midnight, before the next billed turn). Analytics
+    /// keeps these out of session, message and cost aggregation.
+    var isPermissionOnly: Bool {
+        permissionStats != nil && estimatedCost == 0 && inputTokens == 0 && outputTokens == 0
+            && cacheReadTokens == 0 && cacheCreationTokens == 0 && modelBreakdown.isEmpty
+    }
+}
+
+struct EffortDayCost: Sendable, Codable, Equatable {
+    let level: EffortLevel
+    let turnCount: Int
+    let estimatedCost: Double
+    let thinkingDurationMs: Int
+    /// Turns whose level was inferred because the record predates the field.
+    let estimatedTurnCount: Int
+}
+
+/// Counts of tool-call permission decisions. `decisions` is keyed
+/// "decision|source|reasonType" (reasonType "-" when absent) so a value Claude
+/// Code adds later is kept rather than dropped; labels are applied at display.
+struct PermissionStats: Sendable, Codable, Equatable {
+    var decisions: [String: Int] = [:]
+    var circuitBreakers: [String: Int] = [:]
+    var denyRuleSources: [String: Int] = [:]
+    var sandboxed = 0
+    var unsandboxed = 0
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        decisions = try c.decodeIfPresent([String: Int].self, forKey: .decisions) ?? [:]
+        circuitBreakers = try c.decodeIfPresent([String: Int].self, forKey: .circuitBreakers) ?? [:]
+        denyRuleSources = try c.decodeIfPresent([String: Int].self, forKey: .denyRuleSources) ?? [:]
+        sandboxed = try c.decodeIfPresent(Int.self, forKey: .sandboxed) ?? 0
+        unsandboxed = try c.decodeIfPresent(Int.self, forKey: .unsandboxed) ?? 0
+    }
+
+    static func key(decision: String?, source: String?, reasonType: String?) -> String {
+        "\(decision ?? "-")|\(source ?? "-")|\(reasonType ?? "-")"
+    }
+
+    mutating func record(_ d: PermissionDecisionRaw, sandboxed isSandboxed: Bool?) {
+        decisions[Self.key(decision: d.decision, source: d.source, reasonType: d.reasonType), default: 0] += 1
+        if d.isReject {
+            if let breaker = d.circuitBreaker, !breaker.isEmpty { circuitBreakers[breaker, default: 0] += 1 }
+            if let rule = d.ruleSource, !rule.isEmpty { denyRuleSources[rule, default: 0] += 1 }
+        }
+        switch isSandboxed {
+        case true?: sandboxed += 1
+        case false?: unsandboxed += 1
+        case nil: break
+        }
+    }
+
+    mutating func merge(_ other: PermissionStats) {
+        decisions.merge(other.decisions, uniquingKeysWith: +)
+        circuitBreakers.merge(other.circuitBreakers, uniquingKeysWith: +)
+        denyRuleSources.merge(other.denyRuleSources, uniquingKeysWith: +)
+        sandboxed += other.sandboxed
+        unsandboxed += other.unsandboxed
+    }
 }

@@ -25,24 +25,23 @@ struct EffortAnalyticsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Effort Distribution")
                             .font(.headline)
-                        Chart {
-                            SectorMark(angle: .value("Low", data.distribution.low), innerRadius: .ratio(0.5), angularInset: 1.5)
-                                .foregroundStyle(Color.scaleLow)
-                            SectorMark(angle: .value("Medium", data.distribution.medium), innerRadius: .ratio(0.5), angularInset: 1.5)
-                                .foregroundStyle(Color.scaleMedium)
-                            SectorMark(angle: .value("High", data.distribution.high), innerRadius: .ratio(0.5), angularInset: 1.5)
-                                .foregroundStyle(Color.scaleHigh)
-                            SectorMark(angle: .value("Ultra-think", data.distribution.ultrathink), innerRadius: .ratio(0.5), angularInset: 1.5)
-                                .foregroundStyle(Color.scaleMax)
+                        Chart(EffortLevel.allCases, id: \.self) { level in
+                            SectorMark(angle: .value(level.label, data.distribution.count(level)), innerRadius: .ratio(0.5), angularInset: 1.5)
+                                .foregroundStyle(Color.forEffort(level))
                         }
                         .frame(height: 200)
 
-                        // Legend
                         HStack(spacing: 16) {
-                            effortLegend("Low", color: .scaleLow, count: data.distribution.low)
-                            effortLegend("Medium", color: .scaleMedium, count: data.distribution.medium)
-                            effortLegend("High", color: .scaleHigh, count: data.distribution.high)
-                            effortLegend("Ultra-think", color: .scaleMax, count: data.distribution.ultrathink)
+                            ForEach(EffortLevel.allCases, id: \.self) { level in
+                                effortLegend(level.label, color: Color.forEffort(level), count: data.distribution.count(level))
+                            }
+                        }
+
+                        if data.distribution.estimatedTurns > 0, data.distribution.total > 0 {
+                            let pct = Int((Double(data.distribution.estimatedTurns) / Double(data.distribution.total) * 100).rounded())
+                            Text("\(max(pct, 1))% of turns come from transcripts that predate recorded effort; their level is estimated from thinking length and output size.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
                         }
                     }
                     .padding(.horizontal, 24)
@@ -64,6 +63,11 @@ struct EffortAnalyticsView: View {
                                         .font(.system(size: 13))
                                         .foregroundStyle(.secondary)
                                         .frame(width: 80)
+                                    if let ms = row.avgThinkingMs {
+                                        Text(String(format: "%.1fs thinking", ms / 1000))
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.secondary)
+                                    }
                                     Spacer()
                                     Text(String(format: "$%.2f", row.totalCost))
                                         .font(.system(size: 13, design: .monospaced))
@@ -83,14 +87,10 @@ struct EffortAnalyticsView: View {
                             Text("Effort Over Time")
                                 .font(.headline)
                             Chart(data.effortOverTime) { day in
-                                AreaMark(x: .value("Date", day.date), y: .value("Low", day.distribution.low))
-                                    .foregroundStyle(Color.scaleLow.opacity(0.7))
-                                AreaMark(x: .value("Date", day.date), y: .value("Medium", day.distribution.medium))
-                                    .foregroundStyle(Color.scaleMedium.opacity(0.7))
-                                AreaMark(x: .value("Date", day.date), y: .value("High", day.distribution.high))
-                                    .foregroundStyle(Color.scaleHigh.opacity(0.7))
-                                AreaMark(x: .value("Date", day.date), y: .value("Ultra-think", day.distribution.ultrathink))
-                                    .foregroundStyle(Color.scaleMax.opacity(0.7))
+                                ForEach(EffortLevel.allCases, id: \.self) { level in
+                                    AreaMark(x: .value("Date", day.date), y: .value(level.label, day.distribution.count(level)))
+                                        .foregroundStyle(Color.forEffort(level).opacity(0.7))
+                                }
                             }
                             .stridedDateXAxis(dates: data.effortOverTime.map(\.date))
                             .frame(height: 200)
@@ -114,11 +114,6 @@ struct EffortAnalyticsView: View {
     }
 
     private func colorForEffort(_ level: EffortLevel) -> Color {
-        switch level {
-        case .low: return .scaleLow
-        case .medium: return .scaleMedium
-        case .high: return .scaleHigh
-        case .ultrathink: return .scaleMax
-        }
+        Color.forEffort(level)
     }
 }

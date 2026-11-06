@@ -229,6 +229,22 @@ let managedExactKeyPrefix = "@id:"
 /// `promptTokens` is the size of the request (input plus cache reads plus cache
 /// writes). It only matters for a model with a prompt-length tier (Haiku 5.5 today);
 /// callers without per-message usage leave it at 0 and get the base row.
+/// A model id with its provider spelling removed, so the id a client asked for
+/// can be compared with the id that answered: lowercased, a trailing context
+/// tag like `[1m]` dropped, Vertex's `@` turned into `-`, and a trailing
+/// `-YYYYMMDD` snapshot date dropped.
+func canonicalModelId(_ id: String) -> String {
+    var s = id.lowercased().trimmingCharacters(in: .whitespaces)
+    if s.hasSuffix("]"), let open = s.lastIndex(of: "[") {
+        s = String(s[..<open])
+    }
+    s = s.replacingOccurrences(of: "@", with: "-")
+    if let range = s.range(of: "-[0-9]{8}$", options: .regularExpression) {
+        s.removeSubrange(range)
+    }
+    return s
+}
+
 func getModelPricing(
     _ model: String?,
     table: [String: ModelPricing],

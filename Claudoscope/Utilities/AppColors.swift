@@ -43,6 +43,18 @@ extension Color {
     static let scaleMedium = Color.okabeBlue       // dark cool
     static let scaleHigh   = Color.okabeOrange      // light warm
     static let scaleMax    = Color.okabeVermillion // dark warm
+    /// Fifth step for five-level scales (effort gained xhigh and max).
+    static let scaleTop    = Color.okabePurple
+
+    static func forEffort(_ level: EffortLevel) -> Color {
+        switch level {
+        case .low: return .scaleLow
+        case .medium: return .scaleMedium
+        case .high: return .scaleHigh
+        case .xhigh: return .scaleMax
+        case .max: return .scaleTop
+        }
+    }
 
     /// Stable, colorblind-safe color per model family. Replaces the duplicated
     /// maps that used pink/purple/gray, which collide under protanopia.

@@ -165,7 +165,8 @@ actor CoworkService {
                 blockedActionCount: s.blockedActionCount,
                 changedFileCount: s.changedFileCount,
                 continuedInSessionId: s.continuedInSessionId,
-                continuedFromSessionId: s.continuedFromSessionId
+                continuedFromSessionId: s.continuedFromSessionId,
+                modelFallbacks: s.modelFallbacks
             )
             return (parsed, summary)
         } catch {

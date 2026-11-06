@@ -137,7 +137,7 @@ enum AttributionEngine {
         var totalCost = 0.0
 
         for session in sessions {
-            let days = session.dailyContributions.filter { inRange($0.date) }
+            let days = session.dailyContributions.filter { inRange($0.date) && !$0.isPermissionOnly }
             guard !days.isEmpty else { continue }
 
             let windowCost = days.reduce(0.0) { $0 + $1.estimatedCost }

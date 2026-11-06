@@ -12,6 +12,7 @@ struct AnalyticsDetailView: View {
         case attribution = "Attribution"
         case latency = "Latency"
         case effort = "Effort"
+        case permissions = "Permissions"
     }
 
     var data: AnalyticsData { store.analyticsData }
@@ -39,7 +40,7 @@ struct AnalyticsDetailView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 560)
+                .frame(width: 660)
 
                 unpricedModelNotice
             }
@@ -95,6 +96,9 @@ struct AnalyticsDetailView: View {
 
             case .effort:
                 EffortAnalyticsView(data: data.effortAnalytics)
+
+            case .permissions:
+                PermissionAnalyticsView(data: data.permissionAnalytics)
             }
         }
     }

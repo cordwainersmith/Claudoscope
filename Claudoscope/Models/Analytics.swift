@@ -54,6 +54,9 @@ struct AnalyticsData: Sendable {
     /// and are filtered out of `modelUsage`, so `totalCost` understates spend and
     /// nothing else in the payload hints at it. Normally empty.
     let unpricedModels: [String]
+    /// Requested-to-served model pairs across sessions active in the window.
+    let modelFallbacks: [ModelFallbackRow]
+    let permissionAnalytics: PermissionAnalytics
 
     init(
         totalSessions: Int,
@@ -72,7 +75,9 @@ struct AnalyticsData: Sendable {
         parallelToolAnalytics: ParallelToolAnalytics,
         coworkCost: Double,
         coworkHasUnknownModel: Bool,
-        unpricedModels: [String] = []
+        unpricedModels: [String] = [],
+        modelFallbacks: [ModelFallbackRow] = [],
+        permissionAnalytics: PermissionAnalytics = .empty
     ) {
         self.totalSessions = totalSessions
         self.totalMessages = totalMessages
@@ -91,6 +96,8 @@ struct AnalyticsData: Sendable {
         self.coworkCost = coworkCost
         self.coworkHasUnknownModel = coworkHasUnknownModel
         self.unpricedModels = unpricedModels
+        self.modelFallbacks = modelFallbacks
+        self.permissionAnalytics = permissionAnalytics
     }
 
     static let empty = AnalyticsData(
@@ -121,7 +128,9 @@ struct AnalyticsData: Sendable {
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: coworkCost,
             coworkHasUnknownModel: hasUnknownModel,
-            unpricedModels: unpricedModels
+            unpricedModels: unpricedModels,
+            modelFallbacks: modelFallbacks,
+            permissionAnalytics: permissionAnalytics
         )
     }
 }
@@ -335,6 +344,52 @@ struct SlowTurnEntry: Identifiable, Sendable {
     let durationMs: Double
     let isPostCompaction: Bool
     let model: String?
+}
+
+// MARK: - Model Fallbacks
+
+struct ModelFallbackRow: Identifiable, Sendable, Equatable {
+    var id: String { requested + "|" + served }
+    let requested: String
+    let served: String
+    let turnCount: Int
+    let sessionCount: Int
+}
+
+// MARK: - Permission Analytics
+
+struct LabeledCount: Identifiable, Sendable, Equatable {
+    var id: String { label }
+    let label: String
+    let count: Int
+}
+
+struct DatedCount: Identifiable, Sendable, Equatable {
+    var id: String { date }
+    let date: String
+    let count: Int
+}
+
+struct PermissionAnalytics: Sendable, Equatable {
+    let totalDecisions: Int
+    let totalDenials: Int
+    let approvalsBySource: [LabeledCount]
+    let denialsByReason: [LabeledCount]
+    let circuitBreakers: [LabeledCount]
+    let denyRuleSources: [LabeledCount]
+    /// Share of tool calls that recorded `sandboxed: true`, out of those that
+    /// recorded the field at all. Nil when none did.
+    let sandboxedShare: Double?
+    let dailyDenials: [DatedCount]
+
+    var safetyCheckTrips: Int {
+        denialsByReason.first { $0.label == "Safety check" }?.count ?? 0
+    }
+
+    static let empty = PermissionAnalytics(
+        totalDecisions: 0, totalDenials: 0, approvalsBySource: [], denialsByReason: [],
+        circuitBreakers: [], denyRuleSources: [], sandboxedShare: nil, dailyDenials: []
+    )
 }
 
 // MARK: - Effort Analytics

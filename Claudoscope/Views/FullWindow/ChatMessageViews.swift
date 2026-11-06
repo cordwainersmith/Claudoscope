@@ -64,7 +64,12 @@ struct AssistantMessageView: View {
     var showThinking = true
     var showToolCalls = true
 
+    private var recordedEffort: EffortLevel? {
+        ObservabilityAnalyzer.recordedEffort(effort: record.effort, perTurnEffort: record.perTurnEffort)
+    }
+
     private var effortLevel: EffortLevel {
+        if let recorded = recordedEffort { return recorded }
         var thinkingChars = 0
         if case .blocks(let blocks) = record.message?.content {
             for block in blocks where block.type == "thinking" {
@@ -111,6 +116,14 @@ struct AssistantMessageView: View {
                         .padding(.vertical, 2)
                         .background(.purple.opacity(0.1))
                         .clipShape(Capsule())
+                    if let requested = record.requestedModel,
+                       model != "<synthetic>",
+                       canonicalModelId(requested) != canonicalModelId(model) {
+                        Text("requested \(canonicalModelId(requested))")
+                            .font(Typography.caption)
+                            .foregroundStyle(.secondary)
+                            .help("Claude Code asked for \(requested); \(model) answered")
+                    }
                 }
 
                 Spacer()
@@ -131,7 +144,7 @@ struct AssistantMessageView: View {
                             TurnDurationBadge(durationMs: td.durationMs)
                         }
                         if effortLevel != .low {
-                            EffortLevelBadge(level: effortLevel)
+                            EffortLevelBadge(level: effortLevel, isEstimated: recordedEffort == nil)
                         }
                         if showToolCalls && parallelToolCount > 1 {
                             ParallelToolBadge(count: parallelToolCount)

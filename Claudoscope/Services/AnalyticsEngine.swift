@@ -64,12 +64,16 @@ struct AnalyticsEngine {
         var modelMap: [String: ModelUsage] = [:]
         var windowed: [WindowedSession] = []
         var unpricedModels: Set<String> = []
+        // Permission decisions can land on a day with no billed turn; those days
+        // feed only the Permissions tab, never session or cost counts.
+        var permissionDays: [DailyContribution] = []
 
         for (session, project) in sessions {
+            permissionDays += session.dailyContributions.filter { inRange($0.date) && $0.permissionStats != nil }
             // Project the session onto the window. A session with no billed day in
             // range contributes to nothing and is dropped (this replaces the old
             // whole-session filter by lastTimestamp, which over-counted /resume).
-            let days = session.dailyContributions.filter { inRange($0.date) }
+            let days = session.dailyContributions.filter { inRange($0.date) && !$0.isPermissionOnly }
             guard !days.isEmpty else { continue }
 
             var wInput = 0, wOutput = 0, wCacheRead = 0, wCacheCreate = 0
@@ -206,6 +210,8 @@ struct AnalyticsEngine {
         let latencyAnalytics = computeLatencyAnalytics(windowed: windowed)
         let effortAnalytics = computeEffortAnalytics(windowed: windowed)
         let parallelToolAnalytics = computeParallelToolAnalytics(windowed: windowed)
+        let modelFallbacks = computeModelFallbacks(windowed: windowed)
+        let permissionAnalytics = computePermissionAnalytics(days: permissionDays)
 
         return AnalyticsData(
             totalSessions: totalSessions,
@@ -224,7 +230,9 @@ struct AnalyticsEngine {
             parallelToolAnalytics: parallelToolAnalytics,
             coworkCost: 0,
             coworkHasUnknownModel: false,
-            unpricedModels: unpricedModels.sorted()
+            unpricedModels: unpricedModels.sorted(),
+            modelFallbacks: modelFallbacks,
+            permissionAnalytics: permissionAnalytics
         )
     }
 
@@ -711,71 +719,54 @@ struct AnalyticsEngine {
     private static func computeEffortAnalytics(
         windowed: [WindowedSession]
     ) -> EffortAnalytics {
-        // Aggregate effort distribution across all sessions
-        var totalLow = 0
-        var totalMedium = 0
-        var totalHigh = 0
-        var totalUltrathink = 0
+        // Everything comes from the in-range days' per-turn effort partition, so
+        // a resumed session's earlier days stay out of the window and cost is
+        // split per turn rather than by each session's dominant level.
+        var turns: [EffortLevel: Int] = [:]
+        var cost: [EffortLevel: Double] = [:]
+        var thinkingMs: [EffortLevel: Int] = [:]
+        var estimated: [EffortLevel: Int] = [:]
+        var daily: [String: [EffortLevel: Int]] = [:]
+        var dailyEstimated: [String: Int] = [:]
 
         for w in windowed {
-            let dist = w.session.observability.effortDistribution
-            totalLow += dist.low
-            totalMedium += dist.medium
-            totalHigh += dist.high
-            totalUltrathink += dist.ultrathink
+            for day in w.days {
+                for e in day.effortBreakdown ?? [] {
+                    turns[e.level, default: 0] += e.turnCount
+                    cost[e.level, default: 0] += e.estimatedCost
+                    thinkingMs[e.level, default: 0] += e.thinkingDurationMs
+                    estimated[e.level, default: 0] += e.estimatedTurnCount
+                    daily[day.date, default: [:]][e.level, default: 0] += e.turnCount
+                    dailyEstimated[day.date, default: 0] += e.estimatedTurnCount
+                }
+            }
         }
 
         let distribution = EffortDistribution(
-            low: totalLow,
-            medium: totalMedium,
-            high: totalHigh,
-            ultrathink: totalUltrathink
+            counts: turns,
+            estimatedTurns: estimated.values.reduce(0, +)
         )
 
-        // Cost by effort level: group sessions by dominant effort level
-        var effortCostMap: [EffortLevel: (turnCount: Int, totalCost: Double)] = [:]
-        for w in windowed {
-            guard let level = w.session.observability.dominantEffortLevel else { continue }
-            var entry = effortCostMap[level, default: (turnCount: 0, totalCost: 0)]
-            entry.turnCount += w.session.messageCount
-            entry.totalCost += w.cost
-            effortCostMap[level] = entry
-        }
-
         let costByEffort: [EffortCostBreakdown] = EffortLevel.allCases.compactMap { level in
-            guard let entry = effortCostMap[level], entry.turnCount > 0 else { return nil }
+            guard let count = turns[level], count > 0 else { return nil }
+            let total = cost[level, default: 0]
+            let thinking = thinkingMs[level, default: 0]
             return EffortCostBreakdown(
                 level: level,
-                turnCount: entry.turnCount,
-                totalCost: entry.totalCost,
-                avgCostPerTurn: entry.totalCost / Double(entry.turnCount)
+                turnCount: count,
+                totalCost: total,
+                avgCostPerTurn: total / Double(count),
+                avgThinkingMs: thinking > 0 ? Double(thinking) / Double(count) : nil,
+                estimatedShare: Double(estimated[level, default: 0]) / Double(count)
             )
         }
 
-        // Effort over time: group by date
-        var dailyEffortMap: [String: (low: Int, medium: Int, high: Int, ultrathink: Int)] = [:]
-        for w in windowed {
-            // Whole-session effort attributed to its earliest in-range (LOCAL) day,
-            // consistent with how sessionCount is attributed.
-            let day = w.firstDay
-            let dist = w.session.observability.effortDistribution
-            var entry = dailyEffortMap[day, default: (low: 0, medium: 0, high: 0, ultrathink: 0)]
-            entry.low += dist.low
-            entry.medium += dist.medium
-            entry.high += dist.high
-            entry.ultrathink += dist.ultrathink
-            dailyEffortMap[day] = entry
-        }
-
-        let effortOverTime: [DailyEffort] = dailyEffortMap.keys.sorted().map { date in
-            let entry = dailyEffortMap[date]!
-            return DailyEffort(
+        let effortOverTime: [DailyEffort] = daily.keys.sorted().map { date in
+            DailyEffort(
                 date: date,
                 distribution: EffortDistribution(
-                    low: entry.low,
-                    medium: entry.medium,
-                    high: entry.high,
-                    ultrathink: entry.ultrathink
+                    counts: daily[date] ?? [:],
+                    estimatedTurns: dailyEstimated[date, default: 0]
                 )
             )
         }
@@ -784,6 +775,92 @@ struct AnalyticsEngine {
             distribution: distribution,
             costByEffort: costByEffort,
             effortOverTime: effortOverTime
+        )
+    }
+
+    // MARK: - Model Fallbacks
+
+    private static func computeModelFallbacks(windowed: [WindowedSession]) -> [ModelFallbackRow] {
+        var turns: [String: (requested: String, served: String, count: Int, sessions: Int)] = [:]
+        for w in windowed {
+            for f in w.session.modelFallbacks ?? [] {
+                let key = f.requested + "|" + f.served
+                var entry = turns[key] ?? (f.requested, f.served, 0, 0)
+                entry.count += f.count
+                entry.sessions += 1
+                turns[key] = entry
+            }
+        }
+        return turns.values
+            .map { ModelFallbackRow(requested: $0.requested, served: $0.served, turnCount: $0.count, sessionCount: $0.sessions) }
+            .sorted { $0.turnCount != $1.turnCount ? $0.turnCount > $1.turnCount : $0.id < $1.id }
+    }
+
+    // MARK: - Permission Analytics
+
+    /// Display label for one `permissionDecision` shape. Unknown combinations
+    /// keep their raw parts so a value Claude Code adds later still shows up.
+    static func permissionLabel(decision: String?, source: String?, reasonType: String?) -> String {
+        switch (decision, source, reasonType) {
+        case ("accept", "config", "mode"): return "Permission mode"
+        case ("accept", "config", "rule"): return "Allow rule"
+        case ("accept", "user_temporary", _): return "You, once"
+        case ("accept", "user_permanent", _): return "You, always"
+        case ("reject", "user_reject", _): return "You rejected"
+        case ("reject", "config", "safetyCheck"): return "Safety check"
+        case ("reject", "config", "mode"): return "Mode denied"
+        case ("reject", "config", "rule"), ("reject", "config", "subcommandResults"): return "Deny rule"
+        default:
+            let parts = [source, reasonType].compactMap { $0 }.filter { $0 != "-" }
+            return parts.isEmpty ? "Other" : "Other (\(parts.joined(separator: "/")))"
+        }
+    }
+
+    static func computePermissionAnalytics(days: [DailyContribution]) -> PermissionAnalytics {
+        var merged = PermissionStats()
+        var dailyDenials: [String: Int] = [:]
+        for day in days {
+            guard let stats = day.permissionStats else { continue }
+            merged.merge(stats)
+            let denials = stats.decisions.filter { $0.key.hasPrefix("reject|") }.values.reduce(0, +)
+            if denials > 0 { dailyDenials[day.date, default: 0] += denials }
+        }
+
+        var approvals: [String: Int] = [:]
+        var denials: [String: Int] = [:]
+        var total = 0
+        for (key, count) in merged.decisions {
+            let parts = key.split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            guard parts.count == 3 else { continue }
+            let decision = parts[0] == "-" ? nil : parts[0]
+            let label = permissionLabel(
+                decision: decision,
+                source: parts[1] == "-" ? nil : parts[1],
+                reasonType: parts[2] == "-" ? nil : parts[2]
+            )
+            total += count
+            if decision == "reject" {
+                denials[label, default: 0] += count
+            } else {
+                approvals[label, default: 0] += count
+            }
+        }
+
+        func ranked(_ d: [String: Int]) -> [LabeledCount] {
+            d.map { LabeledCount(label: $0.key, count: $0.value) }
+                .sorted { $0.count != $1.count ? $0.count > $1.count : $0.label < $1.label }
+        }
+
+        let sandboxTotal = merged.sandboxed + merged.unsandboxed
+        return PermissionAnalytics(
+            totalDecisions: total,
+            totalDenials: denials.values.reduce(0, +),
+            approvalsBySource: ranked(approvals),
+            denialsByReason: ranked(denials),
+            circuitBreakers: ranked(merged.circuitBreakers),
+            denyRuleSources: ranked(merged.denyRuleSources),
+            sandboxedShare: sandboxTotal > 0 ? Double(merged.sandboxed) / Double(sandboxTotal) : nil,
+            dailyDenials: dailyDenials.keys.sorted().map { DatedCount(date: $0, count: dailyDenials[$0]!) }
         )
     }
 

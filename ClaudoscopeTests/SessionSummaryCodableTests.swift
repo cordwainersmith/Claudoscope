@@ -15,8 +15,8 @@ final class SessionSummaryCodableTests: XCTestCase {
         let observability = SessionObservability(
             medianTurnDurationMs: 1234.5,
             maxTurnDurationMs: 99999.0,
-            dominantEffortLevel: .ultrathink,
-            effortDistribution: EffortDistribution(low: 1, medium: 2, high: 3, ultrathink: 4),
+            dominantEffortLevel: .xhigh,
+            effortDistribution: EffortDistribution(low: 1, medium: 2, high: 3, xhigh: 4, max: 5, estimatedTurns: 2),
             errorClassifications: [.rateLimit, .toolError, .unknown],
             hasIdleZombieGap: true,
             estimatedIdleWasteCost: 0.42,

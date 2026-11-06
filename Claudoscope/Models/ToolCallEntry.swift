@@ -12,6 +12,7 @@ struct ToolCallEntry: Identifiable, Sendable {
     let sessionId: String
     let timestamp: String?
     var toolDenialKind: String? = nil
+    var permissionDecision: PermissionDecisionRaw? = nil
 }
 
 struct ToolAnalytics: Sendable {
@@ -57,7 +58,8 @@ func extractToolCalls(from session: ParsedSession, ownOnly: Bool = false) -> [To
                 turnIndex: turnIndex,
                 sessionId: session.id,
                 timestamp: result?.timestamp ?? record.timestamp,
-                toolDenialKind: result?.toolDenialKind
+                toolDenialKind: result?.toolDenialKind,
+                permissionDecision: result?.permissionDecision
             ))
         }
     }
