@@ -77,7 +77,19 @@ actor SessionParser {
     ///     Sonnet 5.5 / Mythos 5.1 rate splits.
     /// 15: a continued session's copies of its parent transcript are left out
     ///     of its figures; continuedInSessionId / continuedFromSessionId.
-    static let parserVersion: Int = 15
+    /// 16: api-request* lines skipped; recorded effort; model fallbacks;
+    ///     permission decisions.
+    static let parserVersion: Int = 16
+
+    /// Request-log records (`api-request`, `api-request-shape`,
+    /// `api-request-blob`, Claude Code 2.1.300+) describe what was sent to the
+    /// API, not the conversation. Decoding them as transcript records inflated
+    /// message counts and moved timestamps, and the blob lines can be large, so
+    /// every parse loop drops them before JSON decoding. Claude Code writes
+    /// `type` as the first key of these records.
+    static func isRequestLogLine<S: StringProtocol>(_ line: S) -> Bool {
+        line.hasPrefix("{\"type\":\"api-request")
+    }
 
     private let liteDecoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -203,7 +215,7 @@ actor SessionParser {
         var ids = Set<String>()
         for line in StreamingLineReader(fileHandle: handle) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty { continue }
+            if trimmed.isEmpty || Self.isRequestLogLine(trimmed) { continue }
             guard let data = trimmed.data(using: .utf8),
                   let raw = try? liteDecoder.decode(ParsedRecordRaw.self, from: data) else { continue }
             if raw.type == .assistant, let msg = raw.message, msg.usage != nil, let id = msg.id {
@@ -235,7 +247,7 @@ actor SessionParser {
         var uuids = Set<String>()
         for line in StreamingLineReader(fileHandle: handle) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty { continue }
+            if trimmed.isEmpty || Self.isRequestLogLine(trimmed) { continue }
             guard let data = trimmed.data(using: .utf8),
                   let uuid = (try? liteDecoder.decode(ParsedRecordRaw.self, from: data))?.uuid else { continue }
             uuids.insert(uuid)
@@ -281,7 +293,7 @@ actor SessionParser {
         for line in StreamingLineReader(fileHandle: fileHandle) {
             try Task.checkCancellation()
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty { continue }
+            if trimmed.isEmpty || Self.isRequestLogLine(trimmed) { continue }
             guard let lineData = trimmed.data(using: .utf8) else { continue }
             guard let raw = try? fullDecoder.decode(ParsedRecordRaw.self, from: lineData) else {
                 continue
@@ -531,7 +543,7 @@ actor SessionParser {
         for line in StreamingLineReader(fileHandle: fileHandle) {
             try Task.checkCancellation()
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty { continue }
+            if trimmed.isEmpty || Self.isRequestLogLine(trimmed) { continue }
             lineCount += 1
             if lineCount == 1 { firstLine = trimmed }
             guard let lineData = trimmed.data(using: .utf8) else { continue }
