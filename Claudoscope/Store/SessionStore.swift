@@ -185,6 +185,11 @@ final class SessionStore {
     var fileChangesLoading: Bool = false
     var fileDiskStates: [String: FileDiskState] = [:]
 
+    // Request anatomy (session-detail Context tab). requestAnatomy.sessionKey
+    // identifies which session it belongs to; the view ignores a mismatch.
+    var requestAnatomy: RequestAnatomy?
+    var requestAnatomyLoading: Bool = false
+
     // Lint data
     var lintResults: [LintResult] = []
     var lintSummary: LintSummary = .empty
@@ -337,6 +342,7 @@ final class SessionStore {
     private let configService: ConfigService
     private let linterService = ConfigLinterService()
     private let fileChangesService = FileChangesService()
+    private let requestAnatomyService = RequestAnatomyService()
     private let coworkService = CoworkService()
     private let coworkWatcher = CoworkFileWatcher(supportDir: CoworkService.defaultSupportDir)
     private var cancellables = Set<AnyCancellable>()
@@ -2016,6 +2022,17 @@ final class SessionStore {
                 self.fileChangeSet = nil
                 self.fileDiskStates = [:]
             }
+        }
+    }
+
+    func loadRequestAnatomy(for session: ParsedSession) async {
+        let locator = FileChangesService.fileChangesLocator(for: session, claudeDir: claudeDir)
+        requestAnatomyLoading = true
+        defer { requestAnatomyLoading = false }
+        do {
+            requestAnatomy = try await requestAnatomyService.load(url: locator.url, sessionKey: locator.key)
+        } catch {
+            if requestAnatomy?.sessionKey == locator.key { requestAnatomy = nil }
         }
     }
 

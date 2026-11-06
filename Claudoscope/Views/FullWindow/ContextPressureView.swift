@@ -8,6 +8,7 @@ struct ContextPressureView: View {
     private let points: [ContextPressurePoint]
     private let compactionTimestamps: [String]
     private let mixedTokenizers: Bool
+    private let session: ParsedSession
 
     /// The series is computed once here rather than in a body-level computed
     /// property: it walks every record, and a view body re-evaluates constantly.
@@ -16,6 +17,7 @@ struct ContextPressureView: View {
         self.points = points
         self.compactionTimestamps = session.metadata.compactionEvents.compactMap(\.timestamp)
         self.mixedTokenizers = Self.hasMixedTokenizers(session.metadata.models)
+        self.session = session
     }
 
     private var peak: ContextPressurePoint? {
@@ -39,6 +41,7 @@ struct ContextPressureView: View {
                     statCards
                     chart
                     if mixedTokenizers { tokenizerCaveat }
+                    RequestAnatomySection(session: session)
                 }
                 .padding(24)
             }
