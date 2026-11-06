@@ -327,6 +327,19 @@ extension ConfigLinterService {
             ))
         }
 
+        // HRD015: writes are not confined to the working directories (CC 2.1.314)
+        let blockOutsideWrites = permissionsDict?["blockWritesOutsideWorkingDirectories"] as? Bool ?? false
+        if !blockOutsideWrites {
+            results.append(LintResult(
+                severity: .info,
+                checkId: .HRD015,
+                filePath: settingsPath,
+                message: "permissions.blockWritesOutsideWorkingDirectories is not enabled. Write, Edit and NotebookEdit can change files outside the working directories when a call is approved.",
+                fix: "Set permissions.blockWritesOutsideWorkingDirectories to true in settings.json",
+                displayPath: "settings.json"
+            ))
+        }
+
         return results
     }
 

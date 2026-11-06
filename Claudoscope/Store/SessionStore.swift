@@ -1450,12 +1450,16 @@ final class SessionStore {
         let knownIds = Set(sessionsByProject.values.flatMap { $0.map(\.id) })
         let oldest = sessionsByProject.values.flatMap { $0 }
             .map(\.firstTimestamp).filter { !$0.isEmpty }.min()
-        dataCoverage = DataCoverage.compute(
+        var coverage = DataCoverage.compute(
             historyEntries: history,
             knownSessionIds: knownIds,
             cleanupPeriodDays: ext.cleanupPeriodDays,
             oldestFirstTimestamp: oldest
         )
+        coverage.cleanupMayBeOverridden = await configService.loadPlugins().contains {
+            $0.enabled && ($0.modHookEvents ?? []).contains("settings.read")
+        }
+        dataCoverage = coverage
     }
 
     func recomputeAnalytics(rebaselineCostLedger: Bool = false) {

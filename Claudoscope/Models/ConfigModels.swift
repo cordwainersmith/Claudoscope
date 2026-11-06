@@ -25,6 +25,7 @@ struct HookCommand: Sendable {
     let command: String
     let timeout: Int?
     var terminalSequence: String? = nil   // hook terminalSequence field (CC 2.1.141)
+    var onFailure: String? = nil          // "block" makes a failed hook refuse the action (CC 2.1.295)
 }
 
 struct HookRule: Identifiable, Sendable {
@@ -161,6 +162,7 @@ struct SandboxConfig: Sendable {
     let deniedDomains: [String]
     var credentials: SandboxCredentials? = nil   // sandbox.credentials (CC 2.1.187)
     var allowAppleEvents: Bool = false            // sandbox.allowAppleEvents (CC 2.1.181)
+    var allowNestedUserNamespaces: Bool = false   // sandbox.allowNestedUserNamespaces (CC 2.1.305)
     var filesystemDisabled: Bool = false          // sandbox.filesystem.disabled (CC 2.1.216)
     var strictAllowlist: Bool = false             // sandbox.network.strictAllowlist (CC 2.1.219)
     var tlsTerminate: Bool = false                // sandbox.network.tlsTerminate
@@ -201,6 +203,10 @@ struct PluginInfo: Identifiable, Sendable {
     var modModules: [String]? = nil
     /// Mod event names found by scanning the module sources for `on("...")`.
     var modHookEvents: [String]? = nil
+    /// Privacy-sensitive mod APIs the module sources call: "prompt.media"
+    /// (attached image/document bytes) and "session.identity" (sign-in,
+    /// organization and email). Both are limited to managed mods (CC 2.1.299).
+    var modSensitiveApis: [String]? = nil
 
     var isMod: Bool { !(modModules ?? []).isEmpty }
 

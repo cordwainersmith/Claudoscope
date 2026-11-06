@@ -123,7 +123,8 @@ extension ConfigService {
                 componentsByKind: componentsByKind,
                 installations: installations[fullName],
                 modModules: modInfo?.modules,
-                modHookEvents: modInfo?.events
+                modHookEvents: modInfo?.events,
+                modSensitiveApis: modInfo?.sensitiveApis
             ))
         }
 
@@ -208,16 +209,17 @@ extension ConfigService {
     /// A Claude Mod's module list and the events it registers for, or nil for a
     /// plugin that is not a mod. Events come from a static scan of the module
     /// sources for `on("event.name"` calls, tests excluded; nothing is executed.
-    func pluginModInfo(versionDir: URL) -> (modules: [String], events: [String])? {
+    func pluginModInfo(versionDir: URL) -> (modules: [String], events: [String], sensitiveApis: [String])? {
         let hooksDir = versionDir.appendingPathComponent("hooks")
         guard let hooksFile = readJSON(at: hooksDir.appendingPathComponent("hooks.json")),
               let modules = hooksFile["modules"] as? [String], !modules.isEmpty
         else { return nil }
 
         guard let regex = try? NSRegularExpression(pattern: #"\bon\(\s*['"]([a-z]+(?:\.[a-z]+)*)['"]"#) else {
-            return (modules, [])
+            return (modules, [], [])
         }
         var events = Set<String>()
+        var sensitive = Set<String>()
         let enumerator = fm.enumerator(at: hooksDir, includingPropertiesForKeys: [.isDirectoryKey])
         while let url = enumerator?.nextObject() as? URL {
             if url.lastPathComponent == "tests" || url.lastPathComponent == "node_modules" {
@@ -235,8 +237,10 @@ extension ConfigService {
                     events.insert(String(source[r]))
                 }
             }
+            if source.contains("prompt.media") { sensitive.insert("prompt.media") }
+            if source.contains("session.identity(") { sensitive.insert("session.identity") }
         }
-        return (modules, events.sorted())
+        return (modules, events.sorted(), sensitive.sorted())
     }
 
     private func directoryEntryCount(_ url: URL) -> Int {

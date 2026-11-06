@@ -143,6 +143,7 @@ struct AgentsMainPanelView: View {
         ("model", "Model", "cpu"),
         ("effort", "Effort", "speedometer"),
         ("maxTurns", "Max Turns", "arrow.triangle.2.circlepath"),
+        ("autoCompactWindow", "Auto-compact Window", "rectangle.compress.vertical"),
         ("skills", "Skills", "star"),
     ]
 

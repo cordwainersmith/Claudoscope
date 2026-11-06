@@ -205,6 +205,18 @@ extension ConfigLinterService {
             guard let files = try? fm.contentsOfDirectory(at: commandsDir, includingPropertiesForKeys: []) else { continue }
 
             for file in files where file.pathExtension == "md" {
+                // SKL017: command names Claude Code 2.1.299+ refuses to offer
+                let stem = file.deletingPathExtension().lastPathComponent
+                if Self.hasUnsafeNameCharacters(stem, allowAngleBrackets: false) {
+                    results.append(LintResult(
+                        severity: .error,
+                        checkId: .SKL017,
+                        filePath: file.path,
+                        message: "Command file name contains hidden, text-direction or blank-like characters or < >. Claude Code 2.1.299+ does not offer this command.",
+                        fix: "Rename the file using plain characters.",
+                        displayPath: Self.visibleName(file.lastPathComponent)
+                    ))
+                }
                 guard let content = try? String(contentsOf: file, encoding: .utf8) else { continue }
                 let displayPath = file.lastPathComponent
                 results.append(contentsOf: lintCommandFileToolRestrictions(

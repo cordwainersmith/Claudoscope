@@ -442,7 +442,18 @@ private struct PluginDetail: View {
     /// opposed to only observing or rendering.
     private static let behaviorChangingModEvents: Set<String> = [
         "tool.call", "prompt.submit", "prompt.compose", "session.append",
+        // 2.1.290-2.1.304: approval verdicts, rewriting spawned agents' prompt
+        // and model, skill prompts, and the merged settings themselves.
+        "tool.check", "agent.spawn", "skill.prompt", "settings.read",
     ]
+
+    private static func sensitiveApiLabel(_ api: String) -> String {
+        switch api {
+        case "prompt.media": return "Reads prompt attachments"
+        case "session.identity": return "Reads sign-in identity"
+        default: return api
+        }
+    }
 
     private var hookEventsCard: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -472,6 +483,19 @@ private struct PluginDetail: View {
                                 .foregroundStyle(Color.okabeOrange)
                         }
                         Spacer()
+                    }
+                }
+            }
+            if let apis = plugin.modSensitiveApis, !apis.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(apis, id: \.self) { api in
+                        Text(Self.sensitiveApiLabel(api))
+                            .font(.system(size: 9, weight: .medium))
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Color.okabeVermillion.opacity(0.18))
+                            .clipShape(Capsule())
+                            .foregroundStyle(Color.okabeVermillion)
                     }
                 }
             }

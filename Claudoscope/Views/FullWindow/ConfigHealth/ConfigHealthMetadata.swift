@@ -259,6 +259,22 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Skill never runs",
         hint: "The skill is installed but appears in no attributed turn, while other skills do. Its description is loaded into context on every request and earns nothing back. Either the description does not describe a situation Claude recognises, or the skill is obsolete. Only reported once the corpus holds enough tagged skill turns for the absence to mean something."
     ),
+    .SKL017: RuleMetadata(
+        displayName: "Skill or command name Claude Code hides",
+        hint: "Since 2.1.299 Claude Code no longer offers a skill or command whose file or folder name contains hidden, text-direction or blank-like characters, or < and >. Such characters can make a name look like another one. Rename it with plain characters."
+    ),
+    .AGT001: RuleMetadata(
+        displayName: "Agent tool list relies on MCP prefix matching",
+        hint: "Since 2.1.299 an agent's tools: entry mcp__<server> reaches only the server with exactly that normalized name. A server whose name merely starts with it is no longer included. Write mcp__<whole server name>__* for each server."
+    ),
+    .AGT002: RuleMetadata(
+        displayName: "Agent name too long",
+        hint: "Since 2.1.292 Claude Code rejects an agent name longer than 256 characters, so the agent is not available. Shorten the name."
+    ),
+    .AGT003: RuleMetadata(
+        displayName: "Agent preloads too many skills",
+        hint: "Since 2.1.295 a subagent preloads at most 32 skills from its skills: field. The rest are not loaded up front; with the Skill tool it can still invoke them. Trim the list to the skills it needs every time."
+    ),
     .CMD007: RuleMetadata(
         displayName: "Command tool restriction malformed",
         hint: "A command's allowed-tools / disallowed-tools frontmatter is malformed or self-contradictory. Fix the frontmatter so the restriction is unambiguous."
@@ -335,6 +351,26 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Managed-only model setting in user settings",
         hint: "deniedModels, availableModelsMatch and allowedProviders are documented as managed settings (2.1.283, 2.1.285). Set in ~/.claude/settings.json they may have no effect. Deploy them through managed settings to enforce them."
     ),
+    .CFG027: RuleMetadata(
+        displayName: "Sandbox allows nested user namespaces",
+        hint: "sandbox.allowNestedUserNamespaces (2.1.305) lets sandboxed commands create user namespaces for Chromium or rootless podman. Claude Code documents that this lets them get around the sandbox's file protections. Keep it off unless a tool needs it."
+    ),
+    .CFG028: RuleMetadata(
+        displayName: "User-scope setting in project settings",
+        hint: "Claude Code reads these keys only from user, managed or --settings scope: CLAUDE_CODE_DISABLE_ATTACHMENTS and claudeInChromeDefaultEnabled since 2.1.290, axScreenReader and CLAUDE_AX_SCREEN_READER since 2.1.307. In a repo's settings they do nothing."
+    ),
+    .CFG029: RuleMetadata(
+        displayName: "DISABLE_COMPACT cannot re-enable compaction",
+        hint: "Since 2.1.311, DISABLE_COMPACT in a settings file can only turn compaction off. Setting it to 0, false or empty does not turn compaction back on if another scope disabled it. Remove the key."
+    ),
+    .CFG030: RuleMetadata(
+        displayName: "Fast mode on Opus 4.8",
+        hint: "Fast mode on Opus 4.8 was deprecated on October 30, 2026 and is removed on November 30, 2026. After that, fast requests on Opus 4.8 return an error and do not fall back to standard speed. Move to Opus 5.5 to keep the speedup."
+    ),
+    .CFG031: RuleMetadata(
+        displayName: "MCP permission rule relies on prefix matching",
+        hint: "Since 2.1.299 a permission rule mcp__<name> reaches only the server whose normalized name is exactly <name>. Servers whose names merely start with it, like <name>__x or <name>_, are no longer covered. Write mcp__<whole server name>__* instead."
+    ),
     .HRD012: RuleMetadata(
         displayName: "autoMode missing hard_deny baseline",
         hint: "settings.json has an autoMode block but no hard_deny baseline. hard_deny rules are the non-bypassable stops for unattended runs; without them the agent can take destructive actions autonomously during long or batch jobs. Add a hard_deny baseline."
@@ -346,6 +382,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .HRD014: RuleMetadata(
         displayName: "Reads not confined to working directories",
         hint: "permissions.blockReadsOutsideWorkingDirectories is not enabled, so Read, Grep and Glob can reach any path on disk, including other repositories, SSH keys and credential files. Enable it to keep file access inside the directories the session was started with."
+    ),
+    .HRD015: RuleMetadata(
+        displayName: "Writes not confined to working directories",
+        hint: "permissions.blockWritesOutsideWorkingDirectories (2.1.314) makes Write, Edit and NotebookEdit refuse paths outside the working directories in every permission mode. Without it, an approved or auto-approved edit can land anywhere on disk."
     ),
     .RTG001: RuleMetadata(
         displayName: "Routing agent file missing",
@@ -394,6 +434,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .HOOK005: RuleMetadata(
         displayName: "Agent hook on PermissionRequest",
         hint: "Since Claude Code 2.1.280, agent-type hooks are not run on the PermissionRequest event, so this hook never makes a decision. Use a command or prompt hook there instead."
+    ),
+    .HOOK006: RuleMetadata(
+        displayName: "Guard hook fails open",
+        hint: "A PreToolUse or PermissionRequest hook that cannot start, times out or exits unexpectedly lets the tool call through. Since 2.1.295, \"onFailure\": \"block\" on a command or http hook blocks the call instead. Add it to hooks that enforce policy."
     ),
     .PLG001: RuleMetadata(
         displayName: "Unsatisfied plugin dependency",
@@ -457,7 +501,7 @@ struct CategoryDef: Identifiable {
 let healthCategories: [CategoryDef] = [
     CategoryDef(id: "security", label: "Security", icon: "!", color: Color(red: 0.886, green: 0.294, blue: 0.290), prefixes: ["SEC"], sortOrder: 1),
     CategoryDef(id: "performance", label: "Session performance", icon: "~", color: Color(red: 0.937, green: 0.624, blue: 0.153), prefixes: ["SES"], sortOrder: 2),
-    CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS", "HOOK"], sortOrder: 3),
+    CategoryDef(id: "skills", label: "Skills & hooks", icon: "S", color: Color(red: 0.498, green: 0.467, blue: 0.867), prefixes: ["SKL", "HKS", "HOOK", "AGT"], sortOrder: 3),
     CategoryDef(id: "config", label: "Configuration", icon: "i", color: Color(red: 0.216, green: 0.541, blue: 0.867), prefixes: ["XCT", "CFG", "CMD", "RUL"], sortOrder: 4),
     CategoryDef(id: "plugins", label: "Plugins", icon: "P", color: Color(red: 0.357, green: 0.678, blue: 0.518), prefixes: ["PLG", "CHN"], sortOrder: 5),
     CategoryDef(id: "canon", label: "Canon", icon: "C", color: Color(red: 0.553, green: 0.435, blue: 0.302), prefixes: ["CAN"], sortOrder: 6),

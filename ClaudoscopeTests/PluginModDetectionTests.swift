@@ -85,6 +85,24 @@ final class PluginModDetectionTests: XCTestCase {
         XCTAssertEqual(info.events, ["session.start", "tool.call", "turn.complete", "ui.render"])
     }
 
+    func testSensitiveApisDetected() async throws {
+        let dir = versionDir("sensitive")
+        try writeJSON(["modules": ["./register.ts"]], to: dir.appendingPathComponent("hooks/hooks.json"))
+        try writeText(#"on("prompt.submit", async (e) => { const m = await $.prompt.media(e); const who = await $.session.identity(); })"#,
+                      to: dir.appendingPathComponent("hooks/register.ts"))
+
+        let modInfo = await service.pluginModInfo(versionDir: dir)
+        let info = try XCTUnwrap(modInfo)
+        XCTAssertEqual(info.sensitiveApis, ["prompt.media", "session.identity"])
+
+        let plain = versionDir("plain")
+        try writeJSON(["modules": ["./register.ts"]], to: plain.appendingPathComponent("hooks/hooks.json"))
+        try writeText(registerSource, to: plain.appendingPathComponent("hooks/register.ts"))
+        let plainModInfo = await service.pluginModInfo(versionDir: plain)
+        let plainInfo = try XCTUnwrap(plainModInfo)
+        XCTAssertEqual(plainInfo.sensitiveApis, [])
+    }
+
     func testClassicPluginIsNotAMod() async throws {
         let dir = versionDir("classic")
         try writeJSON([

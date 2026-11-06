@@ -283,6 +283,13 @@ struct HooksMainPanelView: View {
                                                     .font(.system(size: 11, design: .monospaced))
                                                     .foregroundStyle(.tertiary)
                                             }
+
+                                            if hook.type != nil || hook.onFailure != nil {
+                                                Text([hook.type.map { "type: \($0)" }, hook.onFailure.map { "onFailure: \($0)" }]
+                                                    .compactMap { $0 }.joined(separator: "  "))
+                                                    .font(.system(size: 11, design: .monospaced))
+                                                    .foregroundStyle(.tertiary)
+                                            }
                                         }
                                     }
                                 }

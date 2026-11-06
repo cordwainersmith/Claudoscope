@@ -188,10 +188,24 @@ extension SettingsMainPanelView {
         let allowList = permissions?["allow"] as? [String] ?? []
         let denyList = permissions?["deny"] as? [String] ?? []
         let blockOutsideReads = permissions?["blockReadsOutsideWorkingDirectories"] as? Bool
+        let blockOutsideWrites = permissions?["blockWritesOutsideWorkingDirectories"] as? Bool
 
         settingsSection(id: "permissions", icon: "shield", title: "Permissions") {
-            if !allowList.isEmpty || !denyList.isEmpty || blockOutsideReads != nil {
+            if !allowList.isEmpty || !denyList.isEmpty || blockOutsideReads != nil || blockOutsideWrites != nil {
                 VStack(alignment: .leading, spacing: 12) {
+                    if let blockOutsideWrites {
+                        HStack(spacing: 6) {
+                            Image(systemName: blockOutsideWrites ? "lock.fill" : "lock.open")
+                                .font(.system(size: 11))
+                            Text(blockOutsideWrites
+                                 ? "Writes confined to the working directories"
+                                 : "Writes not confined: blockWritesOutsideWorkingDirectories is off")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(blockOutsideWrites ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.orange))
+                        .padding(.horizontal, 12)
+                    }
+
                     if let blockOutsideReads {
                         HStack(spacing: 6) {
                             Image(systemName: blockOutsideReads ? "lock.fill" : "lock.open")
@@ -271,7 +285,9 @@ extension SettingsMainPanelView {
         let credentials = sandbox?.credentials
         let hasCredentialProtection = !((credentials?.files ?? []).isEmpty && (credentials?.envVars ?? []).isEmpty)
         let allowAppleEvents = sandbox?.allowAppleEvents ?? false
-        let isDefault = !yolo && !hasUnsandboxed && !weakerSandbox && !hasDeniedDomains && !allowAppleEvents && !hasCredentialProtection
+        let allowNestedNamespaces = sandbox?.allowNestedUserNamespaces ?? false
+        let isDefault = !yolo && !hasUnsandboxed && !weakerSandbox && !hasDeniedDomains && !allowAppleEvents
+            && !allowNestedNamespaces && !hasCredentialProtection
 
         settingsSection(id: "security", icon: "lock.shield", title: "Security") {
             VStack(alignment: .leading, spacing: 8) {
@@ -351,6 +367,17 @@ extension SettingsMainPanelView {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 11))
                         Text("Apple Events allowed from sandbox")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 12)
+                }
+
+                if allowNestedNamespaces {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 11))
+                        Text("Nested user namespaces allowed: sandboxed commands can get around file protections")
                             .font(.system(size: 12))
                     }
                     .foregroundStyle(.yellow)

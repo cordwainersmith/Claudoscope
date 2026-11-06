@@ -68,8 +68,37 @@ extension ConfigLinterService {
         return servers
     }
 
+    /// HOOK006: a PreToolUse or PermissionRequest command/http hook without
+    /// `onFailure: "block"` lets the tool call through when it cannot start,
+    /// times out or exits unexpectedly (CC 2.1.295). One finding per source.
+    static func failOpenGuardHooks(_ hookGroups: [HookEventGroup]) -> [LintResult] {
+        var bySource: [String: [String]] = [:]
+        for group in hookGroups where group.event == "PreToolUse" || group.event == "PermissionRequest" {
+            for rule in group.rules {
+                for hook in rule.hooks {
+                    let type = hook.type ?? "command"
+                    guard type == "command" || type == "http", hook.onFailure != "block" else { continue }
+                    let label = hook.command.isEmpty ? "\(type) hook" : hook.command
+                    bySource[hookSourceDisplayPath(rule.source), default: []].append("\(group.event): \(label)")
+                }
+            }
+        }
+        return bySource.keys.sorted().map { path in
+            let hooks = bySource[path]!
+            let shown = hooks.prefix(3).joined(separator: "; ") + (hooks.count > 3 ? "; and \(hooks.count - 3) more" : "")
+            return LintResult(
+                severity: .info,
+                checkId: .HOOK006,
+                filePath: path,
+                message: "\(hooks.count) PreToolUse/PermissionRequest hook\(hooks.count == 1 ? "" : "s") in \(path) let the tool call through if the hook fails to run: \(shown).",
+                fix: "Add \"onFailure\": \"block\" to hooks that enforce policy.",
+                displayPath: path
+            )
+        }
+    }
+
     func lintHooks(hookGroups: [HookEventGroup], mcpServerNames: Set<String>) -> [LintResult] {
-        var results: [LintResult] = []
+        var results: [LintResult] = Self.failOpenGuardHooks(hookGroups)
 
         for group in hookGroups {
             let event = group.event

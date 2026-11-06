@@ -44,6 +44,10 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SKL014  // allowed-tools restricted to todo tools, unavailable on current models (CC 2.1.233)
     case SKL015  // the same skill name defined in two scopes
     case SKL016  // installed skill with no attributed turns
+    case SKL017  // skill/command name with hidden, bidi or blank-like characters (CC 2.1.299)
+    case AGT001  // agent tools: entry relies on MCP prefix matching (CC 2.1.299)
+    case AGT002  // agent name longer than 256 characters (CC 2.1.292)
+    case AGT003  // agent skills: preloads more than 32 skills (CC 2.1.295)
     case SKL_AGG  // aggregate descriptions >16000 chars
 
     // Hook matcher checks
@@ -52,6 +56,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case HOOK003  // matcher references unknown/removed MCP server
     case HOOK004  // matcher set on an event that ignores matchers
     case HOOK005  // agent-type hook on PermissionRequest, not supported (CC 2.1.280)
+    case HOOK006  // guard hook fails open without onFailure: "block" (CC 2.1.295)
 
     // Cross-cutting
     case XCT001  // total token estimate
@@ -94,6 +99,11 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG024  // MCP server named anthropic-skills, reserved (CC 2.1.282)
     case CFG025  // MCP server of type "sdk", skipped (CC 2.1.274)
     case CFG026  // managed-only model setting in user settings (CC 2.1.283/2.1.285)
+    case CFG027  // sandbox.allowNestedUserNamespaces weakens file protections (CC 2.1.305)
+    case CFG028  // user-scope-only key set in project settings (CC 2.1.290/2.1.307)
+    case CFG029  // DISABLE_COMPACT set to a falsy value (CC 2.1.311)
+    case CFG030  // fast mode on Opus 4.8, deprecated and removed 2026-11-30 (CC 2.1.316)
+    case CFG031  // MCP permission rule relies on prefix matching (CC 2.1.299)
 
     // Hardening baseline checks
     case HRD001  // sandbox.enabled missing or false
@@ -110,6 +120,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case HRD012  // autoMode present but missing hard_deny baseline
     case HRD013  // availableModels listed but not enforced
     case HRD014  // blockReadsOutsideWorkingDirectories not enabled (CC 2.1.252)
+    case HRD015  // blockWritesOutsideWorkingDirectories not enabled (CC 2.1.314)
 
     // Agent routing stack checks
     case RTG001  // installed agent file missing

@@ -63,6 +63,20 @@ extension ConfigLinterService {
             let parsed = parseSkillContent(content)
             let path = skillFilePath.path
 
+            // SKL017: names Claude Code 2.1.299+ refuses to offer
+            let unsafeFolder = Self.hasUnsafeNameCharacters(dirName, allowAngleBrackets: false)
+            let unsafeName = parsed.name.map { Self.hasUnsafeNameCharacters($0, allowAngleBrackets: true) } ?? false
+            if unsafeFolder || unsafeName {
+                results.append(LintResult(
+                    severity: .error,
+                    checkId: .SKL017,
+                    filePath: path,
+                    message: "Skill \(unsafeFolder ? "folder" : "name") contains hidden, text-direction or blank-like characters\(unsafeFolder ? " or < >" : ""). Claude Code 2.1.299+ does not offer this skill.",
+                    fix: "Rename it using plain characters.",
+                    displayPath: Self.visibleName(dirName)
+                ))
+            }
+
             // SKL002: missing name
             if parsed.name == nil {
                 results.append(LintResult(
@@ -605,5 +619,38 @@ extension ConfigLinterService {
         if name.contains("--") { return false }
         // Only lowercase letters, digits, and hyphens
         return name.range(of: "^[a-z0-9]+(-[a-z0-9]+)*$", options: .regularExpression) != nil
+    }
+
+    /// Hidden (format category), text-direction or blank-like characters in a
+    /// skill or command name. `<` and `>` count too for file and folder names;
+    /// in a frontmatter `name:` SKL008 already reports them.
+    static func hasUnsafeNameCharacters(_ name: String, allowAngleBrackets: Bool) -> Bool {
+        if !allowAngleBrackets, name.contains("<") || name.contains(">") { return true }
+        for scalar in name.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            case .format, .control, .lineSeparator, .paragraphSeparator:
+                return true
+            case .spaceSeparator where scalar != " ":
+                return true
+            default:
+                break
+            }
+            if (0x200B...0x200F).contains(scalar.value) || (0x202A...0x202E).contains(scalar.value)
+                || (0x2066...0x2069).contains(scalar.value) || scalar.value == 0xFEFF {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// The name with invisible characters shown as code points, so the finding
+    /// row does not render a reordered or blank label.
+    static func visibleName(_ name: String) -> String {
+        name.unicodeScalars.map { scalar -> String in
+            let category = scalar.properties.generalCategory
+            let invisible = category == .format || category == .control
+                || (category == .spaceSeparator && scalar != " ")
+            return invisible ? String(format: "<U+%04X>", scalar.value) : String(scalar)
+        }.joined()
     }
 }

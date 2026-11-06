@@ -213,7 +213,7 @@ struct DataCoverageBadge: View {
         if coverage.missingTranscriptCount > 0 {
             parts.append("\(coverage.missingTranscriptCount) deleted sessions")
         }
-        parts.append("retention \(coverage.effectiveCleanupDays)d")
+        parts.append("retention \(coverage.effectiveCleanupDays)d" + (coverage.cleanupMayBeOverridden ? "*" : ""))
         return parts.joined(separator: " · ")
     }
 
@@ -223,6 +223,9 @@ struct DataCoverageBadge: View {
             + "and usage on other machines, claude.ai/code, or CI, are not included."
         if coverage.missingTranscriptCount > 0 {
             text += " \(coverage.missingTranscriptCount) sessions in history.jsonl no longer have transcripts on disk."
+        }
+        if coverage.cleanupMayBeOverridden {
+            text += " *An enabled Claude Mod reads settings and can override cleanupPeriodDays, so the retention Claude Code applies may differ."
         }
         return text
     }

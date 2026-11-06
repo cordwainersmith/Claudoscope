@@ -137,6 +137,9 @@ final class HookMatcherLintTests: XCTestCase {
             group("PreToolUse", ["Bash|PowerShell", "mcp__memory__.*", "*"]),
             group("Stop", [""])
         ], mcp: ["memory"])
+            // HOOK006 (fail-open guard hooks) is about onFailure, not matchers;
+            // CC2131xLintTests covers it.
+            .filter { $0.checkId != .HOOK006 }
         XCTAssertTrue(r.isEmpty, "Expected no hook findings, got \(ids(r))")
     }
 

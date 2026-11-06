@@ -87,6 +87,9 @@ actor ConfigLinterService {
         allSkillDescriptions.append(contentsOf: globalDescs)
         allSkillIdentities.append(contentsOf: globalIds)
 
+        // Subagent definitions (AGT001-AGT003)
+        results.append(contentsOf: lintAgents(projectRoot: projectRoot, globalDir: globalClaudeDir, mcpServerNames: mcpServerNames))
+
         // SKL015: the same skill name in two scopes. Claude Code loads one of
         // them and never says which, so an edit can land in the copy that is
         // not running.
@@ -114,6 +117,9 @@ actor ConfigLinterService {
         // Config health checks (CFG001-CFG006)
         let projectRootURL = projectRoot.map { URL(fileURLWithPath: $0) }
         results.append(contentsOf: lintConfig(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))
+        results.append(contentsOf: lintMcpPermissionRules(
+            globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL, mcpServerNames: mcpServerNames
+        ))
 
         // Hardening baseline checks (HRD001-HRD011)
         results.append(contentsOf: lintHardening(globalClaudeDir: globalClaudeDir, projectRoot: projectRootURL))

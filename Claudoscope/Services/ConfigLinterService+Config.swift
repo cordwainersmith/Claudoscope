@@ -4,7 +4,7 @@ extension ConfigLinterService {
 
     // MARK: - Config Health Checks
 
-    func lintConfig(globalClaudeDir: URL, projectRoot: URL?) -> [LintResult] {
+    func lintConfig(globalClaudeDir: URL, projectRoot: URL?, now: Date = Date()) -> [LintResult] {
         var results: [LintResult] = []
 
         let settingsURL = globalClaudeDir.appendingPathComponent("settings.json")
@@ -252,6 +252,9 @@ extension ConfigLinterService {
 
         results += lintBashAllowRules(json: json, filePath: settingsPath, displayPath: "settings.json")
         results += lintBooleanAttribution(json: json, filePath: settingsPath, displayPath: "settings.json")
+        results += lintNestedUserNamespaces(json: json, filePath: settingsPath, displayPath: "settings.json")
+        results += lintDisableCompactFalsy(json: json, filePath: settingsPath, displayPath: "settings.json")
+        results += lintOpus48FastMode(json: json, filePath: settingsPath, displayPath: "settings.json", now: now)
 
         // CFG026: model policy keys documented as managed settings (CC 2.1.283/2.1.285)
         for key in ["deniedModels", "availableModelsMatch", "allowedProviders"] where json[key] != nil {
@@ -305,6 +308,132 @@ extension ConfigLinterService {
             fix: "Use the object form {\"commit\": \"\", \"pr\": \"\"}, which every version reads.",
             displayPath: displayPath
         )]
+    }
+
+    /// CFG027: `sandbox.allowNestedUserNamespaces` (CC 2.1.305) lets sandboxed
+    /// commands get around the sandbox's file protections.
+    private func lintNestedUserNamespaces(json: [String: Any], filePath: String, displayPath: String) -> [LintResult] {
+        guard (json["sandbox"] as? [String: Any])?["allowNestedUserNamespaces"] as? Bool == true else { return [] }
+        return [LintResult(
+            severity: .warning,
+            checkId: .CFG027,
+            filePath: filePath,
+            message: "\(displayPath) sets sandbox.allowNestedUserNamespaces. Sandboxed commands can create user namespaces, which lets them get around the sandbox's file protections.",
+            fix: "Remove it unless a tool such as Chromium or rootless podman needs it.",
+            displayPath: displayPath
+        )]
+    }
+
+    /// CFG029: since CC 2.1.311 `DISABLE_COMPACT` in settings can only turn
+    /// compaction off; a falsy value does not turn it back on.
+    private func lintDisableCompactFalsy(json: [String: Any], filePath: String, displayPath: String) -> [LintResult] {
+        guard let env = json["env"] as? [String: Any], let value = env["DISABLE_COMPACT"] else { return [] }
+        let text = ((value as? String) ?? (value as? NSNumber)?.stringValue ?? "").lowercased()
+            .trimmingCharacters(in: .whitespaces)
+        guard ["", "0", "false", "no", "off"].contains(text) else { return [] }
+        return [LintResult(
+            severity: .info,
+            checkId: .CFG029,
+            filePath: filePath,
+            message: "\(displayPath) env sets DISABLE_COMPACT to \"\(text)\". Since Claude Code 2.1.311 settings can only turn compaction off, so this does not re-enable it.",
+            fix: "Remove DISABLE_COMPACT from env.",
+            displayPath: displayPath
+        )]
+    }
+
+    static let opus48FastModeRemoval: Date = {
+        var c = DateComponents()
+        c.year = 2026; c.month = 11; c.day = 30
+        c.timeZone = TimeZone(identifier: "UTC")
+        return Calendar(identifier: .gregorian).date(from: c)!
+    }()
+
+    /// CFG030: fast mode with Opus 4.8 configured. Deprecated 2026-10-30,
+    /// removed 2026-11-30 (CC 2.1.316); after removal the requests error out.
+    private func lintOpus48FastMode(json: [String: Any], filePath: String, displayPath: String, now: Date) -> [LintResult] {
+        guard json["fastMode"] as? Bool == true else { return [] }
+        let env = json["env"] as? [String: Any] ?? [:]
+        let models = [json["model"], env["ANTHROPIC_MODEL"], env["ANTHROPIC_DEFAULT_OPUS_MODEL"]]
+            .compactMap { $0 as? String }
+        guard let model = models.first(where: { $0.lowercased().contains("opus-4-8") }) else { return [] }
+        let removed = now >= Self.opus48FastModeRemoval
+        return [LintResult(
+            severity: removed ? .error : .warning,
+            checkId: .CFG030,
+            filePath: filePath,
+            message: removed
+                ? "\(displayPath) turns on fast mode with \(model). Fast mode on Opus 4.8 was removed on November 30, 2026; these requests now fail."
+                : "\(displayPath) turns on fast mode with \(model). Fast mode on Opus 4.8 is removed on November 30, 2026, after which these requests fail instead of falling back.",
+            fix: "Switch to Opus 5.5 to keep fast mode, or turn fast mode off.",
+            displayPath: displayPath
+        )]
+    }
+
+    /// Keys Claude Code ignores in project settings: `CLAUDE_CODE_DISABLE_ATTACHMENTS`
+    /// and turning on Claude in Chrome (2.1.290), screen reader mode (2.1.307).
+    static func projectIgnoredUserScopeKeys(_ json: [String: Any]) -> [String] {
+        var keys: [String] = []
+        if json["claudeInChromeDefaultEnabled"] as? Bool == true { keys.append("claudeInChromeDefaultEnabled") }
+        if json["axScreenReader"] != nil { keys.append("axScreenReader") }
+        if let env = json["env"] as? [String: Any] {
+            for key in ["CLAUDE_CODE_DISABLE_ATTACHMENTS", "CLAUDE_AX_SCREEN_READER"] where env[key] != nil {
+                keys.append("env.\(key)")
+            }
+        }
+        return keys
+    }
+
+    /// CFG031: permission rules written as `mcp__<name>` that used to reach
+    /// servers whose normalized name merely starts with `<name>` (CC 2.1.299).
+    func lintMcpPermissionRules(globalClaudeDir: URL, projectRoot: URL?, mcpServerNames: Set<String>) -> [LintResult] {
+        var files: [(url: URL, display: String)] = [(globalClaudeDir.appendingPathComponent("settings.json"), "settings.json")]
+        if let projectRoot {
+            for name in ["settings.json", "settings.local.json"] {
+                files.append((projectRoot.appendingPathComponent(".claude").appendingPathComponent(name), ".claude/\(name)"))
+            }
+        }
+        var results: [LintResult] = []
+        for file in files {
+            guard let data = try? Data(contentsOf: file.url),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let permissions = json["permissions"] as? [String: Any] else { continue }
+            let rules = ["allow", "deny", "ask"].flatMap { permissions[$0] as? [String] ?? [] }
+            for (rule, servers) in Self.staleMcpPrefixRules(rules, servers: Array(mcpServerNames)) {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .CFG031,
+                    filePath: file.url.path,
+                    message: "Permission rule \"\(rule)\" in \(file.display) no longer covers \(servers.joined(separator: ", ")). Since Claude Code 2.1.299 it reaches only a server named exactly that.",
+                    fix: servers.map { "mcp__\($0)__*" }.joined(separator: ", "),
+                    displayPath: file.display
+                ))
+            }
+        }
+        return results
+    }
+
+    /// Claude Code normalizes server names to `[A-Za-z0-9_-]`, other characters
+    /// becoming `_`.
+    static func normalizedMcpName(_ name: String) -> String {
+        String(name.map { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_" || $0 == "-") ? $0 : "_" })
+    }
+
+    /// Rules (or agent `tools:` entries) of the bare form `mcp__<seg>` or
+    /// `mcp__<seg>__*` where no server is named exactly `<seg>` but one or more
+    /// start with `<seg>_`. Returns each such rule with the servers it lost.
+    static func staleMcpPrefixRules(_ rules: [String], servers: [String]) -> [(rule: String, servers: [String])] {
+        let names = servers.map(normalizedMcpName)
+        var out: [(String, [String])] = []
+        for rule in rules {
+            guard rule.hasPrefix("mcp__") else { continue }
+            var seg = String(rule.dropFirst("mcp__".count))
+            if seg.hasSuffix("__*") { seg = String(seg.dropLast(3)) }
+            guard !seg.isEmpty, !seg.contains("__"), !seg.contains("("), !seg.contains("*") else { continue }
+            guard !names.contains(seg) else { continue }
+            let lost = names.filter { $0.hasPrefix(seg + "_") }.sorted()
+            if !lost.isEmpty { out.append((rule, lost)) }
+        }
+        return out
     }
 
     /// Env keys that turn on or route OpenTelemetry export. Claude Code ignores
@@ -423,6 +552,22 @@ extension ConfigLinterService {
             let displayPath = ".claude/\(name)"
 
             results += lintBashAllowRules(json: json, filePath: url.path, displayPath: displayPath)
+            results += lintNestedUserNamespaces(json: json, filePath: url.path, displayPath: displayPath)
+            results += lintDisableCompactFalsy(json: json, filePath: url.path, displayPath: displayPath)
+
+            // CFG028: keys Claude Code reads only from user/managed scope (CC 2.1.290, 2.1.307)
+            let ignored = Self.projectIgnoredUserScopeKeys(json)
+            if !ignored.isEmpty {
+                results.append(LintResult(
+                    severity: .warning,
+                    checkId: .CFG028,
+                    filePath: url.path,
+                    message: "\(displayPath) sets \(ignored.joined(separator: ", ")). Claude Code reads these only from user or managed settings, so they do nothing here.",
+                    fix: "Move them to ~/.claude/settings.json, or remove them.",
+                    displayPath: displayPath
+                ))
+            }
+
             if name == "settings.json" {
                 results += lintBooleanAttribution(json: json, filePath: url.path, displayPath: displayPath)
             }

@@ -123,7 +123,8 @@ actor ConfigService {
                         type: hookDict["type"] as? String,
                         command: command,
                         timeout: hookDict["timeout"] as? Int,
-                        terminalSequence: hookDict["terminalSequence"] as? String
+                        terminalSequence: hookDict["terminalSequence"] as? String,
+                        onFailure: hookDict["onFailure"] as? String
                     )
                 }
 

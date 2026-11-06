@@ -12,6 +12,10 @@ struct DataCoverage: Sendable, Equatable {
     let oldestTranscriptDate: Date?
     let missingTranscriptCount: Int
     let cleanupPeriodDays: Int?              // nil = unset in settings.json
+    /// An enabled Claude Mod registers `settings.read`, which can rewrite the
+    /// merged settings, `cleanupPeriodDays` included (CC 2.1.304). The value
+    /// read from settings.json may then not be the one the retention sweep uses.
+    var cleanupMayBeOverridden = false
 
     var effectiveCleanupDays: Int { cleanupPeriodDays ?? 30 }
     var isWarning: Bool { missingTranscriptCount > 0 || effectiveCleanupDays <= 30 }
