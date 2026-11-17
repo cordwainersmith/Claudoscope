@@ -124,6 +124,42 @@ final class BlockedActionTests: XCTestCase {
         XCTAssertEqual(ObservabilityAnalyzer.blockedKind(fromDenialKind: "classifier"), .other)
     }
 
+    // MARK: - Structured permissionDecision kinds (2.1.317-2.1.325)
+
+    private func decided(_ command: String, _ result: String, _ d: PermissionDecisionRaw) -> ToolCallEntry {
+        var e = entry(tool: "Bash", command: command, result: result, isError: true)
+        e.permissionDecision = d
+        return e
+    }
+
+    func testClassifierRejectIsAutoModeBlocked() {
+        let blocked = ObservabilityAnalyzer.extractBlockedActions(from: [
+            decided("gcloud run deploy api", "Permission for this action has been denied.",
+                    .init(decision: "reject", source: "config", reasonType: "classifier",
+                          reasonCode: "classifier:auto-mode", classifierCategory: "production_deploy"))
+        ])
+        XCTAssertEqual(blocked.map(\.kind), [.classifier])
+        XCTAssertEqual(blocked.first?.kind.label, "Auto mode blocked")
+    }
+
+    func testHeadlessConfigRejectIsDeniedWithoutPrompt() {
+        let blocked = ObservabilityAnalyzer.extractBlockedActions(from: [
+            decided("cd /p && cat a.txt", "Permission to use Bash has been auto-denied (prompts unavailable).",
+                    .init(decision: "reject", source: "config", reasonCode: "bashMiss:cd-compound-read"))
+        ])
+        XCTAssertEqual(blocked.map(\.kind), [.noPrompt])
+        XCTAssertEqual(blocked.first?.kind.label, "Denied without a prompt")
+    }
+
+    func testUserRejectSourceWithRuleReasonIsPermissionDenied() {
+        let blocked = ObservabilityAnalyzer.extractBlockedActions(from: [
+            decided("cat /p/secret.txt", "File is in a directory that is denied by your permission settings.",
+                    .init(decision: "reject", source: "user_reject", reasonType: "rule", ruleSource: "userSettings"))
+        ])
+        XCTAssertEqual(blocked.map(\.kind), [.permissionSetting])
+        XCTAssertEqual(blocked.first?.kind.label, "Permission denied")
+    }
+
     /// Lite path: the summary count picks up the new markers, the bare short
     /// string and a toolDenialKind-only record, and still ignores plain errors.
     func testParserBlockedCountCoversNewStringsAndDenialKind() async throws {

@@ -1077,7 +1077,11 @@ actor SessionParser {
                 let dayKey = raw.timestamp.flatMap(localDayKey) ?? lastSeenDay ?? "1970-01-01"
                 var day = dayAccs[dayKey] ?? DayAcc()
                 var stats = day.permission ?? PermissionStats()
-                stats.record(decision, sandboxed: raw.sandboxed)
+                let keyed = PermissionDecisionRaw(
+                    decision: decision.decision, source: decision.source, reasonType: decision.statsReason,
+                    ruleSource: decision.ruleSource, circuitBreaker: decision.circuitBreaker
+                )
+                stats.record(keyed, sandboxed: raw.sandboxed)
                 day.permission = stats
                 dayAccs[dayKey] = day
             }

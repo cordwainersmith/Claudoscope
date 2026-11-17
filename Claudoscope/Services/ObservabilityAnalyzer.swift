@@ -414,12 +414,15 @@ struct ObservabilityAnalyzer {
     /// approval or when the record carries none.
     static func blockedKind(fromPermissionDecision decision: PermissionDecisionRaw?) -> BlockedActionKind? {
         guard let decision, decision.isReject else { return nil }
-        if decision.source == "user_reject" { return .userRejected }
         switch decision.reasonType {
         case "safetyCheck": return .safetyCheck
         case "mode": return .modeDenied
+        case "classifier": return .classifier
         case "rule", "subcommandResults": return .permissionSetting
-        default: return .other
+        default:
+            if decision.source == "user_reject" { return .userRejected }
+            if decision.source == "config" && decision.reasonType == nil { return .noPrompt }
+            return .other
         }
     }
 

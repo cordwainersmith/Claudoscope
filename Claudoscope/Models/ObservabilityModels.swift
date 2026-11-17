@@ -245,6 +245,8 @@ enum BlockedActionKind: String, Sendable {
     case userRejected
     case safetyCheck
     case modeDenied
+    case classifier
+    case noPrompt
     case other
 
     var label: String {
@@ -255,6 +257,8 @@ enum BlockedActionKind: String, Sendable {
         case .userRejected: return "User rejected"
         case .safetyCheck: return "Safety check"
         case .modeDenied: return "Mode denied"
+        case .classifier: return "Auto mode blocked"
+        case .noPrompt: return "Denied without a prompt"
         case .other: return "Blocked"
         }
     }

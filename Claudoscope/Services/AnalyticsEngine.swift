@@ -804,6 +804,9 @@ struct AnalyticsEngine {
         switch (decision, source, reasonType) {
         case ("accept", "config", "mode"): return "Permission mode"
         case ("accept", "config", "rule"): return "Allow rule"
+        case ("accept", "config", "classifier"): return "Auto mode approved"
+        case ("reject", "config", "classifier"): return "Auto mode blocked"
+        case ("reject", "config", "bashMiss"): return "Denied without a prompt"
         case ("accept", "user_temporary", _): return "You, once"
         case ("accept", "user_permanent", _): return "You, always"
         case ("reject", "user_reject", _): return "You rejected"

@@ -248,13 +248,18 @@ struct PermissionDecisionRaw: Decodable, Sendable, Equatable {
     let reasonType: String?
     let ruleSource: String?
     let circuitBreaker: String?
+    let reasonCode: String?
+    let classifierCategory: String?
 
-    init(decision: String?, source: String?, reasonType: String? = nil, ruleSource: String? = nil, circuitBreaker: String? = nil) {
+    init(decision: String?, source: String?, reasonType: String? = nil, ruleSource: String? = nil, circuitBreaker: String? = nil,
+         reasonCode: String? = nil, classifierCategory: String? = nil) {
         self.decision = decision
         self.source = source
         self.reasonType = reasonType
         self.ruleSource = ruleSource
         self.circuitBreaker = circuitBreaker
+        self.reasonCode = reasonCode
+        self.classifierCategory = classifierCategory
     }
 
     init(from decoder: Decoder) throws {
@@ -264,13 +269,24 @@ struct PermissionDecisionRaw: Decodable, Sendable, Equatable {
         reasonType = try? c.decodeIfPresent(String.self, forKey: .reasonType)
         ruleSource = try? c.decodeIfPresent(String.self, forKey: .ruleSource)
         circuitBreaker = try? c.decodeIfPresent(String.self, forKey: .circuitBreaker)
+        reasonCode = try? c.decodeIfPresent(String.self, forKey: .reasonCode)
+        classifierCategory = try? c.decodeIfPresent(String.self, forKey: .classifierCategory)
     }
 
     enum CodingKeys: String, CodingKey {
-        case decision, source, reasonType, ruleSource, circuitBreaker
+        case decision, source, reasonType, ruleSource, circuitBreaker, reasonCode, classifierCategory
     }
 
     var isReject: Bool { decision == "reject" }
+
+    /// The reason part of the `PermissionStats` key: `reasonType`, or the
+    /// family prefix of `reasonCode` ("bashMiss:cd-compound-read" -> "bashMiss")
+    /// for headless refusals that carry no `reasonType`.
+    var statsReason: String? {
+        if let reasonType { return reasonType }
+        guard let code = reasonCode, !code.isEmpty else { return nil }
+        return code.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init)
+    }
 }
 
 /// One entry of a stop_hook_summary's `hookInfos` array. durationMs is absent

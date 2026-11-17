@@ -138,6 +138,66 @@ final class PermissionDecisionTests: XCTestCase {
         XCTAssertEqual(AnalyticsEngine.permissionLabel(decision: "accept", source: "hook", reasonType: "x"), "Other (hook/x)")
     }
 
+    // MARK: - Structured denial kinds (2.1.317+)
+
+    private let classifierReject = #"{"decision":"reject","source":"config","reasonType":"classifier","reasonCode":"classifier:auto-mode","classifierCategory":"production_deploy"}"#
+    private let headlessReject = #"{"decision":"reject","source":"config","reasonCode":"bashMiss:cd-compound-read"}"#
+
+    func testReasonCodeAndClassifierCategoryDecode() throws {
+        let d = try JSONDecoder().decode(PermissionDecisionRaw.self, from: Data(classifierReject.utf8))
+        XCTAssertEqual(d.reasonCode, "classifier:auto-mode")
+        XCTAssertEqual(d.classifierCategory, "production_deploy")
+        let lenient = try JSONDecoder().decode(PermissionDecisionRaw.self, from: Data(#"{"decision":"reject","reasonCode":7}"#.utf8))
+        XCTAssertNil(lenient.reasonCode)
+        XCTAssertNil(lenient.classifierCategory)
+    }
+
+    func testClassifierRejectIsItsOwnKind() {
+        let d = PermissionDecisionRaw(decision: "reject", source: "config", reasonType: "classifier",
+                                      reasonCode: "classifier:auto-mode", classifierCategory: "production_deploy")
+        XCTAssertEqual(ObservabilityAnalyzer.blockedKind(fromPermissionDecision: d), .classifier)
+        XCTAssertEqual(BlockedActionKind.classifier.label, "Auto mode blocked")
+    }
+
+    func testConfigRejectWithoutReasonTypeIsNoPrompt() {
+        let d = PermissionDecisionRaw(decision: "reject", source: "config", reasonCode: "bashMiss:cd-compound-read")
+        XCTAssertEqual(ObservabilityAnalyzer.blockedKind(fromPermissionDecision: d), .noPrompt)
+        XCTAssertEqual(BlockedActionKind.noPrompt.label, "Denied without a prompt")
+    }
+
+    func testRuleReasonWinsOverUserRejectSource() {
+        let d = PermissionDecisionRaw(decision: "reject", source: "user_reject", reasonType: "rule", ruleSource: "userSettings")
+        XCTAssertEqual(ObservabilityAnalyzer.blockedKind(fromPermissionDecision: d), .permissionSetting)
+    }
+
+    func testPlainUserRejectStaysUserRejected() {
+        let d = PermissionDecisionRaw(decision: "reject", source: "user_reject", reasonCode: "unknown")
+        XCTAssertEqual(ObservabilityAnalyzer.blockedKind(fromPermissionDecision: d), .userRejected)
+    }
+
+    func testStatsKeyFallsBackToReasonCodePrefix() async throws {
+        XCTAssertEqual(PermissionDecisionRaw(decision: "reject", source: "config", reasonCode: "bashMiss:cd-compound-read").statsReason, "bashMiss")
+        XCTAssertEqual(PermissionDecisionRaw(decision: "reject", source: "config", reasonType: "classifier", reasonCode: "classifier:auto-mode").statsReason, "classifier")
+        XCTAssertNil(PermissionDecisionRaw(decision: "accept", source: "user_temporary").statsReason)
+
+        let s = try await summary([
+            assistant,
+            result("r1", decision: headlessReject, isError: true),
+            result("r2", decision: classifierReject, isError: true),
+            result("r3", decision: userOnce),
+        ])
+        let stats = try XCTUnwrap(s.dailyContributions.first?.permissionStats)
+        XCTAssertEqual(stats.decisions["reject|config|bashMiss"], 1)
+        XCTAssertEqual(stats.decisions["reject|config|classifier"], 1)
+        XCTAssertEqual(stats.decisions["accept|user_temporary|-"], 1)
+    }
+
+    func testNewPermissionLabels() {
+        XCTAssertEqual(AnalyticsEngine.permissionLabel(decision: "accept", source: "config", reasonType: "classifier"), "Auto mode approved")
+        XCTAssertEqual(AnalyticsEngine.permissionLabel(decision: "reject", source: "config", reasonType: "classifier"), "Auto mode blocked")
+        XCTAssertEqual(AnalyticsEngine.permissionLabel(decision: "reject", source: "config", reasonType: "bashMiss"), "Denied without a prompt")
+    }
+
     func testPermissionStatsLegacyDecode() throws {
         let stats = try JSONDecoder().decode(PermissionStats.self, from: Data(#"{"decisions":{"accept|config|mode":3}}"#.utf8))
         XCTAssertEqual(stats.decisions["accept|config|mode"], 3)
