@@ -45,6 +45,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case SKL015  // the same skill name defined in two scopes
     case SKL016  // installed skill with no attributed turns
     case SKL017  // skill/command name with hidden, bidi or blank-like characters (CC 2.1.299)
+    case SKL018  // skill with allowed-tools or hooks asks before running unattended (CC 2.1.325)
     case AGT001  // agent tools: entry relies on MCP prefix matching (CC 2.1.299)
     case AGT002  // agent name longer than 256 characters (CC 2.1.292)
     case AGT003  // agent skills: preloads more than 32 skills (CC 2.1.295)
@@ -141,6 +142,7 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case PLG002  // plugin dependency cycle
     case PLG003  // plugin declares no components
     case PLG004  // plugin installed at two scopes running different code
+    case PLG005  // plugin settings.json uses the deprecated agent key (CC 2.1.323)
 
     // Channel plugin checks
     case CHN001  // known channel plugin installed and enabled (prompt-injection surface, permission relay)

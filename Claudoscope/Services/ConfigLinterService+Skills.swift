@@ -469,6 +469,68 @@ extension ConfigLinterService {
         return results
     }
 
+    /// SKL018: skills that scheduled tasks and /loop stop to ask about before
+    /// running (CC 2.1.325), because they declare allowed-tools or hooks and no
+    /// `Skill` allow rule covers them. One aggregated finding.
+    func lintUnattendedSkillApprovals(skillsDirs: [URL], globalClaudeDir: URL, projectRoot: URL?) -> [LintResult] {
+        var settingsFiles = [globalClaudeDir.appendingPathComponent("settings.json")]
+        if let projectRoot {
+            for name in ["settings.json", "settings.local.json"] {
+                settingsFiles.append(projectRoot.appendingPathComponent(".claude").appendingPathComponent(name))
+            }
+        }
+        var allowRules: [String] = []
+        for url in settingsFiles {
+            guard let data = try? Data(contentsOf: url),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let permissions = json["permissions"] as? [String: Any] else { continue }
+            allowRules.append(contentsOf: permissions["allow"] as? [String] ?? [])
+        }
+
+        var uncovered: [String] = []
+        for skillsDir in skillsDirs {
+            guard let skillDirs = try? fm.contentsOfDirectory(at: skillsDir, includingPropertiesForKeys: [.isDirectoryKey]) else { continue }
+            for skillDir in skillDirs.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                guard let content = try? String(contentsOf: skillDir.appendingPathComponent("SKILL.md"), encoding: .utf8) else { continue }
+                let declaresTools = parseToolRestrictions(from: content).allowed != nil
+                guard declaresTools || Self.frontmatterDeclaresHooks(content) else { continue }
+                let name = parseSkillContent(content).name ?? skillDir.lastPathComponent
+                if !Self.skillAllowRuleCovers(allowRules, skill: name), !uncovered.contains(name) {
+                    uncovered.append(name)
+                }
+            }
+        }
+        guard !uncovered.isEmpty else { return [] }
+
+        var listed = uncovered.prefix(10).joined(separator: ", ")
+        if uncovered.count > 10 { listed += " and \(uncovered.count - 10) more" }
+        return [LintResult(
+            severity: .info,
+            checkId: .SKL018,
+            filePath: settingsFiles[0].path,
+            message: "Since Claude Code 2.1.325 scheduled tasks and /loop ask before running a skill that declares allowed-tools or hooks. Not covered by permissions.allow: \(listed).",
+            fix: "Add Skill(name) to permissions.allow for each skill that should run unattended, e.g. Skill(\(uncovered[0])).",
+            displayPath: "settings.json"
+        )]
+    }
+
+    static func skillAllowRuleCovers(_ rules: [String], skill: String) -> Bool {
+        rules.contains { rule in
+            let trimmed = rule.trimmingCharacters(in: .whitespaces)
+            return trimmed == "Skill" || trimmed == "Skill(*)" || trimmed == "Skill(\(skill))"
+        }
+    }
+
+    private static func frontmatterDeclaresHooks(_ content: String) -> Bool {
+        let lines = content.components(separatedBy: "\n")
+        guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else { return false }
+        for line in lines.dropFirst() {
+            if line.trimmingCharacters(in: .whitespaces) == "---" { return false }
+            if line.hasPrefix("hooks:") { return true }
+        }
+        return false
+    }
+
     /// Parse allowed-tools and disallowed-tools from YAML frontmatter (--- ... ---).
     func parseToolRestrictions(from content: String) -> (allowed: [String]?, disallowed: [String]?) {
         let lines = content.components(separatedBy: "\n")

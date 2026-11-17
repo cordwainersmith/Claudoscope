@@ -208,6 +208,10 @@ struct PluginInfo: Identifiable, Sendable {
     /// (attached image/document bytes) and "session.identity" (sign-in,
     /// organization and email). Both are limited to managed mods (CC 2.1.299).
     var modSensitiveApis: [String]? = nil
+    /// plugin.json engines["claude-code"] version range (CC 2.1.323).
+    var requiredClaudeCode: String? = nil
+    /// Plugin settings.json sets the deprecated "agent" key (CC 2.1.323).
+    var usesDeprecatedAgentSetting: Bool = false
 
     var isMod: Bool { !(modModules ?? []).isEmpty }
 

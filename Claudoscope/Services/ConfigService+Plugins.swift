@@ -112,6 +112,9 @@ extension ConfigService {
             let components = pluginComponents(manifest: manifest, versionDir: versionDir)
             let componentsByKind = pluginComponentEntries(versionDir: versionDir)
             let modInfo = pluginModInfo(versionDir: versionDir)
+            let requiredClaudeCode = (manifest?["engines"] as? [String: Any])?["claude-code"] as? String
+            let pluginSettings = readJSON(at: versionDir.appendingPathComponent("settings.json"))
+            let usesDeprecatedAgentSetting = pluginSettings?["agent"] != nil
 
             plugins.append(PluginInfo(
                 fullName: fullName,
@@ -124,7 +127,9 @@ extension ConfigService {
                 installations: installations[fullName],
                 modModules: modInfo?.modules,
                 modHookEvents: modInfo?.events,
-                modSensitiveApis: modInfo?.sensitiveApis
+                modSensitiveApis: modInfo?.sensitiveApis,
+                requiredClaudeCode: requiredClaudeCode,
+                usesDeprecatedAgentSetting: usesDeprecatedAgentSetting
             ))
         }
 
@@ -239,6 +244,7 @@ extension ConfigService {
             }
             if source.contains("prompt.media") { sensitive.insert("prompt.media") }
             if source.contains("session.identity(") { sensitive.insert("session.identity") }
+            if source.contains("model.complete(") || source.contains("model.classify(") { sensitive.insert("model.calls") }
         }
         return (modules, events.sorted(), sensitive.sorted())
     }

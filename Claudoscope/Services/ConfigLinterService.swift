@@ -87,6 +87,13 @@ actor ConfigLinterService {
         allSkillDescriptions.append(contentsOf: globalDescs)
         allSkillIdentities.append(contentsOf: globalIds)
 
+        let skillProjectRoot = projectRoot.map { URL(fileURLWithPath: $0) }
+        results.append(contentsOf: lintUnattendedSkillApprovals(
+            skillsDirs: [globalSkillsDir] + (skillProjectRoot.map { [$0.appendingPathComponent(".claude/skills")] } ?? []),
+            globalClaudeDir: globalClaudeDir,
+            projectRoot: skillProjectRoot
+        ))
+
         // Subagent definitions (AGT001-AGT003)
         results.append(contentsOf: lintAgents(projectRoot: projectRoot, globalDir: globalClaudeDir, mcpServerNames: mcpServerNames))
 

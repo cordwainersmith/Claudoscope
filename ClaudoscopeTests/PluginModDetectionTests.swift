@@ -115,4 +115,37 @@ final class PluginModDetectionTests: XCTestCase {
         XCTAssertNil(plugin.modHookEvents)
         XCTAssertEqual(plugin.components, ["hooks"])
     }
+
+    func testModelCallsDetectedAsSensitive() async throws {
+        let dir = versionDir("caller")
+        try writeJSON(["modules": ["./register.ts"]], to: dir.appendingPathComponent("hooks/hooks.json"))
+        try writeText(#"on("turn.complete", async (e) => { const r = await $.model.complete({ prompt: "x" }); })"#,
+                      to: dir.appendingPathComponent("hooks/register.ts"))
+
+        let modInfo = await service.pluginModInfo(versionDir: dir)
+        let info = try XCTUnwrap(modInfo)
+        XCTAssertEqual(info.sensitiveApis, ["model.calls"])
+    }
+
+    func testModWithoutModelCallsHasNoModelFlag() async throws {
+        let dir = versionDir("quiet")
+        try writeJSON(["modules": ["./register.ts"]], to: dir.appendingPathComponent("hooks/hooks.json"))
+        try writeText(registerSource, to: dir.appendingPathComponent("hooks/register.ts"))
+
+        let modInfo = await service.pluginModInfo(versionDir: dir)
+        let info = try XCTUnwrap(modInfo)
+        XCTAssertFalse(info.sensitiveApis.contains("model.calls"))
+    }
+
+    func testLoadPluginsReadsEnginesAndAgentSetting() async throws {
+        let dir = versionDir("engined")
+        try writeJSON(["name": "engined", "engines": ["claude-code": ">=2.1.323"]],
+                      to: dir.appendingPathComponent(".claude-plugin/plugin.json"))
+        try writeJSON(["agent": "reviewer"], to: dir.appendingPathComponent("settings.json"))
+
+        let plugins = await service.loadPlugins()
+        let plugin = try XCTUnwrap(plugins.first)
+        XCTAssertEqual(plugin.requiredClaudeCode, ">=2.1.323")
+        XCTAssertTrue(plugin.usesDeprecatedAgentSetting)
+    }
 }

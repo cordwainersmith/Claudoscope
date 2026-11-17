@@ -101,6 +101,18 @@ extension ConfigLinterService {
             ))
         }
 
+        // PLG005: plugin settings.json still sets the deprecated agent key.
+        for plugin in plugins where plugin.enabled && plugin.usesDeprecatedAgentSetting {
+            results.append(LintResult(
+                severity: .warning,
+                checkId: .PLG005,
+                filePath: pluginsFilePath,
+                message: "Plugin \"\(plugin.fullName)\" sets the agent key in its settings.json, deprecated since Claude Code 2.1.323.",
+                fix: "Update the plugin or ask its author to stop using the agent setting.",
+                displayPath: "Plugins"
+            ))
+        }
+
         return results
     }
 

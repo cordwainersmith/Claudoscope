@@ -263,6 +263,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "Skill or command name Claude Code hides",
         hint: "Since 2.1.299 Claude Code no longer offers a skill or command whose file or folder name contains hidden, text-direction or blank-like characters, or < and >. Such characters can make a name look like another one. Rename it with plain characters."
     ),
+    .SKL018: RuleMetadata(
+        displayName: "Skill asks for approval when unattended",
+        hint: "Since 2.1.325 scheduled tasks and /loop ask before running a skill that declares allowed-tools or hooks. With nobody watching, the run waits on that prompt. Add Skill(name) to permissions.allow for each skill you want to run unattended."
+    ),
     .AGT001: RuleMetadata(
         displayName: "Agent tool list relies on MCP prefix matching",
         hint: "Since 2.1.299 an agent's tools: entry mcp__<server> reaches only the server with exactly that normalized name. A server whose name merely starts with it is no longer included. Write mcp__<whole server name>__* for each server."
@@ -474,6 +478,10 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
     .PLG004: RuleMetadata(
         displayName: "Plugin scope drift",
         hint: "The same plugin is installed at both user and project scope, at different versions or commits. Which one a session loads depends on where it was started, so the plugin can behave differently between two projects with nothing in the UI explaining why. Update or uninstall one scope."
+    ),
+    .PLG005: RuleMetadata(
+        displayName: "Plugin uses deprecated agent setting",
+        hint: "Since 2.1.323 the agent key in a plugin's settings.json is deprecated. Plugins that still set it may stop applying their default agent in a future release. Ask the plugin author to move off the agent setting, or update the plugin."
     ),
     .CHN001: RuleMetadata(
         displayName: "Channel plugin enabled",

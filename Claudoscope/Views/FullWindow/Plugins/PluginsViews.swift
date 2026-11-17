@@ -234,6 +234,7 @@ private struct PluginDetail: View {
             infoRow("Marketplace", value: plugin.marketplace)
             infoRow("Full name", value: plugin.fullName)
             infoRow("Status", value: plugin.enabled ? "Enabled" : "Disabled")
+            infoRow("Requires Claude Code", value: plugin.requiredClaudeCode)
             if let spend {
                 infoRow("Spend", value: "\(formatCost(spend.estimatedCost)) · \(spend.turnCount) turns · \(spend.sessionCount) sessions")
             }
@@ -451,6 +452,7 @@ private struct PluginDetail: View {
         switch api {
         case "prompt.media": return "Reads prompt attachments"
         case "session.identity": return "Reads sign-in identity"
+        case "model.calls": return "Makes its own model calls (billed to you)"
         default: return api
         }
     }

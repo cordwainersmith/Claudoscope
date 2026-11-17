@@ -19,7 +19,8 @@ final class PluginLintTests: XCTestCase {
         enabled: Bool = true,
         components: [String]? = ["skills (1)"],
         dependencies: [String]? = nil,
-        installations: [PluginInstallation]? = nil
+        installations: [PluginInstallation]? = nil,
+        usesDeprecatedAgentSetting: Bool = false
     ) -> PluginInfo {
         PluginInfo(
             fullName: "\(name)@\(marketplace)",
@@ -28,7 +29,8 @@ final class PluginLintTests: XCTestCase {
             enabled: enabled,
             components: components,
             dependencies: dependencies,
-            installations: installations
+            installations: installations,
+            usesDeprecatedAgentSetting: usesDeprecatedAgentSetting
         )
     }
 
@@ -285,5 +287,21 @@ final class PluginLintTests: XCTestCase {
         XCTAssertEqual(install("user", version: "1", sha: "76c85b7366c8be78").shortSha, "76c85b73")
         XCTAssertEqual(install("user", version: "1", sha: "abc").shortSha, "abc")
         XCTAssertNil(install("user", version: "1").shortSha)
+    }
+
+    // MARK: - PLG005
+
+    func testPLG005FiresForDeprecatedAgentSetting() async {
+        let results = await lint([
+            plugin("legacy", usesDeprecatedAgentSetting: true),
+            plugin("modern"),
+        ])
+        XCTAssertEqual(count(results, .PLG005), 1)
+        XCTAssertTrue(messages(results, .PLG005).first?.contains("\"legacy@mkt\"") ?? false)
+    }
+
+    func testPLG005QuietForDisabledPlugin() async {
+        let results = await lint([plugin("legacy", enabled: false, usesDeprecatedAgentSetting: true)])
+        XCTAssertFalse(contains(results, .PLG005))
     }
 }
