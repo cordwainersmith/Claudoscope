@@ -44,6 +44,53 @@ final class FastModeCostTests: XCTestCase {
                        "a fast-mode turn should bill at the 2x rate")
     }
 
+    func testFastModeDoublesCostOnVertexGlobal() async throws {
+        try await assertFastModeDoubles(pricing: PricingTables.vertexGlobal)
+    }
+
+    func testFastModeDoublesCostOnVertexRegional() async throws {
+        try await assertFastModeDoubles(pricing: PricingTables.vertexRegional)
+    }
+
+    private func assertFastModeDoubles(pricing: [String: ModelPricing]) async throws {
+        let parser = SessionParser()
+        let stdURL = try writeTempFile([billedRecord(msgId: "m1", speed: "standard")])
+        let fastURL = try writeTempFile([billedRecord(msgId: "m1", speed: "fast")])
+        defer { try? FileManager.default.removeItem(at: stdURL); try? FileManager.default.removeItem(at: fastURL) }
+
+        let std = try await parser.parseMetadata(url: stdURL, sessionId: "sess-1", pricingTable: pricing)
+        let fast = try await parser.parseMetadata(url: fastURL, sessionId: "sess-1", pricingTable: pricing)
+
+        XCTAssertGreaterThan(std.estimatedCost, 0)
+        XCTAssertEqual(fast.estimatedCost, std.estimatedCost * 2.0, accuracy: 1e-9)
+    }
+
+    func testAbsentOrNullSpeedBillsStandard() async throws {
+        let parser = SessionParser()
+        let pricing = PricingTables.anthropic
+        let standard = billedRecord(msgId: "m1", speed: "standard")
+        let absent = billedRecord(msgId: "m1")
+        let nullSpeed = standard.replacingOccurrences(of: "\"speed\":\"standard\"", with: "\"speed\":null")
+        XCTAssertTrue(nullSpeed.contains("\"speed\":null"))
+
+        let stdURL = try writeTempFile([standard])
+        let absentURL = try writeTempFile([absent])
+        let nullURL = try writeTempFile([nullSpeed])
+        defer {
+            try? FileManager.default.removeItem(at: stdURL)
+            try? FileManager.default.removeItem(at: absentURL)
+            try? FileManager.default.removeItem(at: nullURL)
+        }
+
+        let std = try await parser.parseMetadata(url: stdURL, sessionId: "sess-1", pricingTable: pricing)
+        let absentCost = try await parser.parseMetadata(url: absentURL, sessionId: "sess-1", pricingTable: pricing)
+        let nullCost = try await parser.parseMetadata(url: nullURL, sessionId: "sess-1", pricingTable: pricing)
+
+        XCTAssertGreaterThan(std.estimatedCost, 0)
+        XCTAssertEqual(absentCost.estimatedCost, std.estimatedCost, accuracy: 1e-9)
+        XCTAssertEqual(nullCost.estimatedCost, std.estimatedCost, accuracy: 1e-9)
+    }
+
     // MARK: - #5 title precedence
 
     func testTitleFieldWinsOverSlug() async throws {

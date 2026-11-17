@@ -668,8 +668,8 @@ extension SettingsMainPanelView {
 
     func pricingRows() -> [PricingRow] {
         let table = store.pricingTable
-        let models = ["fable", "opus4", "opus", "opus55", "sonnet", "haiku", "haiku3"]
-        let labels = ["Fable 5", "Opus 4", "Opus", "Opus 5.5", "Sonnet", "Haiku", "Haiku 3"]
+        let models = ["fable", "fable52", "opus4", "opus", "opus55", "sonnet", "haiku", "haiku3"]
+        let labels = ["Fable 5", "Fable 5.2", "Opus 4", "Opus", "Opus 5.5", "Sonnet", "Haiku", "Haiku 3"]
         var rows: [PricingRow] = []
         for (model, label) in zip(models, labels) {
             if let p = table[model] {

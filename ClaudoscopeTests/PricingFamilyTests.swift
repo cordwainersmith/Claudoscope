@@ -349,6 +349,66 @@ final class PricingFamilyTests: XCTestCase {
         XCTAssertEqual(s.estimatedCost, 0.11025, accuracy: 1e-9)
     }
 
+    // MARK: - Fable 5.2 rate split
+
+    // Fable 5.2 is $8/$40 with $0.20 cache reads against Fable 5's $10/$50/$1.00.
+    // Same family, so the difference lives in the pricing key.
+
+    func testFable52ResolvesToFableFamily() {
+        XCTAssertEqual(getModelFamily("claude-fable-5-2"), "fable")
+    }
+
+    func testFable52AnthropicPricing() {
+        let p = getModelPricing("claude-fable-5-2", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertFalse(p.isUnknown)
+        XCTAssertEqual(p.input, 8.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 40.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.20, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 16.0, accuracy: 1e-9)
+    }
+
+    func testFable52VertexGlobalPricing() {
+        let p = getModelPricing("claude-fable-5-2", table: PricingTables.vertexGlobal, on: anyDay)
+        XCTAssertEqual(p.input, 8.0, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 40.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.20, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 16.0, accuracy: 1e-9)
+    }
+
+    func testFable52VertexRegionalPricing() {
+        let p = getModelPricing("claude-fable-5-2", table: PricingTables.vertexRegional, on: anyDay)
+        XCTAssertEqual(p.input, 8.80, accuracy: 1e-9)
+        XCTAssertEqual(p.output, 44.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheRead, 0.22, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation5m, 11.0, accuracy: 1e-9)
+        XCTAssertEqual(p.cacheCreation1h, 17.60, accuracy: 1e-9)
+    }
+
+    func testFable5AndFable51UnchangedByFable52Split() {
+        let fable5 = getModelPricing("claude-fable-5", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertEqual(fable5.input, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(fable5.output, 50.0, accuracy: 1e-9)
+        XCTAssertEqual(fable5.cacheRead, 1.0, accuracy: 1e-9)
+        let fable51 = getModelPricing("claude-fable-5-1", table: PricingTables.anthropic, on: anyDay)
+        XCTAssertEqual(fable51.input, 10.0, accuracy: 1e-9)
+        XCTAssertEqual(fable51.output, 50.0, accuracy: 1e-9)
+        XCTAssertEqual(fable51.cacheRead, 0.25, accuracy: 1e-9)
+    }
+
+    func testFable52SessionParsesAtFable52Rate() async throws {
+        let parser = SessionParser()
+        let rec = "{\"type\":\"assistant\",\"uuid\":\"u1\",\"sessionId\":\"sess-1\",\"timestamp\":\"2026-11-10T10:00:00.000Z\",\"message\":{\"role\":\"assistant\",\"id\":\"m1\",\"stop_reason\":\"end_turn\",\"model\":\"claude-fable-5-2\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":2000,\"cache_read_input_tokens\":1000,\"service_tier\":\"standard\"}}}"
+        let url = try writeTempFile([rec])
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let s = try await parser.parseMetadata(url: url, sessionId: "sess-1", pricingTable: PricingTables.anthropic)
+        // 1000 input * $8/MTok + 2000 output * $40/MTok + 1000 cache-read * $0.20/MTok
+        // = 0.008 + 0.08 + 0.0002 = 0.0882
+        XCTAssertEqual(s.estimatedCost, 0.0882, accuracy: 1e-9)
+    }
+
     // MARK: - Opus 5.5 rate split
 
     // Opus 5.5 is $4/$20 with $0.20 cache reads against Opus 5's $5/$25/$0.50.
@@ -672,7 +732,7 @@ extension PricingFamilyTests {
             ("vertexGlobal", PricingTables.vertexGlobal),
             ("vertexRegional", PricingTables.vertexRegional),
         ] {
-            for key in ["haiku55", "haiku55Long", "sonnet55", "mythos51"] {
+            for key in ["haiku55", "haiku55Long", "sonnet55", "mythos51", "fable52"] {
                 XCTAssertNotNil(table[key], "\(key) missing from the \(name) table")
             }
         }

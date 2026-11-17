@@ -135,6 +135,24 @@ final class ManagedModelPricingTests: XCTestCase {
         XCTAssertEqual(getModelPricing("claude-opus-5-5", table: t, on: anyDay).input, 4, accuracy: 1e-9)
     }
 
+    func testOverrideForFable52DoesNotRepriceFable5() {
+        let m = ManagedPricingOverride.parse(managedSettings: settings([
+            "overrides": ["claude-fable-5-2": row(6, 30, 0.15, 7.5)],
+        ]))
+        let t = PricingTables.resolvedTable(provider: .anthropic, region: .global, managed: m)
+        XCTAssertEqual(getModelPricing("claude-fable-5-2", table: t, on: anyDay).input, 6, accuracy: 1e-9)
+        XCTAssertEqual(getModelPricing("claude-fable-5", table: t, on: anyDay).input, 10, accuracy: 1e-9)
+    }
+
+    func testOverrideForFable5DoesNotRepriceFable52() {
+        let m = ManagedPricingOverride.parse(managedSettings: settings([
+            "overrides": ["claude-fable-5": row(9, 45, 0.9, 11.25)],
+        ]))
+        let t = PricingTables.resolvedTable(provider: .anthropic, region: .global, managed: m)
+        XCTAssertEqual(getModelPricing("claude-fable-5", table: t, on: anyDay).input, 9, accuracy: 1e-9)
+        XCTAssertEqual(getModelPricing("claude-fable-5-2", table: t, on: anyDay).input, 8, accuracy: 1e-9)
+    }
+
     func testGatewayAliasAppliesToItselfOnly() {
         let m = ManagedPricingOverride.parse(managedSettings: settings([
             "overrides": ["vendor/fast-sonnet": row(1, 1, 1, 1)],
