@@ -119,6 +119,7 @@ extension ConfigService {
                 credentials: credentials,
                 allowAppleEvents: allowAppleEvents,
                 allowNestedUserNamespaces: sandboxDict["allowNestedUserNamespaces"] as? Bool ?? false,
+                autoAllowBashIfSandboxed: sandboxDict["autoAllowBashIfSandboxed"] as? Bool,
                 filesystemDisabled: filesystemDisabled,
                 strictAllowlist: network?["strictAllowlist"] as? Bool ?? false,
                 tlsTerminate: network?["tlsTerminate"] as? Bool ?? false,

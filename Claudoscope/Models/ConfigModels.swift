@@ -163,6 +163,7 @@ struct SandboxConfig: Sendable {
     var credentials: SandboxCredentials? = nil   // sandbox.credentials (CC 2.1.187)
     var allowAppleEvents: Bool = false            // sandbox.allowAppleEvents (CC 2.1.181)
     var allowNestedUserNamespaces: Bool = false   // sandbox.allowNestedUserNamespaces (CC 2.1.305)
+    var autoAllowBashIfSandboxed: Bool? = nil     // sandbox.autoAllowBashIfSandboxed (CC 2.1.325)
     var filesystemDisabled: Bool = false          // sandbox.filesystem.disabled (CC 2.1.216)
     var strictAllowlist: Bool = false             // sandbox.network.strictAllowlist (CC 2.1.219)
     var tlsTerminate: Bool = false                // sandbox.network.tlsTerminate

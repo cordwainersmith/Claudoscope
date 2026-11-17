@@ -255,6 +255,8 @@ extension ConfigLinterService {
         results += lintNestedUserNamespaces(json: json, filePath: settingsPath, displayPath: "settings.json")
         results += lintDisableCompactFalsy(json: json, filePath: settingsPath, displayPath: "settings.json")
         results += lintOpus48FastMode(json: json, filePath: settingsPath, displayPath: "settings.json", now: now)
+        results += lintRemovedSettingsKeys(json: json, filePath: settingsPath, displayPath: "settings.json")
+        results += lintNonClaudeModelContext(json: json, filePath: settingsPath, displayPath: "settings.json")
 
         // CFG026: model policy keys documented as managed settings (CC 2.1.283/2.1.285)
         for key in ["deniedModels", "availableModelsMatch", "allowedProviders"] where json[key] != nil {
@@ -270,6 +272,7 @@ extension ConfigLinterService {
 
         results += lintManagedMcpServers()
         results += lintProjectScopedSettings(projectRoot: projectRoot)
+        results += lintSandboxAutoAllow(globalClaudeDir: globalClaudeDir, projectRoot: projectRoot)
 
         return results
     }
@@ -283,6 +286,17 @@ extension ConfigLinterService {
     private func lintBashAllowRules(json: [String: Any], filePath: String, displayPath: String) -> [LintResult] {
         let allow = (json["permissions"] as? [String: Any])?["allow"] as? [String] ?? []
         return allow.compactMap { rule in
+            // CFG033 (CC 2.1.323): reported on its own so one rule does not also raise CFG020.
+            if Self.bashRuleHasWildcardEnvValue(rule) {
+                return LintResult(
+                    severity: .warning,
+                    checkId: .CFG033,
+                    filePath: filePath,
+                    message: "permissions.allow rule \"\(rule)\" has a wildcard inside a variable assignment's value. Claude Code 2.1.323 warns about these rules at startup.",
+                    fix: "Write the exact value, or allow the command without the leading assignment.",
+                    displayPath: displayPath
+                )
+            }
             guard let body = Self.bashRuleBody(rule), Self.hasNonTerminalWildcard(body) else { return nil }
             let prefix = Self.bashRulePrefix(body)
             return LintResult(
@@ -294,6 +308,97 @@ extension ConfigLinterService {
                 displayPath: displayPath
             )
         }
+    }
+
+    /// True for a `Bash(...)` rule whose leading `NAME=value` assignments put a
+    /// `*` in a value, e.g. `Bash(PORT=* npm run dev)`.
+    static func bashRuleHasWildcardEnvValue(_ rule: String) -> Bool {
+        guard let body = bashRuleBody(rule) else { return false }
+        for token in body.split(whereSeparator: { $0.isWhitespace }) {
+            guard let eq = token.firstIndex(of: "=") else { return false }
+            let name = String(token[token.startIndex..<eq])
+            guard name.range(of: "^[A-Za-z_][A-Za-z0-9_]*$", options: .regularExpression) != nil else { return false }
+            if token[token.index(after: eq)...].contains("*") { return true }
+        }
+        return false
+    }
+
+    /// CFG034: keys Claude Code removed (`subagentStatusLine`, 2.1.323) or
+    /// ignores (`pluginDigests`, 2.1.325).
+    private func lintRemovedSettingsKeys(json: [String: Any], filePath: String, displayPath: String) -> [LintResult] {
+        let keys = ["subagentStatusLine", "pluginDigests"].filter { json[$0] != nil }
+        guard !keys.isEmpty else { return [] }
+        return [LintResult(
+            severity: .info,
+            checkId: .CFG034,
+            filePath: filePath,
+            message: "\(displayPath) sets \(keys.joined(separator: ", ")). subagentStatusLine was removed in Claude Code 2.1.323 and pluginDigests is ignored since 2.1.325, so they have no effect.",
+            fix: "Remove \(keys.joined(separator: " and ")).",
+            displayPath: displayPath
+        )]
+    }
+
+    /// Claude Code model aliases that carry no family name of their own.
+    static let familylessModelAliases: Set<String> = ["default", "best"]
+
+    /// True when a configured model value is not a Claude model, so Claude Code
+    /// has to guess its context window.
+    static func isNonClaudeModel(_ value: String) -> Bool {
+        let id = canonicalModelId(value)
+        guard !id.isEmpty, !familylessModelAliases.contains(id) else { return false }
+        return getModelFamily(id) == "unknown"
+    }
+
+    /// CFG035: since CC 2.1.323 an unrecognized model id is assumed to have a
+    /// 1M window; a smaller real window fails every turn once it is outgrown.
+    private func lintNonClaudeModelContext(json: [String: Any], filePath: String, displayPath: String) -> [LintResult] {
+        let env = json["env"] as? [String: Any] ?? [:]
+        guard env["CLAUDE_CODE_DISABLE_1M_CONTEXT"] == nil, env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == nil else { return [] }
+        let envKeys = ["ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                       "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL"]
+        let candidates: [(key: String, value: Any?)] = [("model", json["model"])] + envKeys.map { ("env.\($0)", env[$0]) }
+        let found = candidates.compactMap { c -> String? in
+            guard let value = c.value as? String, Self.isNonClaudeModel(value) else { return nil }
+            return "\(c.key) = \(value)"
+        }
+        guard !found.isEmpty else { return [] }
+        return [LintResult(
+            severity: .warning,
+            checkId: .CFG035,
+            filePath: filePath,
+            message: "\(displayPath) configures a non-Claude model (\(found.joined(separator: ", "))) without a context cap. Since Claude Code 2.1.323 an unrecognized model is assumed to have a 1M window; if the real window is smaller, every turn can fail until /clear.",
+            fix: "Set env CLAUDE_CODE_MAX_CONTEXT_TOKENS to the model's context window, or CLAUDE_CODE_DISABLE_1M_CONTEXT=1.",
+            displayPath: displayPath
+        )]
+    }
+
+    /// CFG032: since CC 2.1.325 sandboxed Bash follows the normal permission
+    /// flow unless `sandbox.autoAllowBashIfSandboxed` is set somewhere.
+    func lintSandboxAutoAllow(globalClaudeDir: URL, projectRoot: URL?) -> [LintResult] {
+        var files: [(url: URL, display: String)] = [(globalClaudeDir.appendingPathComponent("settings.json"), "settings.json")]
+        if let projectRoot {
+            for name in ["settings.json", "settings.local.json"] {
+                files.append((projectRoot.appendingPathComponent(".claude").appendingPathComponent(name), ".claude/\(name)"))
+            }
+        }
+        files.append((managedSettingsURL, "managed-settings.json"))
+        var enabler: (url: URL, display: String)?
+        for file in files {
+            guard let data = try? Data(contentsOf: file.url),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let sandbox = json["sandbox"] as? [String: Any] else { continue }
+            if sandbox["autoAllowBashIfSandboxed"] != nil { return [] }
+            if enabler == nil, sandbox["enabled"] as? Bool == true { enabler = file }
+        }
+        guard let enabler else { return [] }
+        return [LintResult(
+            severity: .info,
+            checkId: .CFG032,
+            filePath: enabler.url.path,
+            message: "\(enabler.display) enables the sandbox and no settings file sets sandbox.autoAllowBashIfSandboxed. Since Claude Code 2.1.325 sandboxed Bash follows the normal permission flow, so commands that ran without prompts now ask.",
+            fix: "Set sandbox.autoAllowBashIfSandboxed to true to keep running sandboxed commands without prompts, or to false to accept the prompts.",
+            displayPath: enabler.display
+        )]
     }
 
     /// CFG022: `"attribution": false` (CC 2.1.281). Older CLIs skip a settings
@@ -554,6 +659,8 @@ extension ConfigLinterService {
             results += lintBashAllowRules(json: json, filePath: url.path, displayPath: displayPath)
             results += lintNestedUserNamespaces(json: json, filePath: url.path, displayPath: displayPath)
             results += lintDisableCompactFalsy(json: json, filePath: url.path, displayPath: displayPath)
+            results += lintRemovedSettingsKeys(json: json, filePath: url.path, displayPath: displayPath)
+            results += lintNonClaudeModelContext(json: json, filePath: url.path, displayPath: displayPath)
 
             // CFG028: keys Claude Code reads only from user/managed scope (CC 2.1.290, 2.1.307)
             let ignored = Self.projectIgnoredUserScopeKeys(json)
@@ -582,6 +689,18 @@ extension ConfigLinterService {
                         filePath: url.path,
                         message: "\(displayPath) env sets \(keys.joined(separator: ", ")). Claude Code 2.1.282+ ignores telemetry export settings from project scope.",
                         fix: "Move telemetry settings to ~/.claude/settings.json or managed settings, or remove them.",
+                        displayPath: displayPath
+                    ))
+                }
+
+                // CFG036: Code Mode is read only from the shell or user settings
+                if env["CLAUDE_CODE_EXPERIMENTAL_CODE_MODE"] != nil {
+                    results.append(LintResult(
+                        severity: .warning,
+                        checkId: .CFG036,
+                        filePath: url.path,
+                        message: "\(displayPath) env sets CLAUDE_CODE_EXPERIMENTAL_CODE_MODE. Claude Code reads it only from the shell environment or user settings, so it does nothing here.",
+                        fix: "Move it to ~/.claude/settings.json or export it in your shell, or remove it.",
                         displayPath: displayPath
                     ))
                 }

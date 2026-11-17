@@ -371,6 +371,26 @@ let ruleMetadata: [LintCheckId: RuleMetadata] = [
         displayName: "MCP permission rule relies on prefix matching",
         hint: "Since 2.1.299 a permission rule mcp__<name> reaches only the server whose normalized name is exactly <name>. Servers whose names merely start with it, like <name>__x or <name>_, are no longer covered. Write mcp__<whole server name>__* instead."
     ),
+    .CFG032: RuleMetadata(
+        displayName: "Sandboxed Bash now asks for permission",
+        hint: "Since 2.1.325 sandboxed Bash commands follow the normal permission flow, so commands that used to run without a prompt now ask. Set sandbox.autoAllowBashIfSandboxed to true to keep the old behavior, or to false to confirm the new one."
+    ),
+    .CFG033: RuleMetadata(
+        displayName: "Wildcard in a Bash rule's variable value",
+        hint: "A Bash allow rule like Bash(PORT=* npm run dev) puts a wildcard inside a leading variable assignment. Claude Code 2.1.323 warns about these at startup. Write the exact value, or allow the command without the assignment."
+    ),
+    .CFG034: RuleMetadata(
+        displayName: "Removed settings key",
+        hint: "subagentStatusLine was removed in 2.1.323 and pluginDigests is ignored since 2.1.325. Neither has any effect, so remove them."
+    ),
+    .CFG035: RuleMetadata(
+        displayName: "Non-Claude model without a context cap",
+        hint: "Since 2.1.323 Claude Code assumes an unrecognized model id has a 1M token context window. If the real window is smaller, every turn can fail once the conversation outgrows it, until /clear. Set CLAUDE_CODE_MAX_CONTEXT_TOKENS to the model's window, or CLAUDE_CODE_DISABLE_1M_CONTEXT=1."
+    ),
+    .CFG036: RuleMetadata(
+        displayName: "Code Mode set in project settings",
+        hint: "CLAUDE_CODE_EXPERIMENTAL_CODE_MODE is read only from the shell environment or user settings. In a repo's settings it does nothing."
+    ),
     .HRD012: RuleMetadata(
         displayName: "autoMode missing hard_deny baseline",
         hint: "settings.json has an autoMode block but no hard_deny baseline. hard_deny rules are the non-bypassable stops for unattended runs; without them the agent can take destructive actions autonomously during long or batch jobs. Add a hard_deny baseline."

@@ -189,10 +189,23 @@ extension SettingsMainPanelView {
         let denyList = permissions?["deny"] as? [String] ?? []
         let blockOutsideReads = permissions?["blockReadsOutsideWorkingDirectories"] as? Bool
         let blockOutsideWrites = permissions?["blockWritesOutsideWorkingDirectories"] as? Bool
+        let denyInsteadOfPrompting = permissions?["denyInsteadOfPrompting"] as? Bool ?? false
 
         settingsSection(id: "permissions", icon: "shield", title: "Permissions") {
-            if !allowList.isEmpty || !denyList.isEmpty || blockOutsideReads != nil || blockOutsideWrites != nil {
+            if !allowList.isEmpty || !denyList.isEmpty || blockOutsideReads != nil || blockOutsideWrites != nil
+                || denyInsteadOfPrompting {
                 VStack(alignment: .leading, spacing: 12) {
+                    if denyInsteadOfPrompting {
+                        HStack(spacing: 6) {
+                            Image(systemName: "hand.raised.fill")
+                                .font(.system(size: 11))
+                            Text("Calls that would prompt are denied instead (denyInsteadOfPrompting)")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                    }
+
                     if let blockOutsideWrites {
                         HStack(spacing: 6) {
                             Image(systemName: blockOutsideWrites ? "lock.fill" : "lock.open")
@@ -286,8 +299,9 @@ extension SettingsMainPanelView {
         let hasCredentialProtection = !((credentials?.files ?? []).isEmpty && (credentials?.envVars ?? []).isEmpty)
         let allowAppleEvents = sandbox?.allowAppleEvents ?? false
         let allowNestedNamespaces = sandbox?.allowNestedUserNamespaces ?? false
+        let autoAllowSandboxedBash = sandbox?.autoAllowBashIfSandboxed == true
         let isDefault = !yolo && !hasUnsandboxed && !weakerSandbox && !hasDeniedDomains && !allowAppleEvents
-            && !allowNestedNamespaces && !hasCredentialProtection
+            && !allowNestedNamespaces && !hasCredentialProtection && !autoAllowSandboxedBash
 
         settingsSection(id: "security", icon: "lock.shield", title: "Security") {
             VStack(alignment: .leading, spacing: 8) {
@@ -378,6 +392,17 @@ extension SettingsMainPanelView {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.system(size: 11))
                         Text("Nested user namespaces allowed: sandboxed commands can get around file protections")
+                            .font(.system(size: 12))
+                    }
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 12)
+                }
+
+                if autoAllowSandboxedBash {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 11))
+                        Text("Sandboxed Bash runs without permission prompts")
                             .font(.system(size: 12))
                     }
                     .foregroundStyle(.yellow)

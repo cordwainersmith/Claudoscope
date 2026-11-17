@@ -189,6 +189,17 @@ final class ExtendedConfigTests: XCTestCase {
         XCTAssertEqual(ext.sandbox?.allowAppleEvents, false)
     }
 
+    func testSandboxAutoAllowBashDecodes() async throws {
+        try writeSettings(["sandbox": ["enabled": true, "autoAllowBashIfSandboxed": false]])
+        do { let ext = await service.loadExtendedConfig(); XCTAssertEqual(ext.sandbox?.autoAllowBashIfSandboxed, false) }
+
+        try writeSettings(["sandbox": ["autoAllowBashIfSandboxed": true]])
+        do { let ext = await service.loadExtendedConfig(); XCTAssertEqual(ext.sandbox?.autoAllowBashIfSandboxed, true) }
+
+        try writeSettings(["sandbox": ["enabled": true]])
+        do { let ext = await service.loadExtendedConfig(); XCTAssertNil(ext.sandbox?.autoAllowBashIfSandboxed) }
+    }
+
     // MARK: - attribution.sessionUrl (CC 2.1.183)
 
     func testAttributionSessionUrlOmittedWhenFalse() async throws {

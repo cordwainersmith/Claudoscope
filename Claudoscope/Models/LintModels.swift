@@ -104,6 +104,11 @@ enum LintCheckId: String, Sendable, CaseIterable {
     case CFG029  // DISABLE_COMPACT set to a falsy value (CC 2.1.311)
     case CFG030  // fast mode on Opus 4.8, deprecated and removed 2026-11-30 (CC 2.1.316)
     case CFG031  // MCP permission rule relies on prefix matching (CC 2.1.299)
+    case CFG032  // sandbox on, autoAllowBashIfSandboxed unset: sandboxed Bash now prompts (CC 2.1.325)
+    case CFG033  // Bash allow rule with a wildcard in a leading variable value (CC 2.1.323)
+    case CFG034  // removed or ignored settings keys (CC 2.1.323/2.1.325)
+    case CFG035  // non-Claude model without a context window cap (CC 2.1.323)
+    case CFG036  // CLAUDE_CODE_EXPERIMENTAL_CODE_MODE in project settings, ignored
 
     // Hardening baseline checks
     case HRD001  // sandbox.enabled missing or false
