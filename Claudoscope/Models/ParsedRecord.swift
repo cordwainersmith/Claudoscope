@@ -418,7 +418,7 @@ struct ContentBlockRaw: Decodable, Sendable {
     /// Checked in order; the first non-empty string wins.
     private enum ToolTargetKeys: String, CodingKey, CaseIterable {
         case filePath = "file_path", notebookPath = "notebook_path", path, command
-        case pattern, url, query, skill, subagentType = "subagent_type", description
+        case pattern, url, query, skill, subagentType = "subagent_type", description, code
     }
 
     init(from decoder: Decoder) throws {

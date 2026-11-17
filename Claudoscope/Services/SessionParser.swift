@@ -89,7 +89,9 @@ actor SessionParser {
     ///     of its figures; continuedInSessionId / continuedFromSessionId.
     /// 16: api-request* lines skipped; recorded effort; model fallbacks;
     ///     permission decisions.
-    static let parserVersion: Int = 16
+    /// 17: permission-stats keys fall back to the reasonCode prefix; REPL
+    ///     (Code Mode) code as a lite tool target.
+    static let parserVersion: Int = 17
 
     /// Request-log records (`api-request`, `api-request-shape`,
     /// `api-request-blob`, Claude Code 2.1.300+) describe what was sent to the

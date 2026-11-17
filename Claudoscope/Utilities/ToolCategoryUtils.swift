@@ -19,7 +19,7 @@ enum ToolCategory: String, CaseIterable, Sendable {
 func toolCategory(for toolName: String) -> ToolCategory {
     let readTools = ["Read", "Glob", "Grep", "LSP", "WebFetch", "WebSearch"]
     let writeTools = ["Write", "Edit", "NotebookEdit"]
-    let execTools = ["Bash", "Agent", "Skill", "Monitor", "EnterWorktree", "ExitWorktree"]
+    let execTools = ["Bash", "Agent", "Skill", "Monitor", "EnterWorktree", "ExitWorktree", "REPL"]
 
     if readTools.contains(toolName) { return .read }
     if writeTools.contains(toolName) { return .write }
@@ -51,6 +51,7 @@ func toolIcon(for toolName: String) -> String {
     case "Monitor": return "waveform"
     case "EnterWorktree": return "arrow.triangle.branch"
     case "ExitWorktree": return "arrow.uturn.left"
+    case "REPL": return "curlybraces"
     default: return "wrench"
     }
 }
@@ -62,6 +63,12 @@ func primaryArgument(from input: [String: AnyCodableValue], toolName: String) ->
     case "Grep", "Glob": return input["pattern"]?.stringValue
     case "Agent": return input["description"]?.stringValue
     case "Monitor": return input["description"]?.stringValue ?? input["command"]?.stringValue
+    case "REPL":
+        return input["code"]?.stringValue?
+            .split(whereSeparator: \.isNewline)
+            .lazy
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty }
     default: return nil
     }
 }
