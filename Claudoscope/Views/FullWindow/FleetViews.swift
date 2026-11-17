@@ -796,6 +796,7 @@ private struct FleetInspector: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(CostAlertService.self) private var costAlertService
+    @Environment(SessionStore.self) private var store
     @State private var budgetText = ""
 
     private var summary: SessionSummary { agent.summary }
@@ -939,7 +940,8 @@ private struct FleetInspector: View {
 
                     if let turn = summary.latestTurn {
                         section("LATEST TURN") {
-                            if let used = turn.contextTokens, let window = turn.contextWindowTokens {
+                            if let used = turn.contextTokens, let parsedWindow = turn.contextWindowTokens {
+                                let window = ContextWindow.effective(parsedWindow, disable1M: store.extendedConfig?.disable1MContext ?? false)
                                 row("context", "\(formatTokens(used)) / \(formatTokens(window))")
                             }
                             row("tool", turn.toolName)
@@ -1080,13 +1082,25 @@ private struct NameTag: View {
 private struct ContextGauge: View {
     let turn: LatestTurn?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(SessionStore.self) private var store
     @State private var breathing = false
+
+    private var window: Int? {
+        turn?.contextWindowTokens.map {
+            ContextWindow.effective($0, disable1M: store.extendedConfig?.disable1MContext ?? false)
+        }
+    }
+
+    private var contextUtilization: Double? {
+        guard let used = turn?.contextTokens, let window, window > 0 else { return nil }
+        return Double(used) / Double(window)
+    }
 
     /// Worst of two bands: share of the window (what triggers compaction) and
     /// absolute size (what a 1M window hides: cost and recall degrade long
     /// before it fills).
     private var tint: Color {
-        let u = turn?.contextUtilization ?? 0
+        let u = contextUtilization ?? 0
         let used = turn?.contextTokens ?? 0
         if u >= 0.85 || used >= 600_000 { return Tower.red }
         if u >= 0.6 || used >= 300_000 { return Tower.amber }
@@ -1094,8 +1108,7 @@ private struct ContextGauge: View {
     }
 
     var body: some View {
-        if let turn, let utilization = turn.contextUtilization, let used = turn.contextTokens,
-           let window = turn.contextWindowTokens {
+        if let utilization = contextUtilization, let used = turn?.contextTokens, let window {
             HStack(spacing: 8) {
                 Text("CTX")
                     .font(Tower.ui(9, .semibold))

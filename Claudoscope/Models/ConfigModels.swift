@@ -299,6 +299,7 @@ struct ExtendedConfig: Sendable {
     var blockReadsOutsideWorkingDirectories: Bool? = nil  // permissions.* (CC 2.1.252)
     var deniedModels: [String]? = nil         // managed (CC 2.1.283)
     var availableModelsMatch: String? = nil   // managed (CC 2.1.283)
+    var disable1MContext: Bool = false        // env.CLAUDE_CODE_DISABLE_1M_CONTEXT (CC 2.1.323)
 }
 
 // MARK: - Theme Models

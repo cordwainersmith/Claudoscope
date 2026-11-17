@@ -9,6 +9,7 @@ struct ContextPressureView: View {
     private let compactionTimestamps: [String]
     private let mixedTokenizers: Bool
     private let session: ParsedSession
+    @Environment(SessionStore.self) private var store
 
     /// The series is computed once here rather than in a body-level computed
     /// property: it walks every record, and a view body re-evaluates constantly.
@@ -20,12 +21,29 @@ struct ContextPressureView: View {
         self.session = session
     }
 
+    private var disable1M: Bool {
+        store.extendedConfig?.disable1MContext ?? false
+    }
+
+    private func effectiveWindow(_ point: ContextPressurePoint) -> Int {
+        ContextWindow.effective(point.windowTokens, disable1M: disable1M)
+    }
+
+    private func utilization(_ point: ContextPressurePoint) -> Double {
+        let window = effectiveWindow(point)
+        return window > 0 ? Double(point.contextTokens) / Double(window) : 0
+    }
+
     private var peak: ContextPressurePoint? {
-        points.max(by: { $0.utilization < $1.utilization })
+        points.max(by: { utilization($0) < utilization($1) })
+    }
+
+    private var peakUtilization: Double {
+        peak.map(utilization) ?? 0
     }
 
     private var windowTokens: Int {
-        points.last?.windowTokens ?? ContextWindow.extended
+        points.last.map(effectiveWindow) ?? ContextWindow.extended
     }
 
     var body: some View {
@@ -57,8 +75,8 @@ struct ContextPressureView: View {
             )
             StatCard(
                 title: "Peak Utilization",
-                value: String(format: "%.0f%%", (peak?.utilization ?? 0) * 100),
-                isHighlighted: (peak?.utilization ?? 0) > 0.8
+                value: String(format: "%.0f%%", peakUtilization * 100),
+                isHighlighted: peakUtilization > 0.8
             )
             .help("Above 80% a turn is close enough to the ceiling that auto-compact is likely to fire mid-task.")
             StatCard(

@@ -54,7 +54,7 @@ extension McpToolHandlers {
         let failureReason: String?
     }
 
-    static func agentPointer(_ agent: FleetAgent, now: Date, claudeDir: URL) -> AgentPointer {
+    static func agentPointer(_ agent: FleetAgent, now: Date, claudeDir: URL, disable1M: Bool = false) -> AgentPointer {
         let summary = agent.summary
         let reason: String?
         switch agent.state {
@@ -82,7 +82,7 @@ extension McpToolHandlers {
             inputTokens: summary.totalInputTokens,
             outputTokens: summary.totalOutputTokens,
             contextTokens: summary.latestTurn?.contextTokens,
-            contextWindowTokens: summary.latestTurn?.contextWindowTokens,
+            contextWindowTokens: summary.latestTurn?.contextWindowTokens.map { ContextWindow.effective($0, disable1M: disable1M) },
             cacheExpiresAt: agent.cacheExpiry().map(isoString),
             isBypass: agent.isBypass,
             isBackgroundJob: agent.isBackgroundJob,
@@ -111,8 +111,9 @@ extension McpToolHandlers {
 
         let maxCount = limit(arguments)
         let now = Date()
+        let disable1M = await context.configService.loadExtendedConfig().disable1MContext
         return encodeJSON(AgentListResponse(
-            agents: agents.prefix(maxCount).map { agentPointer($0, now: now, claudeDir: context.claudeDir) },
+            agents: agents.prefix(maxCount).map { agentPointer($0, now: now, claudeDir: context.claudeDir, disable1M: disable1M) },
             attentionCount: snapshot.attentionQueue.count,
             truncated: agents.count > maxCount
         ))
@@ -127,8 +128,9 @@ extension McpToolHandlers {
             throw McpToolError(message: "No agent with session id \(sessionId) on the Fleet board (live processes and sessions active in the last 24 hours)")
         }
         let turn = agent.summary.latestTurn
+        let disable1M = await context.configService.loadExtendedConfig().disable1MContext
         return encodeJSON(AgentDetailResponse(
-            agent: agentPointer(agent, now: Date(), claudeDir: context.claudeDir),
+            agent: agentPointer(agent, now: Date(), claudeDir: context.claudeDir, disable1M: disable1M),
             lastPrompt: turn?.lastPrompt,
             lastTool: turn?.toolName,
             lastToolTarget: turn?.toolTarget,

@@ -24,6 +24,20 @@ enum ContextWindow {
         guard let model = model?.lowercased() else { return extended }
         return standardWindowMarkers.contains(where: model.contains) ? standard : extended
     }
+
+    /// CLAUDE_CODE_DISABLE_1M_CONTEXT caps every model at the standard window.
+    /// Applied at display time because the parsed window is baked into the
+    /// cached summary, and re-keying the cache on a settings flag is not worth it.
+    static func effective(_ parsed: Int, disable1M: Bool) -> Int {
+        disable1M ? min(parsed, standard) : parsed
+    }
+
+    static func isTruthyEnvValue(_ value: Any?) -> Bool {
+        if let number = value as? NSNumber { return number.doubleValue != 0 }
+        guard let string = value as? String else { return false }
+        let normalized = string.trimmingCharacters(in: .whitespaces).lowercased()
+        return ["1", "true", "yes", "on"].contains(normalized)
+    }
 }
 
 /// Context occupancy at one assistant turn: everything the model had to read to

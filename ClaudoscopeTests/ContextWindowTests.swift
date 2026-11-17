@@ -101,4 +101,26 @@ final class ContextWindowTests: XCTestCase {
         ]))
         XCTAssertTrue(series.isEmpty)
     }
+
+    func testDisable1MCapsExtendedWindow() {
+        XCTAssertEqual(ContextWindow.effective(ContextWindow.extended, disable1M: true), ContextWindow.standard)
+    }
+
+    func testDisable1MLeavesStandardWindowAlone() {
+        XCTAssertEqual(ContextWindow.effective(ContextWindow.standard, disable1M: true), ContextWindow.standard)
+    }
+
+    func testEffectiveIsIdentityWhenFlagOff() {
+        XCTAssertEqual(ContextWindow.effective(ContextWindow.extended, disable1M: false), ContextWindow.extended)
+        XCTAssertEqual(ContextWindow.effective(ContextWindow.standard, disable1M: false), ContextWindow.standard)
+    }
+
+    func testTruthyEnvValues() {
+        for value: Any in ["1", "true", "TRUE", "Yes", "on", NSNumber(value: 1), NSNumber(value: true)] {
+            XCTAssertTrue(ContextWindow.isTruthyEnvValue(value), "\(value)")
+        }
+        for value: Any? in ["0", "false", "no", "off", "", "2", NSNumber(value: 0), nil] {
+            XCTAssertFalse(ContextWindow.isTruthyEnvValue(value), "\(String(describing: value))")
+        }
+    }
 }

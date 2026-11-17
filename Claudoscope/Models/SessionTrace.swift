@@ -96,7 +96,8 @@ struct SessionTrace: Sendable, Equatable {
     static func build(
         for session: ParsedSession,
         blockedToolUseIds: Set<String>,
-        pricingTable: [String: ModelPricing]
+        pricingTable: [String: ModelPricing],
+        disable1M: Bool = false
     ) -> SessionTrace? {
         let records = session.records
         var userTurns: [UserTurn] = []
@@ -212,7 +213,9 @@ struct SessionTrace: Sendable, Equatable {
 
         let contextPoints = ContextPressurePoint.series(for: session.ownRecords).compactMap { point -> ContextPoint? in
             guard let time = ISO8601.parse(point.timestamp) else { return nil }
-            return ContextPoint(time: time, utilization: point.utilization, tokens: point.contextTokens)
+            let window = ContextWindow.effective(point.windowTokens, disable1M: disable1M)
+            let utilization = window > 0 ? Double(point.contextTokens) / Double(window) : 0
+            return ContextPoint(time: time, utilization: utilization, tokens: point.contextTokens)
         }
 
         var times = userTurns.map(\.time) + toolCalls.map(\.time) + compactions.map(\.time)

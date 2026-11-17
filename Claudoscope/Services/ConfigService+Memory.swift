@@ -175,6 +175,7 @@ extension ConfigService {
         let spellcheck = settings["spellcheck"] as? Bool
         let emojiCompletionEnabled = settings["emojiCompletionEnabled"] as? Bool
         let defaultModel = (settings["env"] as? [String: Any])?["ANTHROPIC_DEFAULT_MODEL"] as? String
+        let disable1MContext = ContextWindow.isTruthyEnvValue((settings["env"] as? [String: Any])?["CLAUDE_CODE_DISABLE_1M_CONTEXT"])
         // Managed settings win; user settings are shown too so CFG026 has context.
         let managed = readJSON(at: managedSettingsURL) ?? [:]
         let deniedModels = (managed["deniedModels"] ?? settings["deniedModels"]) as? [String]
@@ -295,7 +296,8 @@ extension ConfigService {
             subagentPromptCacheTtl: subagentPromptCacheTtl,
             blockReadsOutsideWorkingDirectories: blockReadsOutsideWorkingDirectories,
             deniedModels: deniedModels,
-            availableModelsMatch: availableModelsMatch
+            availableModelsMatch: availableModelsMatch,
+            disable1MContext: disable1MContext
         )
     }
 

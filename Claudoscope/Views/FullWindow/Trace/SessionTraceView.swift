@@ -85,9 +85,10 @@ struct SessionTraceView: View {
         isBuilding = true
         let session = self.session
         let table = store.pricingTable
+        let disable1M = store.extendedConfig?.disable1MContext ?? false
         let built = await Task.detached(priority: .userInitiated) { () -> SessionTrace? in
             let blocked = ObservabilityAnalyzer.extractBlockedActions(from: extractToolCalls(from: session))
-            return SessionTrace.build(for: session, blockedToolUseIds: Set(blocked.map(\.id)), pricingTable: table)
+            return SessionTrace.build(for: session, blockedToolUseIds: Set(blocked.map(\.id)), pricingTable: table, disable1M: disable1M)
         }.value
         trace = built
         isBuilding = false

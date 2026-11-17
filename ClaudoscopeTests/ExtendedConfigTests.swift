@@ -302,6 +302,20 @@ final class ExtendedConfigTests: XCTestCase {
         XCTAssertNil(topLevel.blockReadsOutsideWorkingDirectories)
     }
 
+    func testDisable1MContextDecodesFromEnv() async throws {
+        try writeSettings(["env": ["CLAUDE_CODE_DISABLE_1M_CONTEXT": "1"]])
+        let ext = await service.loadExtendedConfig()
+        XCTAssertTrue(ext.disable1MContext)
+
+        try writeSettings(["env": ["CLAUDE_CODE_DISABLE_1M_CONTEXT": "0"]])
+        let off = await service.loadExtendedConfig()
+        XCTAssertFalse(off.disable1MContext)
+
+        try writeSettings(["CLAUDE_CODE_DISABLE_1M_CONTEXT": "1"])
+        let topLevel = await service.loadExtendedConfig()
+        XCTAssertFalse(topLevel.disable1MContext)
+    }
+
 
     // MARK: - installed_plugins.json per-scope records (PLG004 input)
 
