@@ -21,12 +21,12 @@
 </p>
 
 <p align="center">
-  <strong>🎉 Claudoscope 1.4 is here</strong>
+  <strong>🎉 Claudoscope 1.5 is here</strong>
 </p>
 
 <p align="center">
-  The session viewer release: a Trace tab with Replay plays a session back on a time axis, a minimap shows its shape, bookmarks pin the turns worth keeping, and Resume drops you back into it in your terminal.<br />
-  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v1.4.0">See what's new</a>
+  Catches up with Claude Code 2.1.290 through 2.1.325: the Context tab shows what fills the context window, a new Permissions tab shows what was allowed and blocked and why, and effort is read from the transcript instead of guessed.<br />
+  <a href="https://github.com/cordwainersmith/Claudoscope/releases/tag/v1.5.0">See what's new</a>
   &nbsp;·&nbsp;
   <a href="CHANGELOG.md">Full changelog</a>
 </p>
