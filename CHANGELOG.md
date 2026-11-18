@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.5.0]
+Catches Claudoscope up with Claude Code 2.1.290 through 2.1.325. Claude Code now records what it sent to the API, the effort each turn ran at, which model actually answered, and every permission decision. Claudoscope reads all of it: the session Context tab breaks down what fills the context window, a new Permissions tab in Analytics shows what was allowed and blocked and why, and effort is read from the transcript instead of guessed. Also prices Fable 5.2 at its own rate and adds 18 lint rules for settings and definitions those Claude Code releases changed.
+
+Requires a one-time full reparse on first launch (parser version 17).
+
+### New Features
+- **What fills the context.** The session Context tab rebuilds each API request from Claude Code's request-log lines and splits its real input size into system prompt, built-in tools, MCP tools, reminders and conversation, with a per-server MCP breakdown and the largest tools listed. Built on demand when you open the tab; the initial scan and the cache are unchanged.
+- **Permissions tab.** Analytics gains a Permissions tab built from the permission decisions Claude Code now records on tool results. Auto mode approvals and blocks, rule denials, your own rejections, and denials made without a prompt are counted separately. Blocked actions in Chat gain Safety check, Mode denied, Auto mode blocked and Denied without a prompt kinds.
+- **Recorded effort.** Turns carry their effort level (low, medium, high, xhigh, max) in the transcript. Cost by effort now uses the recorded value per turn per day; older transcripts fall back to the thinking-length guess and are marked estimated.
+- **Model fallbacks.** Turns answered by a different model than the one requested are counted as fallbacks. `[1m]` and dated spellings of the same model are not.
+- **Code Mode REPL calls.** REPL tool calls show as exec tools with their own icon, labelled by the first line of their code, in Chat and on Fleet cards.
+- **1M context opt-out honored.** With `CLAUDE_CODE_DISABLE_1M_CONTEXT` set in user settings, the Fleet gauge and inspector, the Context pressure chart, Trace context points and the MCP agent tools measure against a 200K window.
+- **More of the configuration surfaced.** Hooks show their type and `onFailure`. Settings shows the sandbox and write-confinement flags, `autoAllowBashIfSandboxed` and `denyInsteadOfPrompting`. The Plugins rail flags mods that read prompt attachments or sign-in identity, register the new behavior-changing events, or make their own model calls, and shows a plugin's required Claude Code version. The data-coverage badge notes when an enabled mod can override `cleanupPeriodDays`.
+
+### Fixed
+- **Fable 5.2 priced at its own rate.** `claude-fable-5-2` was billed as Fable 5 ($10/$50, $1.00 cache reads). It now bills at $8/$40 with $0.20 cache reads, with Vertex rows derived from those.
+- **Request-log lines no longer counted as messages.** Claude Code 2.1.300 writes `api-request` lines into the transcript describing what was sent to the API. They were parsed as conversation records, inflating message counts and shifting session start and end times.
+
+### Security
+- **New CFG027.** `sandbox.allowNestedUserNamespaces` enabled, which weakens the sandbox's file protections (2.1.305).
+- **New CFG028.** A user-scope-only key set in project settings, where Claude Code ignores it.
+- **New CFG029.** `DISABLE_COMPACT` set to a falsy value such as `0` or `false`. Since 2.1.311 settings can only turn compaction off, so it does not re-enable it.
+- **New CFG030.** Fast mode on Opus 4.8, deprecated and removed on 2026-11-30 (2.1.316).
+- **New CFG031 and AGT001.** An MCP permission rule or agent `tools` entry that relies on prefix matching (2.1.299).
+- **New CFG032.** Sandbox enabled with `autoAllowBashIfSandboxed` unset, so sandboxed Bash prompts again since 2.1.325.
+- **New CFG033.** A Bash allow rule with a wildcard inside a leading variable's value (2.1.323), reported instead of CFG020 for the same rule.
+- **New CFG034.** Removed or ignored keys (`subagentStatusLine`, `pluginDigests`).
+- **New CFG035.** A non-Claude model configured with no context cap variable; since 2.1.323 unrecognized model ids are assumed to have a 1M window.
+- **New CFG036.** `CLAUDE_CODE_EXPERIMENTAL_CODE_MODE` set in project settings, where Code Mode ignores it.
+- **New HOOK006.** A guard hook that fails open because it lacks `onFailure: "block"` (2.1.295).
+- **New HRD015.** `permissions.blockWritesOutsideWorkingDirectories` not enabled (2.1.314).
+- **New SKL017.** Hidden, bidirectional or blank-looking characters in a skill or command name (2.1.299).
+- **New SKL018.** Skills that declare `allowed-tools` or hooks with no Skill allow rule, which scheduled tasks and `/loop` now stop to ask about before running (2.1.325).
+- **New AGT002 and AGT003.** An agent name over 256 characters (2.1.292), or an agent that preloads more than 32 skills (2.1.295).
+- **New PLG005.** An enabled plugin whose settings.json uses the deprecated `agent` key (2.1.323).
+
 ## [1.4.1]
 A fix release for Claude Code's background jobs. When a conversation moves into a background job (Claude Code 2.1.291 and later), the job's transcript carries a copy of the conversation so far, and the terminal it left behind stays registered. Claudoscope billed that copied history twice and showed the terminal as a second live agent. Both are fixed, along with an Insights tab that stayed empty on first open. Thanks to @beardedeagle for all of the fixes in this release.
 
